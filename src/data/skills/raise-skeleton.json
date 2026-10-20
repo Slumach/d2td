@@ -1,0 +1,10 @@
+{
+  "id": "raise-skeleton",
+  "skill": "Raise Skeleton",
+  "archetype": "summon",
+  "damageType": "phys",
+  "skillLevels": [1, 5, 10, 15, 20],
+  "rangeTenths": 30,
+  "rateTicks": 20,
+  "summon": { "countCalc": "petmax", "damagePctCalc": "aurastatcalc1", "respawnTicks": 100 }
+}

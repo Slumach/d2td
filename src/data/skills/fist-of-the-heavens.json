@@ -1,0 +1,15 @@
+{
+  "id": "fist-of-the-heavens",
+  "skill": "Fist of the Heavens",
+  "archetype": "splash",
+  "damageType": "ltng",
+  "skillLevels": [1, 5, 10, 15, 20],
+  "rangeTenths": 50,
+  "rateTicks": 20,
+  "splash": {
+    "delivery": "strike",
+    "radiusTenths": 5,
+    "edgeDamagePct": 100,
+    "subMissile": { "missile": "fistoftheheavensbolt", "radiusCalc": "aurarangecalc" }
+  }
+}

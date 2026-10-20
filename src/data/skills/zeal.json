@@ -1,0 +1,10 @@
+{
+  "id": "zeal",
+  "skill": "Zeal",
+  "archetype": "melee",
+  "damageType": "phys",
+  "skillLevels": [1, 5, 10, 15, 20],
+  "rangeTenths": 15,
+  "rateTicks": 20,
+  "melee": { "swingsCalc": "calc1", "damagePctCalc": "calc2" }
+}

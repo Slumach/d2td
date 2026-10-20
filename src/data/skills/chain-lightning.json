@@ -1,0 +1,10 @@
+{
+  "id": "chain-lightning",
+  "skill": "Chain Lightning",
+  "archetype": "pierce",
+  "damageType": "ltng",
+  "skillLevels": [1, 5, 10, 15, 20],
+  "rangeTenths": 45,
+  "rateTicks": 25,
+  "pierce": { "mode": "chain", "hopsCalc": "calc1", "jumpCalc": "aurarangecalc", "falloffPct": 0 }
+}

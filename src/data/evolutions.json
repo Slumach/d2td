@@ -1,0 +1,23 @@
+{
+  "zealdin": {
+    "name": "Zealdin",
+    "attack": { "skill": "zeal", "minTier": 2 },
+    "partner": { "skill": "fanaticism", "minTier": 3 }
+  },
+  "hammerdin": {
+    "name": "Hammerdin",
+    "attack": { "skill": "blessed-hammer", "minTier": 2 },
+    "partner": { "skill": "concentration", "minTier": 2 }
+  },
+  "avenger": {
+    "name": "Avenger",
+    "attack": { "skill": "vengeance", "minTier": 3 },
+    "partner": { "skill": "conviction", "minTier": 3 }
+  },
+  "templar": {
+    "name": "Templar",
+    "attack": { "skill": "fist-of-the-heavens", "minTier": 3 },
+    "partner": { "skill": "conviction", "minTier": 3 },
+    "ignoreSkillDelay": true
+  }
+}

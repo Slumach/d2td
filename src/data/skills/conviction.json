@@ -1,0 +1,8 @@
+{
+  "id": "conviction",
+  "skill": "Conviction",
+  "archetype": "debuff",
+  "damageType": "none",
+  "skillLevels": [1, 5, 10, 15, 20],
+  "debuff": { "mode": "aura", "radiusCalc": "aurarangecalc" }
+}

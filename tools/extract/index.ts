@@ -4,12 +4,14 @@
 //   npm run extract                       everything M0 needs
 //   npm run extract -- --only monster --token zm --mode a1 --monster zombie1
 //   npm run extract -- --only icons --class sor
+//   npm run extract -- --only tables
 
 import { parseArgs } from 'node:util';
 
 import { extractSkillIcons } from './icons.ts';
 import { extractMonster } from './monster.ts';
 import { findDataRoot } from './paths.ts';
+import { extractTables } from './tables.ts';
 
 const { values: args } = parseArgs({
   options: {
@@ -32,4 +34,7 @@ if (run('monster')) {
 }
 if (run('icons')) {
   extractSkillIcons({ dataRoot, out: args.out, charClass: args.class });
+}
+if (run('tables')) {
+  extractTables({ dataRoot, out: args.out });
 }

@@ -1,0 +1,10 @@
+{
+  "id": "bone-spear",
+  "skill": "Bone Spear",
+  "archetype": "pierce",
+  "damageType": "mag",
+  "skillLevels": [1, 5, 10, 15, 20],
+  "rangeTenths": 50,
+  "rateTicks": 20,
+  "pierce": { "mode": "pierce", "pierceCount": 0 }
+}

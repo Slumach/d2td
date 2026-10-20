@@ -1,0 +1,109 @@
+// The aura field for one tick. Every aura emitter (an aura tower's own skill, or an evolved
+// tower's built-in partner aura at half radius) contributes to towers and monsters in its
+// radius. The same aura from two towers counts once, strongest value per stat; different
+// auras add up.
+
+import { archetypeOf } from './archetypes/index.ts';
+import type { AuraContribution, MonsterAuraFx, SkillDef, TowerBuff } from './archetypes/types.ts';
+import { within } from './combat.ts';
+import { EVOLVED_LEVEL_INDEX } from './data.ts';
+import { idiv } from './fixed.ts';
+import { ELEMENTS, type AuraEmitter, type AuraField, type Sim, type Tower } from './state.ts';
+
+/** The skill a tower attacks or pulses with, and its level index, or undefined if inert. */
+export function activeSkill(sim: Sim, tower: Tower): { skill: SkillDef; lvl: number } | undefined {
+  if (tower.evolved) {
+    const recipe = sim.data.evolutions.find((e) => e.id === tower.evolved)!;
+    return { skill: sim.data.skills[recipe.attack.skill]!, lvl: EVOLVED_LEVEL_INDEX };
+  }
+  const id = tower.picks[tower.tier - 1];
+  const skill = id ? sim.data.skills[id] : undefined;
+  return skill && { skill, lvl: tower.level - 1 };
+}
+
+interface Source {
+  tower: Tower;
+  skill: SkillDef;
+  aura: AuraContribution;
+}
+
+/** Every aura this tower projects this tick. */
+export function auraSources(sim: Sim, tower: Tower): Source[] {
+  const out: Source[] = [];
+  const own = activeSkill(sim, tower);
+  const ownAura = own && archetypeOf(own.skill).aura?.(own.skill, own.lvl);
+  if (own && ownAura && ownAura.radiusUnits > 0) out.push({ tower, skill: own.skill, aura: ownAura });
+  if (tower.evolved && tower.partnerSkill) {
+    const partner = sim.data.skills[tower.partnerSkill]!;
+    const aura = archetypeOf(partner).aura?.(partner, tower.partnerLevel);
+    if (aura) out.push({ tower, skill: partner, aura: { ...aura, radiusUnits: idiv(aura.radiusUnits, 2) } });
+  }
+  return out;
+}
+
+function strongestTower(into: TowerBuff, add: TowerBuff): void {
+  into.damagePct = Math.max(into.damagePct, add.damagePct);
+  into.attackSpeedPct = Math.max(into.attackSpeedPct, add.attackSpeedPct);
+}
+
+function strongestMonster(into: MonsterAuraFx, add: MonsterAuraFx): void {
+  into.slowPct = Math.max(into.slowPct, add.slowPct);
+  for (const e of ELEMENTS) {
+    const v = add.resistDown[e];
+    if (v !== undefined) into.resistDown[e] = Math.max(into.resistDown[e] ?? 0, v);
+  }
+}
+
+export function computeAuras(sim: Sim): AuraField {
+  const s = sim.state;
+  // target id -> aura skill id -> strongest effect of that aura
+  const towerBy: Record<number, Record<string, TowerBuff>> = {};
+  const monsterBy: Record<number, Record<string, MonsterAuraFx>> = {};
+  const emitters: AuraEmitter[] = [];
+
+  for (const tower of s.towers) {
+    for (const { skill, aura } of auraSources(sim, tower)) {
+      emitters.push({ towerId: tower.id, skill: skill.id, radiusUnits: aura.radiusUnits });
+      if (aura.towers) {
+        for (const t of s.towers) {
+          if (!within(tower, t, aura.radiusUnits)) continue;
+          const per = (towerBy[t.id] ??= {});
+          strongestTower((per[skill.id] ??= { damagePct: 0, attackSpeedPct: 0 }), aura.towers);
+        }
+      }
+      if (aura.monsters) {
+        for (const m of s.monsters) {
+          if (m.hp <= 0 || !within(tower, m, aura.radiusUnits)) continue;
+          const per = (monsterBy[m.id] ??= {});
+          strongestMonster((per[skill.id] ??= { slowPct: 0, resistDown: {} }), aura.monsters);
+        }
+      }
+    }
+  }
+
+  // Different auras stack
+  const towers: Record<number, TowerBuff> = {};
+  for (const [id, per] of Object.entries(towerBy)) {
+    const sum: TowerBuff = { damagePct: 0, attackSpeedPct: 0 };
+    for (const b of Object.values(per)) {
+      sum.damagePct += b.damagePct;
+      sum.attackSpeedPct += b.attackSpeedPct;
+    }
+    towers[Number(id)] = sum;
+  }
+  const monsters: Record<number, MonsterAuraFx> = {};
+  for (const [id, per] of Object.entries(monsterBy)) {
+    const sum: MonsterAuraFx = { slowPct: 0, resistDown: {} };
+    for (const fx of Object.values(per)) {
+      sum.slowPct += fx.slowPct;
+      for (const e of ELEMENTS) {
+        const v = fx.resistDown[e];
+        if (v !== undefined) sum.resistDown[e] = (sum.resistDown[e] ?? 0) + v;
+      }
+    }
+    monsters[Number(id)] = sum;
+  }
+  return { towers, monsters, emitters };
+}
+
+export const EMPTY_FIELD: AuraField = { towers: {}, monsters: {}, emitters: [] };

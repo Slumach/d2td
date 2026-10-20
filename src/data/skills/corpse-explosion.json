@@ -1,0 +1,15 @@
+{
+  "id": "corpse-explosion",
+  "skill": "Corpse Explosion",
+  "archetype": "corpse",
+  "damageType": "fire",
+  "skillLevels": [1, 5, 10, 15, 20],
+  "rangeTenths": 40,
+  "rateTicks": 30,
+  "corpse": {
+    "radiusCalc": "aurarangecalc",
+    "minPctCalc": "calc1",
+    "maxPctCalc": "calc2",
+    "physicalPctCalc": "calc3"
+  }
+}

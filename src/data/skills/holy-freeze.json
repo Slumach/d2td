@@ -1,0 +1,8 @@
+{
+  "id": "holy-freeze",
+  "skill": "Holy Freeze",
+  "archetype": "control",
+  "damageType": "cold",
+  "skillLevels": [1, 5, 10, 15, 20],
+  "control": { "mode": "aura", "radiusCalc": "aurarangecalc" }
+}

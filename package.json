@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tools",
-    "extract": "tsx tools/extract/index.ts"
+    "extract": "tsx tools/extract/index.ts",
+    "balance": "tsx tools/balance.ts"
   },
   "dependencies": {
     "phaser": "3.90.0"

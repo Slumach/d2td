@@ -1,0 +1,178 @@
+// Tower commands and the rules behind them: build, T1 pick, levels, tiers and branches,
+// targeting, evolution and selling. Invalid commands do nothing, deterministically.
+
+import { MAX_TIER, MAX_TOWER_LEVEL, type EvolutionDef } from './data.ts';
+import { idiv } from './fixed.ts';
+import { inBounds, isPathTile, tileCenter } from './map.ts';
+import { TARGETING_MODES, type Sim, type Targeting, type Tower } from './state.ts';
+
+export function towerAt(sim: Sim, x: number, y: number): Tower | undefined {
+  return sim.state.towers.find((t) => t.tileX === x && t.tileY === y);
+}
+
+export function towerById(sim: Sim, id: number): Tower | undefined {
+  return sim.state.towers.find((t) => t.id === id);
+}
+
+export function canBuild(sim: Sim, x: number, y: number): boolean {
+  return inBounds(sim.map, x, y) && !isPathTile(sim.map, x, y) && towerAt(sim, x, y) === undefined;
+}
+
+function lineOf(sim: Sim, tower: Tower) {
+  return sim.data.classes[tower.cls]?.lines[tower.line];
+}
+
+/** The skills offered at the tower's next pick: its T1 options, or a pending branch. */
+export function pendingChoices(sim: Sim, tower: Tower): string[] {
+  if (tower.evolved) return [];
+  if (!tower.line) {
+    const cls = sim.data.classes[tower.cls];
+    return cls ? Object.values(cls.lines).flatMap((l) => l.tiers[0] ?? []) : [];
+  }
+  if (tower.picks.length === tower.tier - 1) return lineOf(sim, tower)?.tiers[tower.tier - 1] ?? [];
+  return [];
+}
+
+export function upgradeCost(sim: Sim, tower: Tower): number | undefined {
+  if (tower.evolved || !tower.picks[tower.tier - 1] || tower.level >= MAX_TOWER_LEVEL) return undefined;
+  return sim.data.economy.levelCosts[tower.tier - 1]?.[tower.level - 1];
+}
+
+export function tierCost(sim: Sim, tower: Tower): number | undefined {
+  const line = lineOf(sim, tower);
+  if (tower.evolved || !line || tower.level < MAX_TOWER_LEVEL || tower.tier >= MAX_TIER) return undefined;
+  if (tower.tier >= line.tiers.length || tower.picks.length < tower.tier) return undefined;
+  return sim.data.economy.tierCosts[tower.tier - 1];
+}
+
+export function sellValue(sim: Sim, tower: Tower): number {
+  return idiv(tower.spent * sim.data.economy.sellRefundPct, 100);
+}
+
+/** True if the tower has learned `skill` and has reached at least `minTier`. */
+function meets(sim: Sim, tower: Tower, req: { skill: string; minTier: number }): boolean {
+  const line = lineOf(sim, tower);
+  if (tower.evolved || !line || tower.tier < req.minTier) return false;
+  const tierIndex = line.tiers.findIndex((options) => options.includes(req.skill));
+  return tierIndex >= 0 && tower.picks[tierIndex] === req.skill;
+}
+
+export function adjacent(a: Tower, b: Tower): boolean {
+  return a.id !== b.id && Math.abs(a.tileX - b.tileX) <= 1 && Math.abs(a.tileY - b.tileY) <= 1;
+}
+
+/** The recipe two adjacent towers can evolve into, with which one is the attack tower. */
+export function evolutionFor(sim: Sim, a: Tower, b: Tower): { recipe: EvolutionDef; attack: Tower; partner: Tower } | undefined {
+  if (!adjacent(a, b)) return undefined;
+  for (const recipe of sim.data.evolutions) {
+    if (meets(sim, a, recipe.attack) && meets(sim, b, recipe.partner)) return { recipe, attack: a, partner: b };
+    if (meets(sim, b, recipe.attack) && meets(sim, a, recipe.partner)) return { recipe, attack: b, partner: a };
+  }
+  return undefined;
+}
+
+function removeTower(sim: Sim, id: number): void {
+  const s = sim.state;
+  s.towers = s.towers.filter((t) => t.id !== id);
+  s.summons = s.summons.filter((u) => u.towerId !== id);
+}
+
+export function build(sim: Sim, x: number, y: number, cls: string, skill?: string): void {
+  const s = sim.state;
+  const cost = sim.data.economy.buildCost;
+  if (!sim.data.classes[cls] || !canBuild(sim, x, y) || s.gold < cost) return;
+  const center = tileCenter({ x, y });
+  s.gold -= cost;
+  const tower: Tower = {
+    id: s.nextId++,
+    cls,
+    tileX: x,
+    tileY: y,
+    x: center.x,
+    y: center.y,
+    line: '',
+    tier: 1,
+    level: 1,
+    picks: [],
+    spent: cost,
+    cooldown: 0,
+    targeting: 'first',
+    evolved: '',
+    partnerSkill: '',
+    partnerLevel: 0,
+    summonCooldown: 0,
+  };
+  s.towers.push(tower);
+  if (skill) pickSkill(sim, tower, skill);
+}
+
+export function pickSkill(sim: Sim, tower: Tower, skill: string): void {
+  if (tower.line || tower.evolved) return;
+  const lines = sim.data.classes[tower.cls]?.lines ?? {};
+  const line = Object.entries(lines).find(([, l]) => l.tiers[0]?.includes(skill));
+  if (!line) return;
+  tower.line = line[0];
+  tower.picks = [skill];
+}
+
+export function upgrade(sim: Sim, tower: Tower): void {
+  const cost = upgradeCost(sim, tower);
+  if (cost === undefined || sim.state.gold < cost) return;
+  sim.state.gold -= cost;
+  tower.spent += cost;
+  tower.level++;
+}
+
+export function upgradeTier(sim: Sim, tower: Tower): void {
+  const cost = tierCost(sim, tower);
+  if (cost === undefined || sim.state.gold < cost) return;
+  sim.state.gold -= cost;
+  tower.spent += cost;
+  tower.tier++;
+  tower.level = 1;
+  // A tier with one skill is taken at once; a branch waits for pickBranch
+  const options = lineOf(sim, tower)!.tiers[tower.tier - 1]!;
+  if (options.length === 1) tower.picks.push(options[0]!);
+}
+
+export function pickBranch(sim: Sim, tower: Tower, skill: string): void {
+  if (!tower.line || tower.evolved || tower.picks.length !== tower.tier - 1) return;
+  if (!lineOf(sim, tower)!.tiers[tower.tier - 1]?.includes(skill)) return;
+  tower.picks.push(skill);
+}
+
+export function setTargeting(tower: Tower, mode: Targeting): void {
+  if (TARGETING_MODES.includes(mode)) tower.targeting = mode;
+}
+
+export function evolve(sim: Sim, a: Tower, b: Tower): void {
+  const s = sim.state;
+  const cost = sim.data.economy.evolveCost;
+  const match = evolutionFor(sim, a, b);
+  if (!match || s.gold < cost) return;
+  const { recipe, attack, partner } = match;
+  // The partner aura keeps the level it reached: its current level if it still has it,
+  // otherwise it was maxed to tier past it
+  const partnerLevel = partner.picks[partner.tier - 1] === recipe.partner.skill ? partner.level - 1 : MAX_TOWER_LEVEL - 1;
+  s.gold -= cost;
+  removeTower(sim, attack.id);
+  removeTower(sim, partner.id);
+  s.towers.push({
+    ...attack,
+    id: s.nextId++,
+    picks: [...attack.picks],
+    tier: MAX_TIER + 1,
+    level: MAX_TOWER_LEVEL,
+    spent: attack.spent + partner.spent + cost,
+    cooldown: 0,
+    evolved: recipe.id,
+    partnerSkill: recipe.partner.skill,
+    partnerLevel,
+    summonCooldown: 0,
+  });
+}
+
+export function sell(sim: Sim, tower: Tower): void {
+  sim.state.gold += sellValue(sim, tower);
+  removeTower(sim, tower.id);
+}

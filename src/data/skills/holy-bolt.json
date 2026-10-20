@@ -1,0 +1,10 @@
+{
+  "id": "holy-bolt",
+  "skill": "Holy Bolt",
+  "archetype": "projectile",
+  "damageType": "mag",
+  "skillLevels": [1, 5, 10, 15, 20],
+  "rangeTenths": 40,
+  "rateTicks": 20,
+  "projectile": { "count": 1 }
+}

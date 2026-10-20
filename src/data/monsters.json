@@ -1,0 +1,33 @@
+{
+  "roster": {
+    "fallen1": { "role": "swarm" },
+    "fallenshaman1": {
+      "role": "support",
+      "resurrect": { "monType": "fallen", "chanceColumn": "aip1", "rangeColumn": "aip4", "sequence": "seq_shamanresurrect" }
+    },
+    "zombie1": { "role": "tank" },
+    "skeleton1": { "role": "undead" },
+    "quillrat1": { "role": "fast" },
+    "corruptrogue1": { "role": "standard" },
+    "fallen4": { "role": "fastSwarm" },
+    "brute1": { "role": "heavyTank" },
+    "bloodraven": { "role": "miniBoss" },
+    "andariel": { "role": "actBoss" }
+  },
+  "pools": {
+    "swarm": [
+      { "id": "fallen1", "minWave": 1 },
+      { "id": "quillrat1", "minWave": 1 },
+      { "id": "fallenshaman1", "minWave": 3 },
+      { "id": "corruptrogue1", "minWave": 5 },
+      { "id": "fallen4", "minWave": 9 }
+    ],
+    "tank": [
+      { "id": "zombie1", "minWave": 1 },
+      { "id": "skeleton1", "minWave": 2 },
+      { "id": "corruptrogue1", "minWave": 4 },
+      { "id": "brute1", "minWave": 6 }
+    ]
+  },
+  "bosses": { "10": "bloodraven", "20": "bloodraven", "30": "andariel" }
+}

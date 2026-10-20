@@ -1,0 +1,10 @@
+{
+  "id": "paladin",
+  "name": "Paladin",
+  "weapon": "Crystal Sword",
+  "lines": {
+    "zealot": { "name": "Zealot", "tiers": [["sacrifice"], ["zeal"], ["vengeance"]] },
+    "holy": { "name": "Holy", "tiers": [["holy-bolt"], ["blessed-hammer"], ["fist-of-the-heavens"]] },
+    "aura": { "name": "Aura", "tiers": [["might"], ["concentration", "holy-freeze"], ["fanaticism", "conviction"]] }
+  }
+}
