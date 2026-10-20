@@ -1,4 +1,4 @@
-// M0 gate scene: the decoded zombie walk cycle walking a circle at 2x, with the
+// M0 gate scene: the decoded zombie walk cycle walking a circle at 1x, with the
 // Paladin's HD skill icons underneath, so one screenshot proves the whole pipeline.
 // This is a render-only demo with no simulation behind it, so it moves on Phaser's
 // frame delta. Real units will take their positions from src/sim.
@@ -11,7 +11,6 @@ const TEXTURE = 'zombie1';
 const MODE = 'WL';
 const ICON_INDEX = 'icons_paladin';
 const ICON_DIR = 'icons/paladin/';
-const SCALE = 2;
 const RADIUS = 160;
 const CIRCLE_Y = 250;
 /** Seconds per lap. Picked by eye for the demo; real movement will use monstats velocity. */
@@ -92,7 +91,6 @@ export class ZombieWalkScene extends Phaser.Scene {
 
     this.zombie = this.add
       .sprite(width / 2 + RADIUS, CIRCLE_Y, TEXTURE)
-      .setScale(SCALE)
       .setOrigin(origin.x / frameWidth, origin.y / frameHeight);
 
     this.add.text(16, 16, `zm walk, ${directions.length} directions x ${framesPerDirection} frames, ${fps.toFixed(1)} fps`, {

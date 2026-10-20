@@ -7,6 +7,7 @@ import type { DesignData } from '../sim/data.ts';
 import { startAutoplay } from './autoplay.ts';
 import { GAME_HEIGHT, GAME_WIDTH, GameScene } from './GameScene.ts';
 import { ZombieWalkScene } from './ZombieWalkScene.ts';
+import { integerZoom } from './zoom.ts';
 
 export interface StartOptions {
   /** The M0 zombie and icons proof instead of the game. */
@@ -25,18 +26,30 @@ export interface StartOptions {
 /** GameScene reads its design data from the registry, so a run can swap it. */
 export const DESIGN_KEY = 'design';
 
+/**
+ * Phaser zooms in CSS pixels. Counting the window in device pixels and dividing back keeps
+ * the zoom whole on the actual screen, even under Windows display scaling.
+ */
+function fitZoom(width: number, height: number): number {
+  const dpr = window.devicePixelRatio || 1;
+  return integerZoom(window.innerWidth * dpr, window.innerHeight * dpr, width, height) / dpr;
+}
+
 export function startGame(opts: StartOptions = {}): Phaser.Game {
+  const width = opts.m0 ? 960 : GAME_WIDTH;
+  const height = opts.m0 ? 680 : GAME_HEIGHT;
   const design: DesignData = opts.rich ? { ...DESIGN, balance: { ...DESIGN.balance, startingGold: 50_000 } } : DESIGN;
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: opts.parent ?? 'game',
-    // The map is 30 x 17 tiles of 64 px between a HUD bar and the tower panel
-    width: opts.m0 ? 960 : GAME_WIDTH,
-    height: opts.m0 ? 680 : GAME_HEIGHT,
+    // The map is 30 x 17 tiles of 48 px between a HUD bar and the tower panel
+    width,
+    height,
     backgroundColor: '#2a2a22',
-    // Nearest-neighbour sampling and whole-pixel positions for classic sprites at 2x
+    // Nearest-neighbour sampling and whole-pixel positions for classic sprites at 1x
     pixelArt: true,
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    // No Scale.FIT: the whole canvas zooms by a whole number and the page letterboxes it
+    scale: { mode: Phaser.Scale.NONE, zoom: fitZoom(width, height) },
     scene: opts.m0 ? [ZombieWalkScene] : [GameScene],
     callbacks: {
       preBoot: (g) => {
@@ -46,6 +59,7 @@ export function startGame(opts: StartOptions = {}): Phaser.Game {
     },
   });
   game.sound.volume = (opts.volume ?? 80) / 100;
+  window.addEventListener('resize', () => game.scale.setZoom(fitZoom(width, height)));
   if (opts.autoplay && !opts.m0) {
     game.events.once(Phaser.Core.Events.READY, () => {
       const scene = game.scene.getScene('Game') as GameScene;

@@ -47,7 +47,8 @@ import { angle64, spriteDirection } from './directions.ts';
 import { facingFromVector, type Facing8 } from './facing.ts';
 import { FONT, buttonRow, createTooltip, type ButtonSpec, type Tooltip } from './ui.ts';
 
-const TILE = 64;
+/** Render-side tile size. The sim's tile is UNITS_PER_TILE units and does not change with it. */
+const TILE = 48;
 const HUD_HEIGHT = 64;
 const MAP_HEIGHT = 17 * TILE;
 const PANEL_TOP = HUD_HEIGHT + MAP_HEIGHT;
@@ -57,8 +58,6 @@ const TICK_MS = 1000 / TICKS_PER_SECOND;
 /** Do not let a stalled tab replay minutes of ticks in one frame. */
 const MAX_TICKS_PER_FRAME = 10;
 const CLASS = 'paladin';
-/** Classic sprites at exactly 2x, nearest neighbour (design doc, Decisions locked). */
-const SPRITE_SCALE = 2;
 /** How far a tower looks for a monster to face, in units. */
 const FACE_RANGE = 6 * UNITS_PER_TILE;
 
@@ -255,7 +254,8 @@ export class GameScene extends Phaser.Scene {
 
   private sprite(texture: string, x: number, y: number): Phaser.GameObjects.Sprite {
     if (DEBUG) console.log(`sprite ${texture} at ${Math.round(x)},${Math.round(y)} tick ${this.sim.state.tick}`);
-    const s = this.add.sprite(x, y, texture).setScale(SPRITE_SCALE);
+    // Classic sprites draw at 1x; only the whole canvas zooms (design doc, Decisions locked)
+    const s = this.add.sprite(x, y, texture);
     const [ox, oy] = originOf(metaOf(this, texture));
     return s.setOrigin(ox, oy);
   }
@@ -411,7 +411,7 @@ export class GameScene extends Phaser.Scene {
     if (!target) return;
     const hit = active.skill.id === 'vengeance' ? 'vengeance-hit' : 'zeal-hit';
     const angle = angle64(target.x - t.x, target.y - t.y);
-    for (const m of MISSILES_FOR[hit] ?? []) this.effect(m, toPx(target.x), HUD_HEIGHT + toPx(target.y) - 30, angle);
+    for (const m of MISSILES_FOR[hit] ?? []) this.effect(m, toPx(target.x), HUD_HEIGHT + toPx(target.y) - 15, angle);
   }
 
   private syncMissiles(): void {
@@ -525,14 +525,15 @@ export class GameScene extends Phaser.Scene {
     // Zones (no Paladin skill makes one) stay translucent circles
     for (const m of state.missiles) {
       if (this.sim.data.skills[m.skill]?.archetype !== 'zone') continue;
-      g.fillStyle(0x80c0ff, 0.2).fillCircle(toPx(m.x), oy + toPx(m.y), 40);
+      g.fillStyle(0x80c0ff, 0.2).fillCircle(toPx(m.x), oy + toPx(m.y), (TILE * 5) / 8);
     }
 
     // HP bars over monsters
     for (const m of state.monsters) {
       const view = this.monsters.get(m.id);
-      const w = m.rank === 'boss' ? 56 : 32;
-      const top = view ? view.sprite.y - view.sprite.displayOriginY * 0.9 * (view.sprite.scaleY / SPRITE_SCALE) - 10 : oy + toPx(m.y) - 40;
+      const w = m.rank === 'boss' ? 42 : 24;
+      // A D2 frame box reaches about twice the body's height above the feet
+      const top = view ? view.sprite.y - view.sprite.displayOriginY * 0.45 - 6 : oy + toPx(m.y) - TILE / 2;
       const x = toPx(m.x) - w / 2;
       g.fillStyle(0x200000).fillRect(x, top, w, 4);
       g.fillStyle(m.rank === 'normal' ? 0x40e040 : 0xe0c040).fillRect(x, top, (w * Math.max(0, m.hp)) / m.maxHp, 4);
