@@ -1,0 +1,25 @@
+{
+  "name": "d2td",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Non-commercial Diablo II fan tower defense. Bring your own D2R install.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tools",
+    "extract": "tsx tools/extract/index.ts"
+  },
+  "dependencies": {
+    "phaser": "3.90.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.9",
+    "tsx": "4.20.3",
+    "typescript": "5.8.3",
+    "vite": "6.4.3",
+    "vitest": "3.2.7"
+  }
+}
