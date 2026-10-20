@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tools",
     "extract": "tsx tools/extract/index.ts",
-    "balance": "tsx tools/balance.ts"
+    "balance": "tsx tools/balance.ts",
+    "ladders": "tsx tools/ladders.ts"
   },
   "dependencies": {
     "phaser": "3.90.0"

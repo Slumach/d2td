@@ -5,8 +5,8 @@
 //   npm run balance -- --waves 30 --seeds 1,2,3,4,5
 //   npm run balance -- --hp 112 --bounty 105 --cost 160     try multipliers without editing the file
 //
-// Targets
-//   BOLT loses on waves 10 to 12, HOLY on 18 to 24, TWOLINE on 25 to 28
+// Targets, by median over the seeds (default 5)
+//   BOLT loses on wave 10 or 15, HOLY on 20, TWOLINE on 30
 //   PALADIN survives all 30 waves with 4 lives or fewer, and has a Hammerdin by wave 15
 
 import { pathToFileURL } from 'node:url';
@@ -38,32 +38,85 @@ export interface Targets {
   notes: string[];
 }
 
-/** Waves on which each losing bot should fall. */
-export const LOSS_WINDOWS: Record<'BOLT' | 'HOLY' | 'TWOLINE', [number, number]> = {
-  BOLT: [10, 12],
-  HOLY: [18, 24],
-  TWOLINE: [25, 28],
+/** The walls each losing bot should fall on, judged by its median over the seeds. */
+export const LOSS_WAVES: Record<'BOLT' | 'HOLY' | 'TWOLINE', number[]> = {
+  BOLT: [10, 15],
+  HOLY: [20],
+  TWOLINE: [30],
 };
 export const PALADIN_MAX_LIVES = 4;
 export const HAMMERDIN_BY_WAVE = 15;
+/** A survived run counts as this wave when taking medians. */
+const SURVIVED = 31;
+
+export function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)]!;
+}
+
+/** The wave a run ended on, or SURVIVED. */
+export function endWave(r: RunResult): number {
+  return r.won ? SURVIVED : r.wave;
+}
 
 export function checkTargets(results: RunResult[], waves: number): Targets {
   const notes: string[] = [];
-  for (const r of results) {
-    const where = `${r.strategy} seed ${r.seed}`;
-    if (r.strategy === 'PALADIN') {
-      if (!r.won) notes.push(`${where} lost on wave ${r.wave} of ${waves}`);
-      else if (r.lives > PALADIN_MAX_LIVES) notes.push(`${where} kept ${r.lives} lives`);
-      const hammerdin = r.evolvedOn['hammerdin'];
-      if (hammerdin === undefined || hammerdin > HAMMERDIN_BY_WAVE) {
-        notes.push(`${where} Hammerdin ${hammerdin === undefined ? 'never' : `on wave ${hammerdin}`}`);
-      }
+  for (const strategy of [...new Set(results.map((r) => r.strategy))]) {
+    const runs = results.filter((r) => r.strategy === strategy);
+    const wave = median(runs.map(endWave));
+    if (strategy === 'PALADIN') {
+      const lives = median(runs.map((r) => r.lives));
+      if (wave !== SURVIVED) notes.push(`PALADIN median: lost on wave ${wave} of ${waves}`);
+      else if (lives > PALADIN_MAX_LIVES) notes.push(`PALADIN median: kept ${lives} lives`);
+      const late = runs.filter((r) => (r.evolvedOn['hammerdin'] ?? 99) > HAMMERDIN_BY_WAVE).map((r) => r.seed);
+      if (late.length > 0) notes.push(`PALADIN Hammerdin after wave ${HAMMERDIN_BY_WAVE} on seeds ${late.join(', ')}`);
     } else {
-      const [from, to] = LOSS_WINDOWS[r.strategy];
-      if (r.won || r.wave < from || r.wave > to) notes.push(`${where} ${r.won ? 'survived' : `lost on wave ${r.wave}`}, wants ${from}-${to}`);
+      const want = LOSS_WAVES[strategy];
+      if (!want.includes(wave)) {
+        notes.push(`${strategy} median: ${wave === SURVIVED ? 'survived' : `lost on wave ${wave}`}, wants ${want.join(' or ')}`);
+      }
     }
   }
   return { ok: notes.length === 0, notes };
+}
+
+/**
+ * Per-wave margins for each bot, median over seeds: lives lost, and how far along the
+ * path the wave's last monster got (percent; 100 means it leaked). The sawtooth shows as
+ * finish points creeping toward 100 before each wall.
+ */
+export function marginTable(results: RunResult[], waves: number): string[] {
+  const out: string[] = [];
+  const header = Array.from({ length: waves }, (_, i) => String(i + 1).padStart(6)).join('');
+  out.push(`per-wave margin, median over seeds: lives lost / % of path where the last monster died`);
+  out.push(`${'wave'.padEnd(8)}${header}`);
+  for (const strategy of [...new Set(results.map((r) => r.strategy))]) {
+    const runs = results.filter((r) => r.strategy === strategy);
+    const cell = (n: number, pick: (m: { livesLost: number; finish: number }) => number) => {
+      const values = runs.map((r) => r.margins.find((m) => m.wave === n)).filter((m) => m !== undefined).map(pick);
+      return values.length === 0 ? '' : String(median(values));
+    };
+    const lives = Array.from({ length: waves }, (_, i) => cell(i + 1, (m) => m.livesLost).padStart(6)).join('');
+    const finish = Array.from({ length: waves }, (_, i) => cell(i + 1, (m) => Math.round(m.finish / 10)).padStart(6)).join('');
+    out.push(`${strategy.padEnd(8)}${lives}`);
+    out.push(`${'  path %'.padEnd(8)}${finish}`);
+  }
+  return out;
+}
+
+/** One line per bot: median end wave and lives, plus the spread over seeds. */
+export function summarise(results: RunResult[]): string[] {
+  const out: string[] = [];
+  for (const strategy of [...new Set(results.map((r) => r.strategy))]) {
+    const runs = results.filter((r) => r.strategy === strategy);
+    const ends = runs.map(endWave);
+    const fmt = (w: number) => (w === SURVIVED ? 'survived' : `w${w}`);
+    out.push(
+      `${strategy.padEnd(8)}  median ${fmt(median(ends)).padEnd(8)}  lives ${median(runs.map((r) => r.lives))}  ` +
+        `spread ${runs.map((r) => `${fmt(endWave(r))}/${r.lives}`).join(' ')}`,
+    );
+  }
+  return out;
 }
 
 export function runAll(design: DesignData, waves: number, seeds: number[]): RunResult[] {
@@ -77,7 +130,7 @@ function main(): void {
   const { values: args } = parseArgs({
     options: {
       waves: { type: 'string', default: '30' },
-      seeds: { type: 'string', default: '1,2,3' },
+      seeds: { type: 'string', default: '1,2,3,4,5' },
       hp: { type: 'string' },
       bounty: { type: 'string' },
       cost: { type: 'string' },
@@ -104,6 +157,10 @@ function main(): void {
         `${String(r.towers).padStart(6)}  ${String(r.levels).padStart(8)}  ${String(r.topTier).padStart(8)}  ${evolutions}`,
     );
   }
+  console.log('');
+  for (const line of marginTable(results, waves)) console.log(line);
+  console.log('');
+  for (const line of summarise(results)) console.log(line);
   const targets = checkTargets(results, waves);
   console.log(targets.ok ? 'Targets met.' : `Targets missed:\n  ${targets.notes.join('\n  ')}`);
 }

@@ -75,7 +75,7 @@ describe('aura stacking', () => {
     placeTower(sim, 2, 4, 'conviction', { tier: 3, level: 1 });
     sim.fx = computeAuras(sim);
     const down = skill<DebuffDef>(sim, 'conviction').levels[0]!.resistDown.fire!;
-    expect(effectiveResist(sim, near, 'fire')).toBe(20 - down);
+    expect(effectiveResist(sim, near, 'fire')).toBe(Math.max(-100, 20 - down));
     expect(effectiveResist(sim, far, 'fire')).toBe(20);
     expect(effectiveResist(sim, near, 'mag')).toBe(0);
   });

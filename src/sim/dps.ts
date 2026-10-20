@@ -1,0 +1,138 @@
+// Ladder metrics. A tier-up must be a strict upgrade, and "better" is measured from data:
+//
+//   Attack skills: single-target damage per tick against the standard target, a plain
+//   monster (not undead, not a demon, no resistances). In 1/256 HP per 1000 ticks.
+//
+//   Auras: the DPS multiplier the aura gives a reference neighbour (a level-5 tower of
+//   balance.json tierLadder.referenceSkill) against that same target, per mille:
+//     damage %             x (100 + damage) / 100
+//     attack speed %       the neighbour's interval shortened by that attack speed
+//     resistance cut       x (100 + cut) / 100, as taken against a 0% resist target
+//     slow %               x 100 / (100 - slow), extra time under fire
+//
+// Per archetype for attack skills: projectile shots times count; a pierce or chain bolt
+// hits the target once; a splash hits it once per cast (the sub-missile only if its
+// filter allows plain monsters); a zone hits every tickTicks while it lasts; melee is
+// weapon damage with the skill's percent and elemental adds, times swings; a control
+// aura pulses its damage. Summons and corpses do no direct damage and score 0.
+
+import type { DamageRange, HitFilter, SkillDef } from './archetypes/types.ts';
+import { idiv } from './fixed.ts';
+
+const PER = 1000;
+
+/** Percent of a hit the standard target takes. */
+function plainPct(filter: HitFilter): number {
+  return filter.fullDamageTo === 'all' ? 100 : filter.otherDamagePct;
+}
+
+function avg(r: DamageRange): number {
+  return idiv(r.min + r.max, 2);
+}
+
+function interval(skill: SkillDef, attackSpeedPct = 0): number {
+  return Math.max(1, idiv(skill.rateTicks * 100, 100 + attackSpeedPct), skill.delayTicks);
+}
+
+export function standardDps(skill: SkillDef, lvl: number): number {
+  const per = (damage: number) => idiv(damage * PER, interval(skill));
+  switch (skill.archetype) {
+    case 'projectile': {
+      const l = skill.levels[lvl]!;
+      return per(idiv(avg(l) * l.count * plainPct(skill.filter), 100));
+    }
+    case 'pierce':
+      return per(idiv(avg(skill.levels[lvl]!) * plainPct(skill.filter), 100));
+    case 'splash': {
+      const l = skill.levels[lvl]!;
+      const sub = skill.subFilter && l.subRadiusUnits > 0 ? idiv(avg(l.sub) * plainPct(skill.subFilter), 100) : 0;
+      return per(idiv(avg(l) * plainPct(skill.filter), 100) + sub);
+    }
+    case 'zone': {
+      const hits = Math.max(1, idiv(skill.durationTicks, skill.tickTicks));
+      return per(idiv(avg(skill.levels[lvl]!) * hits * plainPct(skill.filter), 100));
+    }
+    case 'melee': {
+      const l = skill.levels[lvl]!;
+      const weapon = avg(skill.weapon);
+      let hit = idiv(weapon * (100 + l.damagePct), 100);
+      for (const pct of Object.values(l.elementalPct)) hit += idiv(weapon * (pct ?? 0), 100);
+      return per(hit * l.swings);
+    }
+    case 'control':
+      return per(idiv(avg(skill.levels[lvl]!) * plainPct(skill.filter), 100));
+    default:
+      return 0;
+  }
+}
+
+/** True for skills whose worth is what they do to others: buff, debuff and control auras. */
+export function isAura(skill: SkillDef): boolean {
+  return skill.archetype === 'buffAura' || skill.archetype === 'debuff' || (skill.archetype === 'control' && skill.mode === 'aura');
+}
+
+/** The DPS multiplier (per mille) an aura gives the reference neighbour. */
+export function auraMultiplier(skill: SkillDef, lvl: number, reference: SkillDef): number {
+  let m = PER;
+  const times = (pct: number) => {
+    m = idiv(m * (100 + pct), 100);
+  };
+  if (skill.archetype === 'buffAura') {
+    const l = skill.levels[lvl]!;
+    times(l.damagePct);
+    m = idiv(m * interval(reference), interval(reference, l.attackSpeedPct));
+  } else if (skill.archetype === 'debuff') {
+    const cuts = Object.values(skill.levels[lvl]!.resistDown).map((v) => v ?? 0);
+    times(cuts.length > 0 ? Math.max(...cuts) : 0);
+  } else if (skill.archetype === 'control') {
+    const slow = Math.min(90, skill.levels[lvl]!.slowPct);
+    m = idiv(m * 100, 100 - slow);
+  }
+  return m;
+}
+
+/** What a tier-up compares: DPS for attack skills, the neighbour multiplier for auras. */
+export function ladderMetric(skill: SkillDef, lvl: number, reference: SkillDef): number {
+  return isAura(skill) ? auraMultiplier(skill, lvl, reference) : standardDps(skill, lvl);
+}
+
+const scaled = (r: DamageRange, permille: number): DamageRange => ({ min: idiv(r.min * permille, PER), max: idiv(r.max * permille, PER) });
+const scalePct = (v: number, permille: number) => idiv(v * permille, PER);
+
+/**
+ * A skill with a flat tier bonus (per mille): damage for attack skills, the aura's
+ * effects for auras. Used when a tier cannot out-damage the one before it by its cap.
+ */
+export function withTierBonus(skill: SkillDef, permille: number): SkillDef {
+  if (permille === PER) return skill;
+  switch (skill.archetype) {
+    case 'projectile':
+    case 'pierce':
+    case 'zone':
+      return { ...skill, levels: skill.levels.map((l) => ({ ...l, ...scaled(l, permille) })) } as SkillDef;
+    case 'splash':
+      return { ...skill, levels: skill.levels.map((l) => ({ ...l, ...scaled(l, permille), sub: scaled(l.sub, permille) })) };
+    case 'melee':
+      return { ...skill, weapon: scaled(skill.weapon, permille) };
+    case 'control':
+      return {
+        ...skill,
+        levels: skill.levels.map((l) => ({ ...l, ...scaled(l, permille), slowPct: Math.min(90, scalePct(l.slowPct, permille)) })),
+      };
+    case 'buffAura':
+      return {
+        ...skill,
+        levels: skill.levels.map((l) => ({ ...l, damagePct: scalePct(l.damagePct, permille), attackSpeedPct: scalePct(l.attackSpeedPct, permille) })),
+      };
+    case 'debuff':
+      return {
+        ...skill,
+        levels: skill.levels.map((l) => ({
+          ...l,
+          resistDown: Object.fromEntries(Object.entries(l.resistDown).map(([e, v]) => [e, scalePct(v ?? 0, permille)])),
+        })),
+      };
+    default:
+      return skill;
+  }
+}

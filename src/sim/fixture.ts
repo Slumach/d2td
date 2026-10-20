@@ -146,6 +146,12 @@ export function fixtureDesign(design: DesignData = DESIGN): DesignData {
   };
 }
 
+/**
+ * The skill JSON tierBonus values are computed from the real tables, so the fixture's
+ * invented numbers need their own; skip the stored-value check and use the computed ones.
+ */
+export const FIXTURE_BUILD = { checkTierBonus: false };
+
 export function fixtureGameData(waveCount?: number): GameData {
-  return buildGameData(FIXTURE_TABLES, fixtureDesign(), waveCount);
+  return buildGameData(FIXTURE_TABLES, fixtureDesign(), waveCount, FIXTURE_BUILD);
 }

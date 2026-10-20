@@ -3,6 +3,6 @@
   "skill": "Holy Freeze",
   "archetype": "control",
   "damageType": "cold",
-  "skillLevels": [1, 5, 10, 15, 20],
+  "tierBonus": 1352,
   "control": { "mode": "aura", "radiusCalc": "aurarangecalc" }
 }

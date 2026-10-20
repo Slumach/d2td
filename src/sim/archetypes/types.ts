@@ -36,12 +36,20 @@ export interface SkillJson {
   skill: string;
   archetype: ArchetypeId;
   damageType: DamageType;
-  /** skills.txt levels used for tower levels 1 to 5. */
-  skillLevels: number[];
+  /**
+   * skills.txt levels used for tower levels 1 to 5. Only T1 and non-class skills have
+   * them; T2 and T3 skills get a ladder computed at load time (see buildLadders).
+   */
+  skillLevels?: number[];
   /** Attack range in tenths of a tile; auras use their radius calc instead. */
   rangeTenths?: number;
   /** Ticks between attacks before attack speed bonuses. */
   rateTicks?: number;
+  /**
+   * Per mille flat bonus for a T2/T3 skill that cannot reach its tier floor by the cap.
+   * Computed from data at load time; stored here so it is visible, and checked to match.
+   */
+  tierBonus?: number;
   [archetypeFields: string]: unknown;
 }
 

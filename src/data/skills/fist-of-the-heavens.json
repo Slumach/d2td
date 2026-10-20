@@ -3,7 +3,6 @@
   "skill": "Fist of the Heavens",
   "archetype": "splash",
   "damageType": "ltng",
-  "skillLevels": [1, 5, 10, 15, 20],
   "rangeTenths": 50,
   "rateTicks": 20,
   "splash": {

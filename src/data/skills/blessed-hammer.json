@@ -3,7 +3,6 @@
   "skill": "Blessed Hammer",
   "archetype": "splash",
   "damageType": "mag",
-  "skillLevels": [1, 5, 10, 15, 20],
   "rangeTenths": 25,
   "rateTicks": 16,
   "splash": {

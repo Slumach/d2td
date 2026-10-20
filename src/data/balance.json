@@ -5,15 +5,15 @@
   "bossLeakCost": 5,
   "buildCost": 150,
   "levelCostBase": [40, 80, 120],
-  "levelCostPctPerLevel": 150,
+  "levelCostPctPerLevel": 200,
   "tierCosts": [250, 500],
   "evolveCost": 400,
   "sellRefundPct": 60,
   "bountyPerLevel": 2,
   "rankBountyMultiplier": { "normal": 1, "champion": 3, "unique": 5 },
   "bossBountyMultiplier": { "bloodraven": 20, "andariel": 50 },
-  "bountyPctPerWave": 101,
-  "hpPctPerWave": 107,
+  "bountyPctPerWave": 113,
+  "hpPctPerWave": 120,
   "waveClearBonusPct": 0,
   "earlyCallBonusPct": 5,
   "auraRangePerTile": 8,
@@ -24,13 +24,25 @@
     "count": 30,
     "minTypes": 2,
     "maxTypes": 4,
-    "championEvery": 5,
     "championPackSize": 3,
-    "uniqueEvery": 10,
-    "uniqueForcedMods": { "20": ["magicResistant"], "30": ["magicResistant"] },
     "swarm": { "base": 6, "perWave": 2, "spacingTicks": 10 },
     "tank": { "base": 3, "perWave": 1, "spacingTicks": 24 }
   },
+  "modSchedule": {
+    "champions": { "5": ["extraFast"], "15": ["stoneSkin"], "25": ["magicResistant"] },
+    "uniques": {
+      "10": ["extraStrong", "stoneSkin"],
+      "20": ["stoneSkin", "magicResistant"],
+      "30": ["extraFast", "magicResistant"]
+    },
+    "bosses": {
+      "10": ["extraFast"],
+      "20": ["extraFast", "magicResistant"],
+      "30": ["magicResistant", "extraStrong"]
+    }
+  },
+  "bossHpMultiplier": { "bloodraven": 15, "andariel": 40 },
+  "tierLadder": { "dpsPct": 110, "caps": { "2": 24, "3": 30 }, "referenceSkill": "holy-bolt" },
   "monsterMods": {
     "extraFast": { "speedPct": 50 },
     "extraStrong": { "damagePct": 100 },

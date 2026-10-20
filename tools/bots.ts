@@ -442,6 +442,24 @@ export function createBot(strategy: Strategy, sim: Sim): Bot {
   return engineBot(CONFIGS[strategy], sim);
 }
 
+/** Debug view: a bot's options right now, best power per gold first. */
+export function explainOptions(sim: Sim, strategy: Strategy): { gainPerGold: number; cost: number; commands: Command[] }[] {
+  const ranged = rankSpots(sim, 40);
+  const melee = rankSpots(sim, 15);
+  // Coverage needs the empty-map ranking; recompute it the same way the bot does at start
+  const fresh = createSim(sim.data, 0);
+  const r0 = rankSpots(fresh, 40);
+  const m0 = rankSpots(fresh, 15);
+  const cov: Coverage = {
+    ranged: new Map(r0.map((p) => [`${p.x},${p.y}`, p.score])),
+    melee: new Map(m0.map((p) => [`${p.x},${p.y}`, p.score])),
+    best: r0[0]?.score ?? 1,
+  };
+  return options(sim, CONFIGS[strategy], ranged, melee, cov)
+    .map((o) => ({ gainPerGold: o.gain / o.cost, cost: o.cost, commands: o.commands }))
+    .sort((a, b) => b.gainPerGold - a.gainPerGold);
+}
+
 export interface RunResult {
   strategy: Strategy;
   seed: number;
@@ -458,6 +476,48 @@ export interface RunResult {
   evolvedOn: Record<string, number>;
   /** Every command the bot sent, stamped with its tick: a replayable log. */
   log: TimedCommand[];
+  /** Per-wave margins, index 0 is wave 1, for the waves that finished. */
+  margins: WaveMargin[];
+}
+
+/**
+ * How close a wave came. livesLost counts leaks from that wave's own monsters; finish is
+ * how far along the path (per mille) its last monster got before it died, 1000 if it leaked.
+ */
+export interface WaveMargin {
+  wave: number;
+  livesLost: number;
+  finish: number;
+}
+
+/** Watches state tick by tick to log margins, without touching the sim. */
+class MarginLog {
+  readonly margins: WaveMargin[] = [];
+  private prev = new Map<number, { wave: number; dist: number; rank: string }>();
+  private lost = new Map<number, number>();
+  private done = new Set<number>();
+
+  observe(sim: Sim): void {
+    const s = sim.state;
+    const now = new Map(s.monsters.map((m) => [m.id, { wave: m.wave, dist: m.dist, rank: m.rank }]));
+    const e = sim.data.economy;
+    for (const [id, m] of this.prev) {
+      if (now.has(id)) continue;
+      // Gone this tick: leaked if it was on the last stretch and lives dropped, else killed where it stood
+      const leaked = m.dist + 400 >= sim.map.length;
+      if (leaked) this.lost.set(m.wave, (this.lost.get(m.wave) ?? 0) + (m.rank === 'boss' ? e.bossLeakCost : e.leakCost));
+      const w = s.waves[m.wave];
+      if (w && w.remaining === 0 && !this.done.has(m.wave)) {
+        this.done.add(m.wave);
+        this.margins.push({
+          wave: m.wave + 1,
+          livesLost: this.lost.get(m.wave) ?? 0,
+          finish: leaked ? 1000 : Math.round((m.dist * 1000) / sim.map.length),
+        });
+      }
+    }
+    this.prev = now;
+  }
 }
 
 const MAX_TICKS = 600_000;
@@ -473,11 +533,13 @@ export function runBot(
   const sim = createSim(data, seed);
   const bot = createBot(strategy, sim);
   const log: TimedCommand[] = [];
+  const margins = new MarginLog();
   let topTier = 0;
   while (sim.state.status === 'playing' && sim.state.tick < maxTicks) {
     const commands = bot.decide(sim);
     for (const command of commands) log.push({ tick: sim.state.tick, command });
     step(sim, commands);
+    margins.observe(sim);
     for (const t of sim.state.towers) topTier = Math.max(topTier, t.tier);
     onTick?.(sim);
   }
@@ -494,5 +556,6 @@ export function runBot(
     topTier,
     evolvedOn: bot.evolvedOn,
     log,
+    margins: margins.margins.sort((a, b) => a.wave - b.wave),
   };
 }

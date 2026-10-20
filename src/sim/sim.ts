@@ -11,8 +11,8 @@ import type { GameData } from './data.ts';
 import { idiv } from './fixed.ts';
 import { createMap } from './map.ts';
 import { decayCorpses, spawnMonsters, updateMonsters } from './monsters.ts';
-import { createRng, rollInt } from './rng.ts';
-import { MONSTER_MODS, type Command, type MonsterMod, type Sim, type TimedCommand, type Tower } from './state.ts';
+import { createRng } from './rng.ts';
+import type { Command, Sim, TimedCommand, Tower } from './state.ts';
 import { updateSummons } from './archetypes/summon.ts';
 import { build, evolve, pickBranch, pickSkill, sell, setTargeting, towerById, upgrade, upgradeTier } from './towers.ts';
 
@@ -103,16 +103,6 @@ function applyCommand(sim: Sim, command: Command): void {
   }
 }
 
-/** Distinct mods for a group: the forced ones, then the rest rolled from the sim RNG. */
-function rollMods(sim: Sim, count: number, forced: readonly MonsterMod[]): MonsterMod[] {
-  const out: MonsterMod[] = [...forced];
-  const pool = MONSTER_MODS.filter((m) => !forced.includes(m));
-  for (let i = out.length; i < count && pool.length > 0; i++) {
-    out.push(pool.splice(rollInt(sim.state.rng, 0, pool.length - 1), 1)[0]!);
-  }
-  return out;
-}
-
 function callWave(sim: Sim): void {
   const s = sim.state;
   const waveDef = sim.data.waves[s.wave];
@@ -122,9 +112,8 @@ function callWave(sim: Sim): void {
   let count = 0;
   let offset = 1;
   for (const group of waveDef.groups) {
-    const mods = rollMods(sim, group.modCount, group.forcedMods);
     for (let i = 0; i < group.count; i++) {
-      s.spawns.push({ tick: s.tick + offset, def: group.monster, wave, rank: group.rank, mods: [...mods] });
+      s.spawns.push({ tick: s.tick + offset, def: group.monster, wave, rank: group.rank, mods: [...group.mods], hp: group.hp ?? 0 });
       offset += group.spacingTicks;
       count++;
     }

@@ -3,7 +3,7 @@
   "skill": "Vengeance",
   "archetype": "melee",
   "damageType": "phys",
-  "skillLevels": [1, 5, 10, 15, 20],
+  "tierBonus": 1195,
   "rangeTenths": 15,
   "rateTicks": 15,
   "melee": { "elementalPctCalcs": { "fire": "calc1", "cold": "calc2", "ltng": "calc3" } }

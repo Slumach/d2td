@@ -4,6 +4,7 @@
 
 import { ARCHETYPES } from './archetypes/index.ts';
 import type { HitFilter, SkillDef, SkillJson } from './archetypes/types.ts';
+import { auraMultiplier, isAura, standardDps, withTierBonus } from './dps.ts';
 import { VELOCITY_TO_UNITS_PER_TICK, UNITS_PER_TILE, d2FramesToTicks, idiv } from './fixed.ts';
 import { ELEMENTS, MONSTER_MODS, type Element, type MonsterMod, type Rank } from './state.ts';
 import { findRow, int, monumodConstant, str, type Tables } from './tables.ts';
@@ -85,14 +86,26 @@ export interface BalanceJson {
     count: number;
     minTypes: number;
     maxTypes: number;
-    championEvery: number;
     championPackSize: number;
-    uniqueEvery: number;
-    /** Mods a wave's unique always carries, by wave number; the rest are rolled. */
-    uniqueForcedMods: Record<string, MonsterMod[]>;
     swarm: WaveKindJson;
     tank: WaveKindJson;
   };
+  /**
+   * Normal difficulty's fixed specials, keyed by wave number: champion packs and uniques
+   * with their mods, and the mods each wave's boss carries. Rolled mods return with Random mode.
+   */
+  modSchedule: {
+    champions: Record<string, MonsterMod[]>;
+    uniques: Record<string, MonsterMod[]>;
+    bosses: Record<string, MonsterMod[]>;
+  };
+  /** Boss HP as a multiple of its wave's average monster HP, by monster id. */
+  bossHpMultiplier: Record<string, number>;
+  /**
+   * Tier ladders: a tier must reach dpsPct of the tower it replaces; caps by tier. Auras
+   * are valued by the multiplier they give a level-5 referenceSkill tower.
+   */
+  tierLadder: { dpsPct: number; caps: Record<string, number>; referenceSkill: string };
   /** D2 hardcodes these mod effects, so they are design values. */
   monsterMods: Record<MonsterMod, { speedPct?: number; damagePct?: number; resist?: Partial<Record<Element, number>> }>;
   skillOverrides: Record<string, Partial<HitFilter>>;
@@ -149,10 +162,10 @@ export interface WaveGroup {
   count: number;
   spacingTicks: number;
   rank: Rank;
-  /** Mods for the group when the wave is called; a pack shares its mods. */
-  modCount: number;
-  /** Mods the group always gets; the rest of modCount is rolled from the others. */
-  forcedMods: MonsterMod[];
+  /** Mods every monster of the group carries, from the schedule. */
+  mods: MonsterMod[];
+  /** Fixed HP (1/256) for bosses: a multiple of the wave's average monster HP. */
+  hp?: number;
 }
 
 export interface WaveDef {
@@ -200,6 +213,7 @@ export interface GameData {
   evolutions: EvolutionDef[];
   monsters: Record<string, MonsterDef>;
   waves: WaveDef[];
+  ladders: Ladder[];
   economy: Economy;
   rules: Rules;
 }
@@ -256,10 +270,15 @@ export function compound(pct: number, steps: number): number[] {
 /**
  * Wave n (1-based): odd waves are swarms, even waves tanks. Each mixes 2 to 4 monster
  * types from its pool (those unlocked by minWave), rotating through the pool so
- * consecutive waves differ. Champion packs every championEvery waves, a unique with
- * two mods every uniqueEvery, and the bosses from monsters.json on their waves.
+ * consecutive waves differ. Champion packs, uniques and boss mods come from the
+ * balance.json schedule; a boss's HP is a multiple of its wave's average monster HP.
  */
-export function generateWaves(balance: BalanceJson, monsters: MonstersJson, count: number): WaveDef[] {
+export function generateWaves(
+  balance: BalanceJson,
+  monsters: MonstersJson,
+  count: number,
+  defs: Record<string, MonsterDef>,
+): WaveDef[] {
   const hp = compound(balance.hpPctPerWave, count);
   const bounty = compound(balance.bountyPctPerWave, count);
   const w = balance.waves;
@@ -283,26 +302,40 @@ export function generateWaves(balance: BalanceJson, monsters: MonstersJson, coun
       count: c,
       spacingTicks: spec.spacingTicks,
       rank: 'normal',
-      modCount: 0,
-      forcedMods: [],
+      mods: [],
     }));
 
+    const key = String(n);
     const lead = picked[0]!;
-    if (n % w.uniqueEvery === 0) {
-      const forcedMods = w.uniqueForcedMods[String(n)] ?? [];
-      groups.push({ monster: lead, count: 1, spacingTicks: spec.spacingTicks, rank: 'unique', modCount: 2, forcedMods });
-    } else if (n % w.championEvery === 0) {
+    const schedule = balance.modSchedule;
+    const uniqueMods = schedule.uniques[key];
+    const championMods = schedule.champions[key];
+    if (uniqueMods) groups.push({ monster: lead, count: 1, spacingTicks: spec.spacingTicks, rank: 'unique', mods: uniqueMods });
+    if (championMods) {
+      groups.push({ monster: lead, count: w.championPackSize, spacingTicks: spec.spacingTicks, rank: 'champion', mods: championMods });
+    }
+
+    const boss = monsters.bosses[key];
+    if (boss) {
+      // The wall scales with the curve: a multiple of this wave's average monster HP
+      let total = 0;
+      let monstersInWave = 0;
+      for (const [id, c] of counts) {
+        const d = defs[id]!;
+        total += idiv((d.minHp + d.maxHp) * hp[n - 1]!, 2000) * c;
+        monstersInWave += c;
+      }
+      const multiplier = balance.bossHpMultiplier[boss];
+      if (multiplier === undefined) throw new Error(`balance.json bossHpMultiplier has no ${boss}`);
       groups.push({
-        monster: lead,
-        count: w.championPackSize,
+        monster: boss,
+        count: 1,
         spacingTicks: spec.spacingTicks,
-        rank: 'champion',
-        modCount: 1,
-        forcedMods: [],
+        rank: 'boss',
+        mods: schedule.bosses[key] ?? [],
+        hp: Math.max(256, idiv(total, monstersInWave) * multiplier),
       });
     }
-    const boss = monsters.bosses[String(n)];
-    if (boss) groups.push({ monster: boss, count: 1, spacingTicks: spec.spacingTicks, rank: 'boss', modCount: 0, forcedMods: [] });
 
     waves.push({ kind, hpPermille: hp[n - 1]!, bountyPermille: bounty[n - 1]!, groups });
   }
@@ -346,42 +379,185 @@ export function rulesFrom(tables: Tables, balance: BalanceJson): Rules {
   };
 }
 
-export function resolveSkill(tables: Tables, json: SkillJson, design: DesignData, weapon: string | undefined): SkillDef {
+export function resolveSkill(
+  tables: Tables,
+  json: SkillJson,
+  design: DesignData,
+  weapon: string | undefined,
+  skillLevels: number[] | undefined = json.skillLevels,
+): SkillDef {
   const archetype = ARCHETYPES[json.archetype];
   if (!archetype) throw new Error(`${json.id}: unknown archetype ${json.archetype}`);
-  return archetype.resolve(json, {
-    tables,
-    skillRow: findRow(tables.skills, 'skill', json.skill),
-    weapon,
-    auraRangePerTile: design.balance.auraRangePerTile,
-    filterOverride: design.balance.skillOverrides[json.id],
-  });
+  if (!skillLevels) throw new Error(`${json.id}: no skillLevels and no tier ladder`);
+  return archetype.resolve(
+    { ...json, skillLevels },
+    {
+      tables,
+      skillRow: findRow(tables.skills, 'skill', json.skill),
+      weapon,
+      auraRangePerTile: design.balance.auraRangePerTile,
+      filterOverride: design.balance.skillOverrides[json.id],
+    },
+  );
 }
 
-export function buildGameData(tables: Tables, design: DesignData, waveCount: number = design.balance.waves.count): GameData {
+/** One computed tier ladder, kept for reports. */
+export interface Ladder {
+  cls: string;
+  line: string;
+  tier: number;
+  skill: string;
+  /** 'dps' for attack skills, 'aura' for the reference-neighbour multiplier. */
+  metric: 'dps' | 'aura';
+  /** skills.txt levels for tower levels 1 to 5. */
+  levels: number[];
+  /** The previous tier's best value at its top level, and this tier's value at its level 1. */
+  previous: number;
+  start: number;
+  /** False when no level up to the cap reached the floor and a tierBonus was needed. */
+  reached: boolean;
+  /** Per mille; 1000 unless the skill needed a bonus to reach the floor. */
+  tierBonus: number;
+}
+
+export interface BuildOptions {
+  /** Check skill JSON tierBonus values against the computed ones (default true). */
+  checkTierBonus?: boolean;
+}
+
+/**
+ * Tier ladders. A T2 or T3 skill starts at the lowest skills.txt level whose value is at
+ * least dpsPct of the strongest tower it can replace (the previous tier's options at their
+ * top level), then climbs to the tier's cap in five equal steps. Value is standard DPS for
+ * attack skills and the reference-neighbour multiplier for auras (see dps.ts). A skill
+ * that cannot reach the floor by its cap climbs cap-4 to cap instead, with a flat
+ * tierBonus that lifts its level 1 to the floor; the bonus is stored in the skill JSON and
+ * must match what the data needs.
+ */
+function buildLadders(
+  tables: Tables,
+  design: DesignData,
+  skills: Record<string, SkillDef>,
+  jsonById: Map<string, SkillJson>,
+  weaponFor: (id: string) => string | undefined,
+  checkTierBonus: boolean,
+): Ladder[] {
+  const { dpsPct, caps, referenceSkill } = design.balance.tierLadder;
+  const reference = skills[referenceSkill];
+  if (!reference) throw new Error(`tierLadder referenceSkill ${referenceSkill} is not a T1 or non-class skill`);
+  const top = MAX_TOWER_LEVEL - 1;
+  const ladders: Ladder[] = [];
+  for (const c of design.classes) {
+    for (const [lineId, line] of Object.entries(c.lines)) {
+      for (let t = 1; t < line.tiers.length; t++) {
+        const tier = t + 1;
+        const cap = caps[String(tier)];
+        if (cap === undefined) throw new Error(`balance.json tierLadder has no cap for T${tier}`);
+        const before = line.tiers[t - 1]!.map((id) => skills[id]!);
+        for (const id of line.tiers[t]!) {
+          const json = jsonById.get(id)!;
+          if (json.skillLevels) throw new Error(`${id}: T${tier} skills get a computed ladder; remove skillLevels`);
+          const resolveAt = (levels: number[]) => resolveSkill(tables, json, design, weaponFor(id), levels);
+          const probe = resolveAt(Array(MAX_TOWER_LEVEL).fill(1));
+          // Compare like with like: auras against auras, attacks against attacks
+          const metric: Ladder['metric'] = isAura(probe) && before.every(isAura) ? 'aura' : 'dps';
+          const value = (s: SkillDef, lvl: number) => (metric === 'aura' ? auraMultiplier(s, lvl, reference) : standardDps(s, lvl));
+          const previous = Math.max(...before.map((s) => value(s, top)));
+          const floor = Math.ceil((previous * dpsPct) / 100);
+
+          let start = 0;
+          for (let level = 1; level <= cap && previous > 0; level++) {
+            if (value(resolveAt(Array(MAX_TOWER_LEVEL).fill(level)), 0) >= floor) {
+              start = level;
+              break;
+            }
+          }
+          if (previous === 0) start = 1;
+          const reached = start > 0;
+          // Five equal steps to the cap; an unreachable floor climbs cap-4 to cap instead
+          const levels = reached
+            ? Array.from({ length: MAX_TOWER_LEVEL }, (_, i) => start + idiv(i * (cap - start) + 2, 4))
+            : Array.from({ length: MAX_TOWER_LEVEL }, (_, i) => cap - (MAX_TOWER_LEVEL - 1) + i);
+          const base = resolveAt(levels);
+
+          let tierBonus = 1000;
+          if (!reached) {
+            // The lowest flat bonus that lifts level 1 to the floor
+            let lo = 1000;
+            let hi = 1000;
+            while (value(withTierBonus(base, hi), 0) < floor) {
+              hi *= 2;
+              if (hi > 1 << 20) throw new Error(`${id}: no tierBonus reaches the T${tier} floor (the effect saturates)`);
+            }
+            while (lo < hi) {
+              const mid = idiv(lo + hi, 2);
+              if (value(withTierBonus(base, mid), 0) >= floor) hi = mid;
+              else lo = mid + 1;
+            }
+            tierBonus = lo;
+          }
+          if (checkTierBonus && (json.tierBonus ?? 1000) !== tierBonus) {
+            throw new Error(
+              `${id}: tierBonus in its JSON is ${json.tierBonus ?? 'missing'}, the data needs ${tierBonus}. Run npm run ladders -- --write`,
+            );
+          }
+          skills[id] = withTierBonus(base, tierBonus);
+          ladders.push({ cls: c.id, line: lineId, tier, skill: id, metric, levels, previous, start: value(skills[id]!, 0), reached, tierBonus });
+        }
+      }
+    }
+  }
+  return ladders;
+}
+
+export function buildGameData(
+  tables: Tables,
+  design: DesignData,
+  waveCount: number = design.balance.waves.count,
+  options: BuildOptions = {},
+): GameData {
   // A skill takes the weapon of the class whose lines use it
   const weaponFor = (skillId: string) =>
     design.classes.find((c) => Object.values(c.lines).some((l) => l.tiers.flat().includes(skillId)))?.weapon;
+  const jsonById = new Map(design.skills.map((s) => [s.id, s]));
+  const laddered = new Set(design.classes.flatMap((c) => Object.values(c.lines).flatMap((l) => l.tiers.slice(1).flat())));
   const skills: Record<string, SkillDef> = {};
-  for (const json of design.skills) skills[json.id] = resolveSkill(tables, json, design, weaponFor(json.id));
+  for (const json of design.skills) {
+    if (!laddered.has(json.id)) skills[json.id] = resolveSkill(tables, json, design, weaponFor(json.id));
+  }
 
   const classes: Record<string, ClassDef> = {};
   for (const c of design.classes) {
     for (const line of Object.values(c.lines)) {
-      for (const id of line.tiers.flat()) if (!skills[id]) throw new Error(`${c.id}: no skill entry ${id}`);
+      for (const id of line.tiers.flat()) if (!jsonById.has(id)) throw new Error(`${c.id}: no skill entry ${id}`);
     }
     classes[c.id] = { id: c.id, name: c.name, lines: c.lines };
   }
+  const ladders = buildLadders(tables, design, skills, jsonById, weaponFor, options.checkTierBonus ?? true);
 
   const evolutions = Object.entries(design.evolutions).map(([id, e]) => {
     for (const skill of [e.attack.skill, e.partner.skill]) if (!skills[skill]) throw new Error(`${id}: no skill ${skill}`);
     return { id, name: e.name, attack: e.attack, partner: e.partner, ignoreSkillDelay: e.ignoreSkillDelay === true };
   });
 
-  const waves = generateWaves(design.balance, design.monsters, waveCount);
-  const monsterIds = new Set([...Object.keys(design.monsters.roster), ...waves.flatMap((w) => w.groups.map((g) => g.monster))]);
+  const m = design.monsters;
+  const monsterIds = new Set([
+    ...Object.keys(m.roster),
+    ...Object.values(m.pools).flatMap((pool) => pool.map((p) => p.id)),
+    ...Object.values(m.bosses),
+  ]);
   const monsters: Record<string, MonsterDef> = {};
-  for (const id of monsterIds) monsters[id] = monsterDef(tables, design.monsters, id, design.balance.auraRangePerTile);
+  for (const id of monsterIds) monsters[id] = monsterDef(tables, m, id, design.balance.auraRangePerTile);
+  const waves = generateWaves(design.balance, m, waveCount, monsters);
 
-  return { skills, classes, evolutions, monsters, waves, economy: economyFrom(design.balance), rules: rulesFrom(tables, design.balance) };
+  return {
+    skills,
+    classes,
+    evolutions,
+    monsters,
+    waves,
+    ladders,
+    economy: economyFrom(design.balance),
+    rules: rulesFrom(tables, design.balance),
+  };
 }

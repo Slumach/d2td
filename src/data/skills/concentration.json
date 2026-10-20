@@ -3,6 +3,5 @@
   "skill": "Concentration",
   "archetype": "buffAura",
   "damageType": "none",
-  "skillLevels": [1, 5, 10, 15, 20],
   "buffAura": { "radiusCalc": "aurarangecalc" }
 }

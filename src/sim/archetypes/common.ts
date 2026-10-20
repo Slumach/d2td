@@ -116,9 +116,7 @@ export function skillDelayTicks(row: TableRow): number {
 
 /** The common fields, validating the JSON's damage type against skills.txt where it has one. */
 export function common(json: SkillJson, ctx: ResolveContext, needsRange: boolean): SkillCommon {
-  if (json.skillLevels.length !== TOWER_LEVELS) {
-    throw new Error(`${json.id}: skillLevels needs ${TOWER_LEVELS} entries`);
-  }
+  const skillLevels = levelsOf(json);
   if (needsRange && (json.rangeTenths === undefined || json.rateTicks === undefined)) {
     throw new Error(`${json.id}: rangeTenths and rateTicks are required for ${json.archetype}`);
   }
@@ -127,7 +125,7 @@ export function common(json: SkillJson, ctx: ResolveContext, needsRange: boolean
     name: str(ctx.skillRow, 'skill'),
     archetype: json.archetype,
     damageType: json.damageType,
-    skillLevels: json.skillLevels,
+    skillLevels,
     rangeUnits: tenthsToUnits(json.rangeTenths ?? 0),
     rateTicks: json.rateTicks ?? 0,
     delayTicks: skillDelayTicks(ctx.skillRow),
@@ -161,6 +159,14 @@ export function auraStats(row: TableRow, level: number): Record<string, number> 
   return out;
 }
 
+/** The five skills.txt levels a skill resolves at (its JSON ones, or its tier ladder). */
+function levelsOf(json: SkillJson): number[] {
+  if (!json.skillLevels || json.skillLevels.length !== TOWER_LEVELS) {
+    throw new Error(`${json.id}: needs ${TOWER_LEVELS} skill levels`);
+  }
+  return json.skillLevels;
+}
+
 export function perLevel<T>(json: SkillJson, fn: (skillLevel: number) => T): T[] {
-  return json.skillLevels.map(fn);
+  return levelsOf(json).map(fn);
 }

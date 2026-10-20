@@ -143,6 +143,8 @@ export interface Spawn {
   wave: number;
   rank: Rank;
   mods: MonsterMod[];
+  /** Fixed HP (1/256) for bosses, 0 to roll from monstats. */
+  hp: number;
 }
 
 export interface WaveProgress {

@@ -5,9 +5,9 @@ import { hasTables, loadTables } from '../../tools/lib/load-tables.ts';
 import { runBot, type Strategy } from '../../tools/bots.ts';
 import { damageAt, elementalAtLevel } from './archetypes/common.ts';
 import type { BuffAuraDef, ControlDef, DebuffDef, ProjectileDef } from './archetypes/types.ts';
-import { buildGameData, compound, generateWaves, type GameData } from './data.ts';
+import { buildGameData, compound, resolveSkill, type GameData } from './data.ts';
 import { isqrt } from './fixed.ts';
-import { FIXTURE_TABLES, fixtureDesign, fixtureGameData } from './fixture.ts';
+import { FIXTURE_BUILD, FIXTURE_TABLES, fixtureDesign, fixtureGameData } from './fixture.ts';
 import { stateHash } from './hash.ts';
 import { createMap, isPathTile } from './map.ts';
 import { createRng, nextU32, rollInt } from './rng.ts';
@@ -62,9 +62,9 @@ describe('data', () => {
     expect(compound(112, 3)).toEqual([1000, 1120, 1254]);
   });
 
-  it('generates waves from the formulas: 2 to 4 types, champions, uniques and bosses', () => {
+  it('generates waves from the formulas: 2 to 4 types, alternating swarm and tank', () => {
     const b = DESIGN.balance;
-    const waves = generateWaves(b, DESIGN.monsters, 30);
+    const waves = fixtureGameData(30).waves;
     const normalCount = (i: number) => waves[i]!.groups.filter((g) => g.rank === 'normal').reduce((n, g) => n + g.count, 0);
     expect(waves.map((w) => w.kind).slice(0, 4)).toEqual(['swarm', 'tank', 'swarm', 'tank']);
     expect(normalCount(0)).toBe(b.waves.swarm.base + b.waves.swarm.perWave * 1);
@@ -74,41 +74,92 @@ describe('data', () => {
       expect(types).toBeGreaterThanOrEqual(b.waves.minTypes);
       expect(types).toBeLessThanOrEqual(b.waves.maxTypes);
     }
+  });
+
+  it('places champions, uniques and bosses by the fixed schedule, with fixed mods', () => {
+    const waves = fixtureGameData(30).waves;
     const ranked = (n: number, rank: string) => waves[n - 1]!.groups.filter((g) => g.rank === rank);
-    expect(ranked(5, 'champion')).toEqual([expect.objectContaining({ count: b.waves.championPackSize, modCount: 1 })]);
-    expect(ranked(10, 'unique')).toEqual([expect.objectContaining({ count: 1, modCount: 2 })]);
-    expect(ranked(10, 'boss').map((g) => g.monster)).toEqual(['bloodraven']);
-    expect(ranked(20, 'boss').map((g) => g.monster)).toEqual(['bloodraven']);
-    expect(ranked(30, 'boss').map((g) => g.monster)).toEqual(['andariel']);
-    expect(ranked(7, 'champion')).toEqual([]);
+    const s = DESIGN.balance.modSchedule;
+    const specials = (rank: string) => waves.map((_, i) => i + 1).filter((n) => ranked(n, rank).length > 0);
+    expect(specials('champion')).toEqual([5, 15, 25]);
+    expect(specials('unique')).toEqual([10, 20, 30]);
+    expect(specials('boss')).toEqual([10, 20, 30]);
+    expect(ranked(5, 'champion')).toEqual([expect.objectContaining({ count: DESIGN.balance.waves.championPackSize, mods: s.champions['5'] })]);
+    expect(ranked(20, 'unique')[0]!.mods).toContain('magicResistant');
+    expect(ranked(30, 'unique')[0]!.mods).toContain('magicResistant');
+    expect(ranked(10, 'boss')[0]).toMatchObject({ monster: 'bloodraven', mods: ['extraFast'] });
+    expect(ranked(20, 'boss')[0]).toMatchObject({ monster: 'bloodraven', mods: ['extraFast', 'magicResistant'] });
+    expect(ranked(30, 'boss')[0]).toMatchObject({ monster: 'andariel', mods: ['magicResistant', 'extraStrong'] });
   });
 
-  it('rolls champion and unique mods when the wave is called, one set per pack', () => {
-    const sim = createSim(fixtureGameData(10), 3);
-    sim.state.wave = 4; // the next call is wave 5, a champion wave
-    sim.state.waves = Array.from({ length: 4 }, () => ({ remaining: 0, bounty: 0, early: false }));
-    step(sim, [{ type: 'callWave' }]);
-    const champions = sim.state.spawns.filter((sp) => sp.rank === 'champion');
-    expect(champions.length).toBe(DESIGN.balance.waves.championPackSize);
-    expect(champions[0]!.mods).toHaveLength(1);
-    expect(new Set(champions.map((c) => c.mods.join()))).toHaveLength(1);
+  it('gives every seed the same specials: mods are scheduled, not rolled', () => {
+    const modsOn = (seed: number, wave: number) => {
+      const sim = createSim(fixtureGameData(30), seed);
+      sim.state.wave = wave - 1;
+      sim.state.waves = Array.from({ length: wave - 1 }, () => ({ remaining: 0, bounty: 0, early: false }));
+      step(sim, [{ type: 'callWave' }]);
+      return sim.state.spawns.filter((sp) => sp.rank !== 'normal').map((sp) => `${sp.rank}:${sp.mods.join('+')}`);
+    };
+    for (const wave of [5, 10, 20, 30]) expect(modsOn(1, wave)).toEqual(modsOn(99, wave));
   });
 
-  it('gives the uniques on waves 20 and 30 Magic Resistant plus one rolled mod', () => {
-    for (const seed of [1, 2, 3, 4, 5]) {
-      for (const wave of [20, 30]) {
-        const sim = createSim(fixtureGameData(30), seed);
-        sim.state.wave = wave - 1;
-        sim.state.waves = Array.from({ length: wave - 1 }, () => ({ remaining: 0, bounty: 0, early: false }));
-        step(sim, [{ type: 'callWave' }]);
-        const unique = sim.state.spawns.find((sp) => sp.rank === 'unique')!;
-        expect(unique.mods).toHaveLength(2);
-        expect(unique.mods[0]).toBe('magicResistant');
-        expect(unique.mods[1]).not.toBe('magicResistant');
+  it('sets boss HP to a multiple of its wave average monster HP', () => {
+    const data = fixtureGameData(30);
+    for (const [n, boss] of [[10, 'bloodraven'], [30, 'andariel']] as const) {
+      const wave = data.waves[n - 1]!;
+      let total = 0;
+      let count = 0;
+      for (const g of wave.groups.filter((x) => x.rank === 'normal')) {
+        const d = data.monsters[g.monster]!;
+        total += Math.trunc(((d.minHp + d.maxHp) * wave.hpPermille) / 2000) * g.count;
+        count += g.count;
       }
+      const group = wave.groups.find((g) => g.rank === 'boss')!;
+      expect(group.monster).toBe(boss);
+      expect(group.hp).toBe(Math.trunc(total / count) * DESIGN.balance.bossHpMultiplier[boss]!);
     }
-    // Wave 10's unique has no forced mod
-    expect(generateWaves(DESIGN.balance, DESIGN.monsters, 10)[9]!.groups.find((g) => g.rank === 'unique')!.forcedMods).toEqual([]);
+    // And the spawned boss carries exactly that HP
+    const sim = createSim(data, 1);
+    sim.state.wave = 9;
+    sim.state.waves = Array.from({ length: 9 }, () => ({ remaining: 0, bounty: 0, early: false }));
+    step(sim, [{ type: 'callWave' }]);
+    sim.state.spawns = sim.state.spawns.filter((sp) => sp.rank === 'boss').map((sp) => ({ ...sp, tick: sim.state.tick }));
+    step(sim, []);
+    const raven = sim.state.monsters.find((m) => m.def === 'bloodraven')!;
+    expect(raven.maxHp).toBe(data.waves[9]!.groups.find((g) => g.rank === 'boss')!.hp);
+  });
+
+  it('builds tier ladders: every tier-up reaches the floor, five rising steps to the cap', () => {
+    for (const data of [fixtureGameData(), ...(hasTables() ? [buildGameData(loadTables(), DESIGN)] : [])]) {
+      const { dpsPct, caps } = DESIGN.balance.tierLadder;
+      expect(data.ladders.length).toBe(8);
+      for (const ladder of data.ladders) {
+        const cap = caps[String(ladder.tier)]!;
+        expect(ladder.levels).toHaveLength(5);
+        expect(ladder.levels[4]).toBe(cap);
+        for (let i = 1; i < 5; i++) expect(ladder.levels[i]!).toBeGreaterThanOrEqual(ladder.levels[i - 1]!);
+        expect(data.skills[ladder.skill]!.skillLevels).toEqual(ladder.levels);
+        // A strict upgrade, with or without a tier bonus
+        expect(ladder.start * 100).toBeGreaterThanOrEqual(ladder.previous * dpsPct);
+        if (ladder.reached) expect(ladder.tierBonus).toBe(1000);
+        else {
+          expect(ladder.levels).toEqual([cap - 4, cap - 3, cap - 2, cap - 1, cap]);
+          expect(ladder.tierBonus).toBeGreaterThan(1000);
+        }
+      }
+      // T1 skills keep their JSON levels
+      expect(data.skills['holy-bolt']!.skillLevels).toEqual([1, 5, 10, 15, 20]);
+    }
+  });
+
+  it('refuses hand-typed skillLevels on a T2 or T3 skill', () => {
+    const bad = { ...DESIGN, skills: DESIGN.skills.map((s) => (s.id === 'zeal' ? { ...s, skillLevels: [1, 5, 10, 15, 20] } : s)) };
+    expect(() => buildGameData(FIXTURE_TABLES, fixtureDesign(bad), 30, FIXTURE_BUILD)).toThrow(/computed ladder/);
+  });
+
+  it.skipIf(!hasTables())('refuses a skill JSON tierBonus that no longer matches the data', () => {
+    const stale = { ...DESIGN, skills: DESIGN.skills.map((s) => (s.id === 'vengeance' ? { ...s, tierBonus: 1000 } : s)) };
+    expect(() => buildGameData(loadTables(), stale)).toThrow(/tierBonus/);
   });
 
   it('prices levels per tier with the compounding multiplier', () => {
@@ -178,7 +229,7 @@ function replaySuite(name: string, getData: () => GameData, strategies: Strategy
  */
 const RICH: typeof DESIGN = { ...DESIGN, balance: { ...DESIGN.balance, startingGold: 20_000 } };
 
-replaySuite('replay (fixture data)', () => buildGameData(FIXTURE_TABLES, fixtureDesign(RICH), 30), ['PALADIN', 'TWOLINE']);
+replaySuite('replay (fixture data)', () => buildGameData(FIXTURE_TABLES, fixtureDesign(RICH), 30, FIXTURE_BUILD), ['PALADIN', 'TWOLINE']);
 
 // Runs only where the pipeline has written the real tables; the repo holds no game data.
 describe.skipIf(!hasTables())('real tables', () => {
@@ -191,8 +242,11 @@ describe.skipIf(!hasTables())('real tables', () => {
     expect(bolt.filter).toMatchObject({ fullDamageTo: 'undead', otherDamagePct: 40 });
     expect((data.skills['might'] as BuffAuraDef).levels[0]!.damagePct).toBe(40);
     expect((data.skills['might'] as BuffAuraDef).levels[4]!.damagePct).toBe(230);
-    expect((data.skills['holy-freeze'] as ControlDef).levels[0]!.slowPct).toBe(30);
-    expect((data.skills['conviction'] as DebuffDef).levels[0]!.resistDown).toEqual({ fire: 30, cold: 30, ltng: 30 });
+    // T2/T3 skills are laddered; resolve them at skill level 1 to check the raw table values
+    const atLevel1 = (id: string) =>
+      resolveSkill(loadTables(), DESIGN.skills.find((s) => s.id === id)!, DESIGN, undefined, [1, 1, 1, 1, 1]);
+    expect((atLevel1('holy-freeze') as ControlDef).levels[0]!.slowPct).toBe(30);
+    expect((atLevel1('conviction') as DebuffDef).levels[0]!.resistDown).toEqual({ fire: 30, cold: 30, ltng: 30 });
     expect(data.rules.championHpPct).toBe(200);
     expect(data.rules.uniqueHpPct).toBe(300);
   });
