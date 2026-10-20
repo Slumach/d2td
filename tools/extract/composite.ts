@@ -14,6 +14,18 @@ export interface CompositeLayer {
   dcc: Dcc;
   /** 0 to 255 opacity from the COF draw effect. */
   alpha: number;
+  /**
+   * Glow layers (draw effects Modulate and beyond: spirits, auras on bodies) are blended
+   * by the game at draw time. A sheet cannot, so they are baked as additive: on the body
+   * the colours add; on empty pixels black turns transparent and brightness becomes alpha,
+   * which over the ground reads close to ground + glow.
+   */
+  additive?: boolean;
+}
+
+/** True for COF draw effects the game blends at draw time rather than by a fixed alpha. */
+export function isGlowEffect(transparent: boolean, drawEffect: number): boolean {
+  return transparent && drawEffect >= DrawEffect.Modulate && drawEffect !== DrawEffect.None;
 }
 
 export interface CompositeResult {
@@ -48,11 +60,9 @@ export function composite(cof: Cof, layers: CompositeLayer[], palette: Palette):
         `Layer ${compositeCode(layer.type)} has ${layer.dcc.numberOfDirections} directions, COF has ${cof.numberOfDirections}`,
       );
     }
-    if (layer.dcc.framesPerDirection !== cof.framesPerDirection) {
-      throw new Error(
-        `Layer ${compositeCode(layer.type)} has ${layer.dcc.framesPerDirection} frames, COF has ${cof.framesPerDirection}`,
-      );
-    }
+    // The COF sets the frame count; a layer with extra frames (Blood Raven's death S3 has
+    // 25 for 24) is cut, one with fewer wraps, as the game plays them
+    if (layer.dcc.framesPerDirection === 0) throw new Error(`Layer ${compositeCode(layer.type)} has no frames`);
     byType.set(layer.type, layer);
   }
 
@@ -81,7 +91,9 @@ export function composite(cof: Cof, layers: CompositeLayer[], palette: Palette):
         const layer = byType.get(type);
         if (!layer) continue;
         const dir = layer.dcc.directions[d]!;
-        blit(out, frameWidth, dir.box, dir.frames[f]!.pixelData, left, top, palette, layer.alpha);
+        const pixels = dir.frames[f % dir.frames.length]!.pixelData;
+        if (layer.additive) blitAdditive(out, frameWidth, dir.box, pixels, left, top, palette);
+        else blit(out, frameWidth, dir.box, pixels, left, top, palette, layer.alpha);
       }
       dirFrames.push(out);
     }
@@ -89,6 +101,45 @@ export function composite(cof: Cof, layers: CompositeLayer[], palette: Palette):
   }
 
   return { frameWidth, frameHeight, originX: -left, originY: -top, frames };
+}
+
+function blitAdditive(
+  out: Uint8Array,
+  outWidth: number,
+  box: Rect,
+  indices: Uint8Array,
+  originLeft: number,
+  originTop: number,
+  palette: Palette,
+): void {
+  const dx = box.left - originLeft;
+  const dy = box.top - originTop;
+  for (let y = 0; y < box.height; y++) {
+    for (let x = 0; x < box.width; x++) {
+      const index = indices[x + y * box.width]!;
+      if (index === 0) continue;
+      const o = (x + dx + (y + dy) * outWidth) * 4;
+      const r = palette[index * 4]!;
+      const g = palette[index * 4 + 1]!;
+      const b = palette[index * 4 + 2]!;
+      const glow = Math.max(r, g, b);
+      if (glow === 0) continue;
+      const da = out[o + 3]!;
+      if (da === 255) {
+        // On the body: colours add
+        out[o] = Math.min(255, out[o]! + r);
+        out[o + 1] = Math.min(255, out[o + 1]! + g);
+        out[o + 2] = Math.min(255, out[o + 2]! + b);
+        continue;
+      }
+      // On empty or translucent pixels: brightness is the alpha, colour is unpremultiplied
+      const a = Math.max(da, glow);
+      out[o] = Math.min(255, Math.trunc((r * 255) / glow));
+      out[o + 1] = Math.min(255, Math.trunc((g * 255) / glow));
+      out[o + 2] = Math.min(255, Math.trunc((b * 255) / glow));
+      out[o + 3] = a;
+    }
+  }
 }
 
 function blit(

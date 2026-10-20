@@ -1,0 +1,26 @@
+{
+  "monsterModes": ["WL", "A1", "DT", "DD"],
+  "hero": {
+    "token": "PA",
+    "modes": ["NU", "A1"],
+    "weapon": "Crystal Sword",
+    "armor": "Plate Mail",
+    "helm": "Full Helm",
+    "shield": "Kite Shield"
+  },
+  "colorShifts": {
+    "champion": { "table": "hueVariations", "index": 12 },
+    "unique": { "table": "hueVariations", "index": 40 },
+    "evolved": { "table": "hueVariations", "index": 76 }
+  },
+  "missiles": {
+    "holy-bolt": ["holybolt"],
+    "blessed-hammer": ["blessedhammer"],
+    "fist-of-the-heavens": ["handofgod", "fistoftheheavensbolt"],
+    "zeal-hit": ["blood1"],
+    "vengeance-hit": ["fireexplode", "iceexplode", "lightninghit"]
+  },
+  "iconClasses": ["pal"],
+  "palettes": ["act1/pal.dat", "act1/pal.pl2"],
+  "strings": ["skills.json"]
+}

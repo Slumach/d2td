@@ -1,40 +1,57 @@
-// Asset pipeline entry point. Reads from assets-raw (CascView export), writes to
-// assets-extracted. Both are gitignored.
+// Asset pipeline entry point. Writes everything the game needs to assets-extracted
+// (gitignored), from a CascView export (assets-raw) or straight from a D2R install.
 //
-//   npm run extract                       everything M0 needs
-//   npm run extract -- --only monster --token zm --mode a1 --monster zombie1
-//   npm run extract -- --only icons --class sor
-//   npm run extract -- --only tables
+//   npm run extract                          from assets-raw
+//   npm run extract -- --casc                from the D2R install the registry points to
+//   npm run extract -- --casc --d2r "D:\Games\Diablo II Resurrected"
+//   npm run extract -- --check               list the game files the run reads and any missing
 
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
-import { extractSkillIcons } from './icons.ts';
-import { extractMonster } from './monster.ts';
-import { findDataRoot } from './paths.ts';
-import { extractTables } from './tables.ts';
+import { detectD2R } from '../lib/d2r.ts';
+import { extractGame, planGame } from './game.ts';
+import { CascSource, FolderSource, type CascStorage, type DataSource } from './source.ts';
 
 const { values: args } = parseArgs({
   options: {
-    only: { type: 'string' },
-    token: { type: 'string', default: 'zm' },
-    mode: { type: 'string', default: 'wl' },
-    monster: { type: 'string', default: 'zombie1' },
-    act: { type: 'string', default: 'act1' },
-    class: { type: 'string', default: 'pal' },
+    casc: { type: 'boolean', default: false },
+    d2r: { type: 'string' },
     raw: { type: 'string', default: 'assets-raw' },
     out: { type: 'string', default: 'assets-extracted' },
+    check: { type: 'boolean', default: false },
   },
 });
 
-const dataRoot = findDataRoot(args.raw);
-const run = (step: string): boolean => args.only === undefined || args.only === step;
+/** The CascView export may nest the CASC "data" folder once or twice. */
+function folderSource(raw: string): FolderSource {
+  for (const candidate of [join(raw, 'data', 'data'), join(raw, 'data'), raw]) {
+    if (existsSync(join(candidate, 'global'))) return new FolderSource(candidate);
+  }
+  throw new Error(`No global folder under ${resolve(raw)}`);
+}
 
-if (run('monster')) {
-  extractMonster({ dataRoot, out: args.out, token: args.token, mode: args.mode, monster: args.monster, act: args.act });
+async function openSource(): Promise<DataSource> {
+  if (!args.casc) return folderSource(args.raw);
+  const install = args.d2r ?? (await detectD2R());
+  if (!install) throw new Error('No D2R install found in the registry; pass --casc "<folder>"');
+  const { Storage } = createRequire(import.meta.url)('@jamiephan/casclib') as { Storage: { open(p: string): CascStorage } };
+  return new CascSource(Storage.open(install), install);
 }
-if (run('icons')) {
-  extractSkillIcons({ dataRoot, out: args.out, charClass: args.class });
-}
-if (run('tables')) {
-  extractTables({ dataRoot, out: args.out });
+
+const source = await openSource();
+try {
+  const plan = planGame(source);
+  if (args.check) {
+    console.log(`${plan.inputs.length} game files from ${source.label}, ${plan.jobs.length} jobs`);
+    console.log(plan.missing.length === 0 ? 'Nothing missing.' : `Missing:\n  ${plan.missing.join('\n  ')}`);
+  } else {
+    const t0 = Date.now();
+    const list = extractGame(source, args.out, (p) => p.file && console.log(`  ${p.done + 1}/${p.total} ${p.file}`));
+    console.log(`Wrote ${Object.keys(list.files).length} files to ${args.out} in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  }
+} finally {
+  source.close();
 }

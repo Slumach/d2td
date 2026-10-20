@@ -7,7 +7,8 @@ import Phaser from 'phaser';
 
 import { facingFromVector, type Facing8 } from './facing.ts';
 
-const TEXTURE = 'zm_wl_hth';
+const TEXTURE = 'zombie1';
+const MODE = 'WL';
 const ICON_INDEX = 'icons_paladin';
 const ICON_DIR = 'icons/paladin/';
 const SCALE = 2;
@@ -21,10 +22,8 @@ const ICONS_PER_ROW = 15;
 const ICONS_TOP = 540;
 
 interface AtlasMeta {
-  mode: string;
   directions: Facing8[];
-  framesPerDirection: number;
-  fps: number;
+  modes: Record<string, { frames: number; fps: number }>;
   frameWidth: number;
   frameHeight: number;
   origin: { x: number; y: number };
@@ -51,7 +50,7 @@ export class ZombieWalkScene extends Phaser.Scene {
         .setDepth(10_000);
     });
 
-    this.load.atlas(TEXTURE, 'monsters/zm/zm_wl_hth.png', 'monsters/zm/zm_wl_hth.json');
+    this.load.multiatlas(TEXTURE, 'monsters/zombie1/normal.json', 'monsters/zombie1/');
 
     // The icon list is data, so queue the images once the index arrives
     this.load.json(ICON_INDEX, `${ICON_DIR}index.json`);
@@ -72,7 +71,9 @@ export class ZombieWalkScene extends Phaser.Scene {
 
     // Phaser's JSON Hash parser copies the atlas "meta" block onto texture.customData
     this.meta = (this.textures.get(TEXTURE).customData as { meta: AtlasMeta }).meta;
-    const { mode, directions, framesPerDirection, fps, frameWidth, frameHeight, origin } = this.meta;
+    const { directions, frameWidth, frameHeight, origin } = this.meta;
+    const mode = MODE;
+    const { frames: framesPerDirection, fps } = this.meta.modes[MODE]!;
 
     for (const dir of directions) {
       this.anims.create({
@@ -152,7 +153,7 @@ export class ZombieWalkScene extends Phaser.Scene {
       // Keep the stride phase when turning so the legs do not snap back to frame 0
       const anims = this.zombie.anims;
       const current = anims.currentAnim && anims.currentFrame ? anims.currentAnim.frames.indexOf(anims.currentFrame) : 0;
-      anims.play({ key: `${this.meta.mode}_${facing}`, startFrame: Math.max(0, current) });
+      anims.play({ key: `${MODE}_${facing}`, startFrame: Math.max(0, current) });
       this.facing = facing;
     }
   }

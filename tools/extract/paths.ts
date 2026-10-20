@@ -1,23 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-
 import { parseTxt, type TxtRow } from '../lib/txt.ts';
+import type { DataSource } from './source.ts';
 
-/** The CascView export may nest the CASC "data" folder once or twice. */
-export function findDataRoot(raw: string): string {
-  for (const candidate of [join(raw, 'data', 'data'), join(raw, 'data'), raw]) {
-    if (existsSync(join(candidate, 'global', 'monsters'))) return candidate;
-  }
-  throw new Error(`No global/monsters folder under ${resolve(raw)}`);
-}
-
-export function readBytes(path: string): Uint8Array {
-  if (!existsSync(path)) throw new Error(`Missing file: ${path}`);
-  return new Uint8Array(readFileSync(path));
-}
-
-export function readTable(dataRoot: string, name: string): TxtRow[] {
-  return parseTxt(readFileSync(join(dataRoot, 'global', 'excel', name), 'latin1'));
+/** An excel table from the source, e.g. readTable(source, 'monstats.txt'). */
+export function readTable(source: DataSource, name: string): TxtRow[] {
+  return parseTxt(Buffer.from(source.read(`global/excel/${name}`)).toString('latin1'));
 }
 
 /** Case-insensitive column lookup; monstats2 spells them HDv, TRv but Rav, Lav. */

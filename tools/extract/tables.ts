@@ -1,17 +1,12 @@
 // Converts D2 excel .txt tables to JSON arrays of row objects. Empty cells are dropped,
 // integer cells become numbers, and the "Expansion" divider rows are skipped.
 
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-
+import type { SpriteJob } from './sprites.ts';
 import { readTable } from './paths.ts';
+import type { DataSource } from './source.ts';
 
+/** The tables the sim reads (assets-extracted/data/*.json). */
 export const TABLES = ['monstats', 'monlvl', 'monumod', 'monseq', 'skills', 'missiles', 'weapons'] as const;
-
-export interface TableOptions {
-  dataRoot: string;
-  out: string;
-}
 
 const INTEGER = /^-?\d+$/;
 
@@ -28,13 +23,10 @@ export function tableToJson(rows: Record<string, string>[]): Record<string, stri
     });
 }
 
-export function extractTables(opts: TableOptions): void {
-  const outDir = join(opts.out, 'data');
-  mkdirSync(outDir, { recursive: true });
-  for (const name of TABLES) {
-    const rows = tableToJson(readTable(opts.dataRoot, `${name}.txt`));
-    writeFileSync(join(outDir, `${name}.json`), JSON.stringify(rows));
-    console.log(`${name}.txt: ${rows.length} rows`);
-  }
-  console.log(`Wrote ${outDir}`);
+export function tableJobs(source: DataSource): SpriteJob[] {
+  return TABLES.map((name) => ({
+    label: `table ${name}`,
+    inputs: [`global/excel/${name}.txt`],
+    run: () => [{ path: `data/${name}.json`, bytes: new TextEncoder().encode(JSON.stringify(tableToJson(readTable(source, `${name}.txt`)))) }],
+  }));
 }

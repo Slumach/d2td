@@ -1,20 +1,14 @@
-import Phaser from 'phaser';
+import { startGame } from './render/start.ts';
 
-import { GAME_HEIGHT, GAME_WIDTH, GameScene } from './render/GameScene.ts';
-import { ZombieWalkScene } from './render/ZombieWalkScene.ts';
-
-// ?m0 opens the M0 pipeline proof (zombie walk and Paladin icons) instead of the game.
-const m0 = new URLSearchParams(window.location.search).has('m0');
-
-new Phaser.Game({
-  type: Phaser.AUTO,
-  parent: 'game',
-  // The map is 30 x 17 tiles of 64 px between a HUD bar and the tower panel
-  width: m0 ? 960 : GAME_WIDTH,
-  height: m0 ? 680 : GAME_HEIGHT,
-  backgroundColor: '#2a2a22',
-  // Nearest-neighbour sampling and whole-pixel positions for classic sprites at 2x.
-  pixelArt: true,
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: m0 ? [ZombieWalkScene] : [GameScene],
+// In a plain browser (npm run dev) the game starts at once. URL flags:
+//   ?m0        the M0 pipeline proof (zombie walk and Paladin icons)
+//   ?autoplay  a scripted opening that keeps calling waves
+//   ?rich      plenty of starting gold, so autoplay reaches tiers and an evolution
+//   ?speed=4   run the sim 4 times as fast
+const params = new URLSearchParams(window.location.search);
+startGame({
+  m0: params.has('m0'),
+  autoplay: params.has('autoplay'),
+  rich: params.has('rich'),
+  speed: Number(params.get('speed') ?? 1),
 });
