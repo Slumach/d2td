@@ -88,6 +88,8 @@ export interface BalanceJson {
     championEvery: number;
     championPackSize: number;
     uniqueEvery: number;
+    /** Mods a wave's unique always carries, by wave number; the rest are rolled. */
+    uniqueForcedMods: Record<string, MonsterMod[]>;
     swarm: WaveKindJson;
     tank: WaveKindJson;
   };
@@ -147,8 +149,10 @@ export interface WaveGroup {
   count: number;
   spacingTicks: number;
   rank: Rank;
-  /** Mods rolled for the group when the wave is called; a pack shares its mods. */
+  /** Mods for the group when the wave is called; a pack shares its mods. */
   modCount: number;
+  /** Mods the group always gets; the rest of modCount is rolled from the others. */
+  forcedMods: MonsterMod[];
 }
 
 export interface WaveDef {
@@ -280,16 +284,25 @@ export function generateWaves(balance: BalanceJson, monsters: MonstersJson, coun
       spacingTicks: spec.spacingTicks,
       rank: 'normal',
       modCount: 0,
+      forcedMods: [],
     }));
 
     const lead = picked[0]!;
     if (n % w.uniqueEvery === 0) {
-      groups.push({ monster: lead, count: 1, spacingTicks: spec.spacingTicks, rank: 'unique', modCount: 2 });
+      const forcedMods = w.uniqueForcedMods[String(n)] ?? [];
+      groups.push({ monster: lead, count: 1, spacingTicks: spec.spacingTicks, rank: 'unique', modCount: 2, forcedMods });
     } else if (n % w.championEvery === 0) {
-      groups.push({ monster: lead, count: w.championPackSize, spacingTicks: spec.spacingTicks, rank: 'champion', modCount: 1 });
+      groups.push({
+        monster: lead,
+        count: w.championPackSize,
+        spacingTicks: spec.spacingTicks,
+        rank: 'champion',
+        modCount: 1,
+        forcedMods: [],
+      });
     }
     const boss = monsters.bosses[String(n)];
-    if (boss) groups.push({ monster: boss, count: 1, spacingTicks: spec.spacingTicks, rank: 'boss', modCount: 0 });
+    if (boss) groups.push({ monster: boss, count: 1, spacingTicks: spec.spacingTicks, rank: 'boss', modCount: 0, forcedMods: [] });
 
     waves.push({ kind, hpPermille: hp[n - 1]!, bountyPermille: bounty[n - 1]!, groups });
   }

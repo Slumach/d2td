@@ -27,6 +27,7 @@
     "championEvery": 5,
     "championPackSize": 3,
     "uniqueEvery": 10,
+    "uniqueForcedMods": { "20": ["magicResistant"], "30": ["magicResistant"] },
     "swarm": { "base": 6, "perWave": 2, "spacingTicks": 10 },
     "tank": { "base": 3, "perWave": 1, "spacingTicks": 24 }
   },

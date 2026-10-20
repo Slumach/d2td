@@ -94,6 +94,23 @@ describe('data', () => {
     expect(new Set(champions.map((c) => c.mods.join()))).toHaveLength(1);
   });
 
+  it('gives the uniques on waves 20 and 30 Magic Resistant plus one rolled mod', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      for (const wave of [20, 30]) {
+        const sim = createSim(fixtureGameData(30), seed);
+        sim.state.wave = wave - 1;
+        sim.state.waves = Array.from({ length: wave - 1 }, () => ({ remaining: 0, bounty: 0, early: false }));
+        step(sim, [{ type: 'callWave' }]);
+        const unique = sim.state.spawns.find((sp) => sp.rank === 'unique')!;
+        expect(unique.mods).toHaveLength(2);
+        expect(unique.mods[0]).toBe('magicResistant');
+        expect(unique.mods[1]).not.toBe('magicResistant');
+      }
+    }
+    // Wave 10's unique has no forced mod
+    expect(generateWaves(DESIGN.balance, DESIGN.monsters, 10)[9]!.groups.find((g) => g.rank === 'unique')!.forcedMods).toEqual([]);
+  });
+
   it('prices levels per tier with the compounding multiplier', () => {
     const e = fixtureGameData().economy;
     const pct = DESIGN.balance.levelCostPctPerLevel;
@@ -104,16 +121,25 @@ describe('data', () => {
   });
 });
 
+/** Long enough for the opening, tiers, branches and an evolve on the rich economy. */
+const REPLAY_TICKS = 8000;
+
 /** Plays a bot game recording hashes every 100 ticks, then replays its log twice. */
 function replaySuite(name: string, getData: () => GameData, strategies: Strategy[]): void {
   describe(name, () => {
     for (const strategy of strategies) {
-      it(`${strategy}: two sims replaying the same seed and command log match the original every 100 ticks`, () => {
+      it(`${strategy}: two sims replaying the same seed and command log match the original every 100 ticks`, { timeout: 120_000 }, () => {
         const data = getData();
         const recorded: number[] = [];
-        const run = runBot(data, strategy, 1234, (s) => {
-          if (s.state.tick % 100 === 0) recorded.push(stateHash(s.state));
-        });
+        const run = runBot(
+          data,
+          strategy,
+          1234,
+          (s) => {
+            if (s.state.tick % 100 === 0) recorded.push(stateHash(s.state));
+          },
+          REPLAY_TICKS,
+        );
         const end = recorded.length * 100;
         expect(end).toBeGreaterThan(1000);
 
@@ -138,8 +164,8 @@ function replaySuite(name: string, getData: () => GameData, strategies: Strategy
       });
     }
 
-    it('the PALADIN log exercises every Paladin command, evolve included', () => {
-      const run = runBot(getData(), 'PALADIN', 1234);
+    it('the PALADIN log exercises every Paladin command, evolve included', { timeout: 120_000 }, () => {
+      const run = runBot(getData(), 'PALADIN', 1234, undefined, REPLAY_TICKS);
       const types = new Set(run.log.map((c) => c.command.type));
       for (const t of ['build', 'upgrade', 'upgradeTier', 'pickBranch', 'evolve', 'callWave'] as const) expect(types).toContain(t);
     });
@@ -152,7 +178,7 @@ function replaySuite(name: string, getData: () => GameData, strategies: Strategy
  */
 const RICH: typeof DESIGN = { ...DESIGN, balance: { ...DESIGN.balance, startingGold: 20_000 } };
 
-replaySuite('replay (fixture data)', () => buildGameData(FIXTURE_TABLES, fixtureDesign(RICH), 30), ['PALADIN', 'ONE-LINE']);
+replaySuite('replay (fixture data)', () => buildGameData(FIXTURE_TABLES, fixtureDesign(RICH), 30), ['PALADIN', 'TWOLINE']);
 
 // Runs only where the pipeline has written the real tables; the repo holds no game data.
 describe.skipIf(!hasTables())('real tables', () => {

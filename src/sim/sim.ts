@@ -103,11 +103,11 @@ function applyCommand(sim: Sim, command: Command): void {
   }
 }
 
-/** Distinct mods for a group, rolled from the sim RNG when the wave is called. */
-function rollMods(sim: Sim, count: number): MonsterMod[] {
-  const pool = [...MONSTER_MODS];
-  const out: MonsterMod[] = [];
-  for (let i = 0; i < count && pool.length > 0; i++) {
+/** Distinct mods for a group: the forced ones, then the rest rolled from the sim RNG. */
+function rollMods(sim: Sim, count: number, forced: readonly MonsterMod[]): MonsterMod[] {
+  const out: MonsterMod[] = [...forced];
+  const pool = MONSTER_MODS.filter((m) => !forced.includes(m));
+  for (let i = out.length; i < count && pool.length > 0; i++) {
     out.push(pool.splice(rollInt(sim.state.rng, 0, pool.length - 1), 1)[0]!);
   }
   return out;
@@ -122,7 +122,7 @@ function callWave(sim: Sim): void {
   let count = 0;
   let offset = 1;
   for (const group of waveDef.groups) {
-    const mods = rollMods(sim, group.modCount);
+    const mods = rollMods(sim, group.modCount, group.forcedMods);
     for (let i = 0; i < group.count; i++) {
       s.spawns.push({ tick: s.tick + offset, def: group.monster, wave, rank: group.rank, mods: [...mods] });
       offset += group.spacingTicks;
