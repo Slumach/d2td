@@ -14,7 +14,7 @@ The full design lives in @docs/design.md. Read it before planning any feature.
 
 - TypeScript (strict), Vite, Phaser 3 for the game. Vitest for the data layer.
 - `tools/` holds the Node asset pipeline: decoders for DCC, DC6, COF, PL2 palettes and D2R .sprite, plus the .txt table parser. Port decoders from OpenDiablo2 (Go) or libd2 (Zig) rather than writing from scratch, and say which file you ported from.
-- Electron and multiplayer come at M5. Do not add them earlier.
+- Electron comes at M3 and multiplayer at M4. Do not add them earlier.
 
 ## Layout
 
