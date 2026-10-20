@@ -47,7 +47,7 @@
     "extraFast": { "speedPct": 50 },
     "extraStrong": { "damagePct": 100 },
     "stoneSkin": { "resist": { "phys": 50 } },
-    "magicResistant": { "resist": { "fire": 40, "cold": 40, "ltng": 40 } }
+    "magicResistant": { "resist": { "fire": 40, "cold": 40, "ltng": 40, "mag": 75 } }
   },
   "skillOverrides": {
     "holy-bolt": { "fullDamageTo": "undead", "otherDamagePct": 40 }

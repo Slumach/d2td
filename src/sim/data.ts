@@ -106,7 +106,11 @@ export interface BalanceJson {
    * are valued by the multiplier they give a level-5 referenceSkill tower.
    */
   tierLadder: { dpsPct: number; caps: Record<string, number>; referenceSkill: string };
-  /** D2 hardcodes these mod effects, so they are design values. */
+  /**
+   * D2 hardcodes these mod effects, so they are design values. House rule: Magic
+   * Resistant also resists magic (D2's only covers fire, cold and lightning), the wall
+   * for pure Holy builds.
+   */
   monsterMods: Record<MonsterMod, { speedPct?: number; damagePct?: number; resist?: Partial<Record<Element, number>> }>;
   skillOverrides: Record<string, Partial<HitFilter>>;
 }
