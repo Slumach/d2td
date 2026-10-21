@@ -2,6 +2,8 @@
 // script as window.d2td. Types only, so both sides compile against the same contract.
 // In a plain browser (npm run dev) window.d2td is undefined and the game starts directly.
 
+import type { ClientMessage, HostMessage } from '../net/protocol.ts';
+
 export interface LauncherState {
   /** The D2R folder in settings, or null before first setup. */
   d2rPath: string | null;
@@ -17,7 +19,23 @@ export interface LauncherState {
   smoke: boolean;
   /** Where the launcher writes its log, to show when something fails. */
   logFile: string;
+  /** The player's name in multiplayer lobbies. */
+  name: string;
 }
+
+/** A code a friend types to join, and which network it works on. */
+export interface JoinCode {
+  label: string;
+  code: string;
+}
+
+/** How asking the router to open the game port went, once it is known. */
+export type UpnpStatus = { state: 'ok'; code: JoinCode } | { state: 'failed' } | { state: 'doubleNat' };
+
+export type MpEvent =
+  | { kind: 'message'; message: HostMessage }
+  | { kind: 'closed'; reason: string }
+  | { kind: 'upnp'; status: UpnpStatus };
 
 export interface SetupProgress {
   done: number;
@@ -51,6 +69,14 @@ export interface LauncherApi {
   onSetupProgress(callback: (p: SetupProgress) => void): void;
   setVolume(volume: number): Promise<void>;
   reportSmoke(result: SmokeResult): void;
+  setName(name: string): Promise<void>;
+  /** Opens a lobby on this PC and joins it; codes for friends on the local network come back at once. */
+  mpHost(): Promise<{ ok: boolean; error?: string; codes: JoinCode[] }>;
+  mpJoin(code: string): Promise<{ ok: boolean; error?: string }>;
+  mpSend(message: ClientMessage): void;
+  mpLeave(): Promise<void>;
+  /** Multiplayer events from the main process. Register once. */
+  onMp(callback: (e: MpEvent) => void): void;
 }
 
 declare global {

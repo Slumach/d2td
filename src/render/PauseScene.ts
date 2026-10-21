@@ -1,6 +1,7 @@
 // The pause menu, opened with Escape over a paused GameScene: Resume, Restart, and Quit to
 // menu (launcher only), which asks before throwing the run away. Pausing the scene stops
-// its update, so no sim tick runs and no animation advances while this is open.
+// its update, so no sim tick runs and no animation advances while this is open. Online the
+// game cannot pause for one player, so it keeps running underneath and there is no Restart.
 
 import Phaser from 'phaser';
 
@@ -14,6 +15,7 @@ const TEXT = { fontFamily: FONT, fontSize: '22px', color: '#e8e0c0', align: 'cen
 
 export class PauseScene extends Phaser.Scene {
   private parts: Phaser.GameObjects.GameObject[] = [];
+  private online = false;
 
   constructor() {
     super('Pause');
@@ -23,7 +25,8 @@ export class PauseScene extends Phaser.Scene {
     return this.scene.get('Game') as GameScene;
   }
 
-  create(): void {
+  create(data?: { online?: boolean }): void {
+    this.online = data?.online === true;
     this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.6).setOrigin(0).setInteractive();
     this.input.keyboard?.on('keydown-ESC', () => this.resume());
     this.drawMenu();
@@ -46,8 +49,13 @@ export class PauseScene extends Phaser.Scene {
   private drawMenu(): void {
     this.clear();
     const top = GAME_HEIGHT / 2 - 140;
-    this.parts.push(this.add.text(CX, top, 'Paused', { ...TEXT, fontSize: '40px' }).setOrigin(0.5));
+    const title = this.online ? 'Menu (the game goes on)' : 'Paused';
+    this.parts.push(this.add.text(CX, top, title, { ...TEXT, fontSize: this.online ? '30px' : '40px' }).setOrigin(0.5));
     this.menuButton(top + 70, 'Resume', () => this.resume(), '#6a3020');
+    if (this.online) {
+      this.menuButton(top + 130, 'Leave game', () => this.drawConfirm());
+      return;
+    }
     this.menuButton(top + 130, 'Restart', () => {
       this.run.restartRun();
       this.resume();
@@ -59,8 +67,9 @@ export class PauseScene extends Phaser.Scene {
   private drawConfirm(): void {
     this.clear();
     const top = GAME_HEIGHT / 2 - 100;
-    this.parts.push(this.add.text(CX, top, 'Quit to the menu?\nThis run will be lost.', { ...TEXT, lineSpacing: 8 }).setOrigin(0.5));
-    this.menuButton(top + 80, 'Quit', () => {
+    const question = this.online ? 'Leave the game?\nYou cannot rejoin it.' : 'Quit to the menu?\nThis run will be lost.';
+    this.parts.push(this.add.text(CX, top, question, { ...TEXT, lineSpacing: 8 }).setOrigin(0.5));
+    this.menuButton(top + 80, this.online ? 'Leave' : 'Quit', () => {
       this.scene.stop();
       this.run.quitToMenu();
     }, '#6a3020');

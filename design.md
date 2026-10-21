@@ -213,6 +213,8 @@ FFA on separate lanes and team mode with chained zones and shared lives, built a
 - Team mode: zones sit along one path in player order. A leak from zone 1 walks into zone 2. Kill gold goes to the owner of the tower that killed. Only a leak past the last zone costs the team a life.
 - Lockstep: every client runs the same deterministic simulation from the same seed. The only network traffic is the ordered command stream (build, upgrade, sell, evolve, call wave), relayed by the host. Fixed 20 ticks per second, seeded RNG, integer math in gameplay code, a state hash every 100 ticks to catch desync. A TD tolerates 200 ms of command delay without anyone noticing.
 - Hosting: the host's Electron app carries the relay, so any friend who clicks Host is the server for that game; the others join with a code that carries the host's address. One forwarded TCP port on the host's router is the only setup; the app asks the router to open it by UPnP first, so most friends never touch router settings. Behind CGNAT with no public IP, Tailscale (free for a few people) replaces the port forward. For games the host is not in, the same relay runs as a service on a Pi, a NAS or an existing web server. If the host drops, the game ends.
+- Wave clock (built in M4): in FFA and team, waves start in every lane together, either when every player still in has pressed Call Wave or when the clock runs out (time to wave 1 and between waves: see src/data/balance.json, multiplayer). Independent wave calls could not settle "last one standing". Solo keeps Call Wave as it was.
+- How it is built (M4): each player's zone is the single-player sim; a Match steps them together and moves team leaks to the next zone with their damage kept. The relay never runs the game: it keeps the lobby, stamps commands into one bundle per tick, and compares the hashes players report. Commands are validated at the relay. Players must have the same app version and the same extracted tables (checked at join), or their sims would differ. Join codes are 12 characters carrying the host's IPv4 address and port with a check against typos. An online game cannot pause; Escape opens a menu over the running game. Players can watch any zone with the number keys but only build in their own. Port 47310.
 
 ## Tech stack
 
@@ -241,6 +243,8 @@ Each milestone has one gate. Nothing moves to the next until the gate is met, be
 ## Open questions
 
 Answer these in the doc or in chat; each one changes code in M2 or M3.
+
+- [ ] Team mode gold: zones after the first only earn from what leaks to them, so the last players starve while the first carries the team. In the M4 soak four bots lost a team game the same bots win alone. Share kill gold across the team, give every zone a trickle, or spawn a share of each wave in every zone?
 
 - [ ] Smite: the stun alternative at Zealot T1, or saved for the Smiter evolution?
 - [ ] Aura line: picks at T2 and T3 (Concentration or Holy Freeze, Fanaticism or Conviction), or one fixed skill per tier?

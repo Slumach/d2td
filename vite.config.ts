@@ -6,6 +6,6 @@ export default defineConfig(({ command }) => ({
   // extraction, and the installer must hold zero Blizzard bytes.
   publicDir: command === 'serve' ? 'assets-extracted' : false,
   test: {
-    include: ['src/**/*.test.ts', 'tools/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'tools/**/*.test.ts', 'electron/**/*.test.ts'],
   },
 }));

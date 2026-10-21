@@ -2,7 +2,8 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 
-import type { LauncherApi, SetupProgress, SmokeResult } from '../src/launcher/api.ts';
+import type { LauncherApi, MpEvent, SetupProgress, SmokeResult } from '../src/launcher/api.ts';
+import type { ClientMessage } from '../src/net/protocol.ts';
 
 const api: LauncherApi = {
   getState: () => ipcRenderer.invoke('get-state'),
@@ -15,6 +16,14 @@ const api: LauncherApi = {
   },
   setVolume: (volume: number) => ipcRenderer.invoke('set-volume', volume),
   reportSmoke: (result: SmokeResult) => ipcRenderer.send('smoke-result', result),
+  setName: (name: string) => ipcRenderer.invoke('set-name', name),
+  mpHost: () => ipcRenderer.invoke('mp-host'),
+  mpJoin: (code: string) => ipcRenderer.invoke('mp-join', code),
+  mpSend: (message: ClientMessage) => ipcRenderer.send('mp-send', message),
+  mpLeave: () => ipcRenderer.invoke('mp-leave'),
+  onMp: (callback: (e: MpEvent) => void) => {
+    ipcRenderer.on('mp-event', (_e, event: MpEvent) => callback(event));
+  },
 };
 
 contextBridge.exposeInMainWorld('d2td', api);

@@ -7,6 +7,7 @@ import { FONT, button } from '../render/ui.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
 import type { LauncherApi, LauncherState } from './api.ts';
 import { shortPath } from './paths.ts';
+import { TextField } from './TextField.ts';
 import { LAUNCHER_KEY } from './SetupScene.ts';
 
 const BUTTON_WIDTH = 360;
@@ -19,6 +20,7 @@ export class MenuScene extends Phaser.Scene {
   private state!: LauncherState;
   private parts: Phaser.GameObjects.GameObject[] = [];
   private settingsOpen = false;
+  private nameField: TextField | undefined;
 
   constructor() {
     super('Menu');
@@ -26,6 +28,8 @@ export class MenuScene extends Phaser.Scene {
 
   create(): void {
     this.api = this.registry.get(LAUNCHER_KEY) as LauncherApi;
+    // Whatever path led here, no lobby or game connection outlives the main menu
+    void this.api.mpLeave();
     this.settingsOpen = false;
     void this.api.getState().then((state) => {
       this.state = state;
@@ -48,6 +52,8 @@ export class MenuScene extends Phaser.Scene {
   private draw(): void {
     for (const p of this.parts) p.destroy();
     this.parts = [];
+    this.nameField?.destroy();
+    this.nameField = undefined;
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
 
     add(this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x14120e).setOrigin(0));
@@ -58,9 +64,9 @@ export class MenuScene extends Phaser.Scene {
       let y = 360;
       this.menuButton(y, 'Play', () => this.scene.start('Game'), true, '#6a3020');
       y += 70;
-      this.menuButton(y, 'Host (coming soon)', () => undefined, false);
+      this.menuButton(y, 'Host', () => this.scene.start('Lobby', { role: 'host' }));
       y += 70;
-      this.menuButton(y, 'Join (coming soon)', () => undefined, false);
+      this.menuButton(y, 'Join', () => this.scene.start('Lobby', { role: 'join' }));
       y += 70;
       this.menuButton(y, 'Settings', () => {
         this.settingsOpen = true;
@@ -74,7 +80,19 @@ export class MenuScene extends Phaser.Scene {
   private drawSettings(): void {
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
     const left = CX - 360;
-    let y = 340;
+    let y = 300;
+
+    add(this.add.text(left, y, 'Your name in multiplayer games', MUTED));
+    y += 34;
+    this.nameField = new TextField(this, left, y, 360, {
+      value: this.state.name,
+      maxLength: 20,
+      onChange: (v) => {
+        this.state = { ...this.state, name: v };
+        void this.api.setName(v);
+      },
+    });
+    y += 70;
 
     add(this.add.text(left, y, 'Volume', MUTED));
     y += 34;

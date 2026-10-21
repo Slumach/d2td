@@ -34,6 +34,22 @@ You only do this once. Next time the game opens straight to the main menu.
 - Click a tower to upgrade it.
 - Press **Esc** to pause. From there you can resume, restart, or quit to the main menu.
 
+## Playing together
+
+One person hosts and everyone else joins. Everyone needs the same version of this game and the same version of Diablo II: Resurrected.
+
+**To host:** click **Host** in the main menu. The first time, Windows may ask whether to let D2 Tower Defense through the firewall. Click **Allow**, otherwise friends cannot reach you. The lobby shows one or more codes; send your friends the right one:
+
+- **Internet**: for friends anywhere. It only appears when your router agreed to let the game in.
+- **Same network**: for people in your home, on the same Wi-Fi or router.
+- **Tailscale**: for friends who are on your Tailscale network.
+
+If there is no Internet code, a friend elsewhere can still join if you forward TCP port **47310** to your PC in your router's settings, or if you both use Tailscale (free for small groups). Pick **Team** or **Free for all**, wait for everyone to show up in the list, then click **Start**.
+
+**To join:** click **Join**, type or paste the code, and press **Join**. Then wait for the host to start.
+
+In a game, waves start when everyone has pressed **Call Wave**, or when the timer at the top runs out. The number keys show another player's area; press your own number to go back. **Esc** opens a menu, but the game keeps going for everyone. If the host leaves, the game ends.
+
 ## If something goes wrong
 
 The game keeps a log, a small text file that says what happened. If setup fails or the game misbehaves, send that file to whoever gave you the game.

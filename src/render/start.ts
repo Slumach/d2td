@@ -5,6 +5,7 @@ import Phaser from 'phaser';
 
 import { DESIGN } from '../data/design.ts';
 import type { LauncherApi } from '../launcher/api.ts';
+import { LobbyScene } from '../launcher/LobbyScene.ts';
 import { MenuScene } from '../launcher/MenuScene.ts';
 import { LAUNCHER_KEY, SetupScene } from '../launcher/SetupScene.ts';
 import type { DesignData } from '../sim/data.ts';
@@ -59,7 +60,7 @@ export function startGame(opts: StartOptions = {}): Phaser.Game {
     // No Scale.FIT: the whole canvas zooms by a whole number and the page letterboxes it
     scale: { mode: Phaser.Scale.NONE, zoom: fitZoom(width, height) },
     // Only the first scene starts on its own; the launcher's scenes start the rest
-    scene: opts.m0 ? [ZombieWalkScene] : opts.launcher ? [SetupScene, MenuScene, GameScene, PauseScene] : [GameScene, PauseScene],
+    scene: opts.m0 ? [ZombieWalkScene] : opts.launcher ? [SetupScene, MenuScene, LobbyScene, GameScene, PauseScene] : [GameScene, PauseScene],
     callbacks: {
       preBoot: (g) => {
         g.registry.set(DESIGN_KEY, design);

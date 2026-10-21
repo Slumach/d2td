@@ -1,19 +1,27 @@
 // Electron main process: the window, the app:// protocol that serves the game and its
 // extracted data, settings, and the setup step that runs the pipeline against D2R's CASC.
 
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { userInfo } from 'node:os';
 import { createRequire } from 'node:module';
 import { dirname, join, normalize, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { BrowserWindow, app, dialog, ipcMain, net, protocol, screen, shell } from 'electron';
 
-import type { LauncherState, SetupResult, SmokeResult } from '../src/launcher/api.ts';
+import type { JoinCode, LauncherState, MpEvent, SetupResult, SmokeResult } from '../src/launcher/api.ts';
+import { decodeJoinCode, encodeJoinCode } from '../src/net/codes.ts';
+import { DEFAULT_PORT, PROTOCOL, type ClientMessage } from '../src/net/protocol.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../src/render/layout.ts';
 import { extractGame, verifyGame } from '../tools/extract/game.ts';
 import { CascSource, type CascStorage } from '../tools/extract/source.ts';
 import { detectD2R, looksLikeD2R } from '../tools/lib/d2r.ts';
 import { describe, log, openLog } from './log.ts';
+import { localAddresses } from './net/addresses.ts';
+import { connectToRelay, type Connection } from './net/client.ts';
+import { Relay } from './net/relay.ts';
+import { openPort, type PortMapping } from './net/upnp.ts';
 
 // A clean profile for tests and the smoke run: D2TD_USER_DATA=<folder>
 if (process.env['D2TD_USER_DATA']) app.setPath('userData', process.env['D2TD_USER_DATA']);
@@ -28,6 +36,15 @@ process.on('unhandledRejection', (e) => log(`unhandled rejection: ${describe(e)}
 interface Settings {
   d2rPath: string | null;
   volume: number;
+  name: string;
+}
+
+function defaultName(): string {
+  try {
+    return userInfo().username.slice(0, 20) || 'Player';
+  } catch {
+    return 'Player';
+  }
 }
 
 const settingsPath = () => join(app.getPath('userData'), 'settings.json');
@@ -37,10 +54,11 @@ const assetsDir = () => join(app.getPath('userData'), 'assets');
 const rendererDir = () => join(app.getAppPath(), 'dist');
 
 function loadSettings(): Settings {
+  const defaults: Settings = { d2rPath: null, volume: 80, name: defaultName() };
   try {
-    return { d2rPath: null, volume: 80, ...JSON.parse(readFileSync(settingsPath(), 'utf8')) };
+    return { ...defaults, ...JSON.parse(readFileSync(settingsPath(), 'utf8')) };
   } catch {
-    return { d2rPath: null, volume: 80 };
+    return defaults;
   }
 }
 
@@ -99,7 +117,94 @@ async function launcherState(): Promise<LauncherState> {
     version: app.getVersion(),
     smoke: smokeFile !== undefined,
     logFile,
+    name: settings.name,
   };
+}
+
+// ---- multiplayer: the relay when hosting, the router mapping, and this player's socket ----
+
+let relay: Relay | undefined;
+let mapping: PortMapping | undefined;
+let connection: Connection | undefined;
+/** Proves to our own relay that our game is its host. */
+const hostToken = randomBytes(16).toString('hex');
+
+/** Players must extract the same tables or their sims would desync; this names them. */
+function dataHash(): string {
+  try {
+    const list = JSON.parse(readFileSync(join(assetsDir(), 'checksums.json'), 'utf8')) as { files: Record<string, string> };
+    const tables = Object.entries(list.files)
+      .filter(([path]) => path.startsWith('data/'))
+      .sort(([a], [b]) => a.localeCompare(b));
+    return createHash('sha256').update(JSON.stringify(tables)).digest('hex').slice(0, 16);
+  } catch {
+    return 'none';
+  }
+}
+
+function joinRelay(win: BrowserWindow, ip: string, port: number, token?: string): void {
+  connection?.close();
+  const hello: Extract<ClientMessage, { t: 'hello' }> = { t: 'hello', protocol: PROTOCOL, version: app.getVersion(), data: dataHash(), name: settings.name, token };
+  const send = (e: MpEvent) => !win.isDestroyed() && win.webContents.send('mp-event', e);
+  log(`mp: connecting to ${ip}:${port}`);
+  const conn = connectToRelay(
+    ip,
+    port,
+    hello,
+    (message) => {
+      if (message.t === 'reject' || message.t === 'desync' || message.t === 'start') log(`mp: ${JSON.stringify(message).slice(0, 300)}`);
+      send({ kind: 'message', message });
+    },
+    (reason) => {
+      if (connection !== conn) return;
+      connection = undefined;
+      log(`mp: closed: ${reason}`);
+      send({ kind: 'closed', reason });
+    },
+  );
+  connection = conn;
+}
+
+async function leaveMultiplayer(): Promise<void> {
+  const conn = connection;
+  connection = undefined;
+  conn?.close();
+  relay?.close();
+  relay = undefined;
+  const m = mapping;
+  mapping = undefined;
+  await m?.close();
+}
+
+async function hostMultiplayer(win: BrowserWindow): Promise<{ ok: boolean; error?: string; codes: JoinCode[] }> {
+  await leaveMultiplayer();
+  const r = new Relay({ port: DEFAULT_PORT, token: hostToken, version: app.getVersion(), log });
+  let port: number;
+  try {
+    port = await r.listen();
+  } catch (e) {
+    log(`mp: could not listen on ${DEFAULT_PORT}: ${describe(e)}`);
+    return { ok: false, error: `Could not open the game port (${DEFAULT_PORT}). Close any other copy of the game that is hosting and try again.`, codes: [] };
+  }
+  relay = r;
+  const codes = localAddresses().map((a) => ({ label: a.kind === 'tailscale' ? 'Tailscale' : 'Same network', code: encodeJoinCode({ ip: a.ip, port }) }));
+  log(`mp: hosting on port ${port}; local codes ${codes.map((c) => `${c.label} ${c.code}`).join(', ')}`);
+  joinRelay(win, '127.0.0.1', port, hostToken);
+  // The router may take a few seconds or not answer at all; the lobby updates when it does
+  void openPort(port, 'D2 Tower Defense', log).then((m) => {
+    if (relay !== r) {
+      void m?.close();
+      return;
+    }
+    mapping = m ?? undefined;
+    const status: MpEvent = !m
+      ? { kind: 'upnp', status: { state: 'failed' } }
+      : m.externalIp && !m.doubleNat
+        ? { kind: 'upnp', status: { state: 'ok', code: { label: 'Internet', code: encodeJoinCode({ ip: m.externalIp, port }) } } }
+        : { kind: 'upnp', status: { state: m.doubleNat ? 'doubleNat' : 'failed' } };
+    if (!win.isDestroyed()) win.webContents.send('mp-event', status);
+  });
+  return { ok: true, codes };
 }
 
 async function runSetup(win: BrowserWindow): Promise<SetupResult> {
@@ -155,6 +260,8 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // An online game runs on the relay's clock; a covered or alt-tabbed window must keep up
+      backgroundThrottling: false,
     },
   });
   // Links never open inside the game window
@@ -195,6 +302,20 @@ void app.whenReady().then(async () => {
   });
   ipcMain.handle('run-setup', () => runSetup(win));
   ipcMain.handle('open-log-folder', () => shell.openPath(dirname(logFile)));
+  ipcMain.handle('set-name', (_e, name: string) => {
+    settings = { ...settings, name: String(name).trim().slice(0, 20) || defaultName() };
+    saveSettings(settings);
+  });
+  ipcMain.handle('mp-host', () => hostMultiplayer(win));
+  ipcMain.handle('mp-join', async (_e, code: string) => {
+    const address = decodeJoinCode(String(code));
+    if (!address) return { ok: false, error: 'That code is not right. Check it with the host and try again.' };
+    await leaveMultiplayer();
+    joinRelay(win, address.ip, address.port);
+    return { ok: true };
+  });
+  ipcMain.on('mp-send', (_e, message: ClientMessage) => connection?.send(message));
+  ipcMain.handle('mp-leave', () => leaveMultiplayer());
   ipcMain.handle('set-volume', (_e, volume: number) => {
     settings = { ...settings, volume: Math.max(0, Math.min(100, Math.round(volume))) };
     saveSettings(settings);
@@ -213,3 +334,11 @@ void app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => app.quit());
+// Give the router mapping back on the way out
+let leaving = false;
+app.on('before-quit', (e) => {
+  if (leaving || (!relay && !mapping && !connection)) return;
+  e.preventDefault();
+  leaving = true;
+  void leaveMultiplayer().finally(() => app.quit());
+});

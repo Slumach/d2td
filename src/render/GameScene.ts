@@ -5,17 +5,20 @@
 import Phaser from 'phaser';
 
 import { DESIGN } from '../data/design.ts';
-import { buildGameData, MAX_TOWER_LEVEL, type DesignData } from '../sim/data.ts';
+import type { MpEvent, LauncherApi } from '../launcher/api.ts';
+import { MpSession } from '../launcher/session.ts';
+import { Lockstep } from '../net/lockstep.ts';
+import type { LobbyPlayer } from '../net/protocol.ts';
+import { buildGameData, MAX_TOWER_LEVEL, type DesignData, type GameData } from '../sim/data.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
+import { livesOf, playersIn, type MatchMode } from '../sim/match.ts';
 import { isPathTile } from '../sim/map.ts';
 import {
   activeSkill,
   canBuild,
-  createSim,
   evolutionFor,
   pendingChoices,
   sellValue,
-  step,
   tierCost,
   towerAt,
   towerById,
@@ -24,7 +27,6 @@ import {
   type Corpse,
   type Monster,
   type Sim,
-  type TimedCommand,
   type Tower,
 } from '../sim/sim.ts';
 import { TABLE_NAMES, type Tables } from '../sim/tables.ts';
@@ -44,13 +46,11 @@ import {
   type IconIndex,
 } from './assets.ts';
 import { angle64, spriteDirection } from './directions.ts';
+import { LocalDriver, NetDriver, type Driver } from './driver.ts';
 import { facingFromVector, type Facing8 } from './facing.ts';
 import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, PANEL_TOP, TILE } from './layout.ts';
 import { FONT, buttonRow, createTooltip, type ButtonSpec, type Tooltip } from './ui.ts';
 
-const TICK_MS = 1000 / TICKS_PER_SECOND;
-/** Do not let a stalled tab replay minutes of ticks in one frame. */
-const MAX_TICKS_PER_FRAME = 10;
 const CLASS = 'paladin';
 /** How far a tower looks for a monster to face, in units. */
 const FACE_RANGE = 6 * UNITS_PER_TILE;
@@ -67,6 +67,14 @@ function toPx(units: number): number {
 }
 
 type Selection = { kind: 'tile'; x: number; y: number } | { kind: 'tower'; id: number } | undefined;
+
+/** What the lobby hands the game when the host starts an online match. */
+export interface OnlineStart {
+  seed: number;
+  mode: MatchMode;
+  players: LobbyPlayer[];
+  you: number;
+}
 
 interface MonsterView {
   sprite: Phaser.GameObjects.Sprite;
@@ -94,11 +102,13 @@ interface MissileView {
 }
 
 export class GameScene extends Phaser.Scene {
-  private sim!: Sim;
+  private driver: Driver | undefined;
+  private gameData!: GameData;
   private seed = 1;
-  private log: TimedCommand[] = [];
-  private pending: Command[] = [];
-  private accumulator = 0;
+  /** The zone on screen: your own, or another player's while watching. */
+  private view = 0;
+  /** Why an online game stopped early (desync, host gone); empty while it runs. */
+  private halted = '';
   private lastTick = -1;
   private hover: { x: number; y: number } | undefined;
   private selection: Selection;
@@ -107,6 +117,9 @@ export class GameScene extends Phaser.Scene {
   private overlayGfx!: Phaser.GameObjects.Graphics;
   private ringGfx!: Phaser.GameObjects.Graphics;
   private hud!: Phaser.GameObjects.Text;
+  /** Online only: the wave clock and the other players. */
+  private hud2!: Phaser.GameObjects.Text;
+  private notice!: Phaser.GameObjects.Text;
   private info!: Phaser.GameObjects.Text;
   private endOverlay!: Phaser.GameObjects.Text;
   private tooltip!: Tooltip;
@@ -131,11 +144,29 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  create(): void {
+  /** The zone on screen. */
+  private get sim(): Sim {
+    return this.driver!.match.zones[this.view]!;
+  }
+
+  create(start?: OnlineStart): void {
+    this.driver = undefined;
+    this.halted = '';
+    this.clearViews();
     if (!TABLE_NAMES.every((name) => this.cache.json.exists(name))) return;
     const tables = Object.fromEntries(TABLE_NAMES.map((name) => [name, this.cache.json.get(name)])) as unknown as Tables;
     const design = (this.registry.get('design') as DesignData | undefined) ?? DESIGN;
-    this.sim = createSim(buildGameData(tables, design), this.seed);
+    this.gameData = buildGameData(tables, design);
+    if (start?.players) {
+      const session = MpSession.of(this.registry.get('launcher') as LauncherApi);
+      const lockstep = new Lockstep({ data: this.gameData, seed: start.seed, mode: start.mode, players: start.players.length, me: start.you, send: (m) => session.send(m) });
+      this.driver = new NetDriver(lockstep, start.players);
+      this.view = start.you;
+      session.listen((e) => this.onNet(e, lockstep));
+    } else {
+      this.driver = new LocalDriver(this.gameData, this.seed);
+      this.view = 0;
+    }
     this.icons = this.cache.json.get(ICON_INDEX) as IconIndex | undefined;
     createAnimations(this);
 
@@ -145,7 +176,10 @@ export class GameScene extends Phaser.Scene {
     this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
 
     const text = { fontFamily: FONT, fontSize: '24px', color: '#e8e0c0' };
-    this.hud = this.add.text(16, 18, '', text).setDepth(3000);
+    const online = this.driver.online;
+    this.hud = this.add.text(16, online ? 8 : 18, '', text).setDepth(3000);
+    this.hud2 = this.add.text(16, 38, '', { ...text, fontSize: '17px', color: '#b8b090' }).setDepth(3000).setVisible(online);
+    this.notice = this.add.text(GAME_WIDTH / 2, HUD_HEIGHT + 16, '', { ...text, fontSize: '20px', backgroundColor: '#000000a0', padding: { x: 12, y: 6 } }).setOrigin(0.5, 0).setDepth(5500).setVisible(false);
     this.info = this.add.text(16, PANEL_TOP + 8, '', { ...text, fontSize: '20px' }).setDepth(3000);
     this.tooltip = createTooltip(this, 16, PANEL_TOP - 8);
     buttonRow(this, GAME_WIDTH - 180, 12, [{ label: 'Call Wave', onClick: () => this.issue({ type: 'callWave' }), colour: '#6a3020' }], 200);
@@ -155,15 +189,21 @@ export class GameScene extends Phaser.Scene {
       .setDepth(6000)
       .setVisible(false)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.restartRun());
+      .on('pointerdown', () => (this.driver?.online ? this.leaveOnline() : this.restartRun()));
 
     this.input.mouse?.disableContextMenu();
     this.input.keyboard?.on('keydown-ESC', () => {
-      if (this.scene.isActive()) {
-        this.scene.pause();
-        this.scene.launch('Pause');
-      }
+      if (!this.scene.isActive() || this.scene.isActive('Pause')) return;
+      // An online game cannot stop for one player: the menu opens over it while it runs
+      if (!online) this.scene.pause();
+      this.scene.launch('Pause', { online });
     });
+    if (online) {
+      this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
+        const n = Number(e.key);
+        if (Number.isInteger(n) && n >= 1 && n <= this.driver!.match.zones.length && n - 1 !== this.view) this.watch(n - 1);
+      });
+    }
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => (this.hover = this.tileAt(p)));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       if (over.length === 0) this.onMapClick(p);
@@ -181,7 +221,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onMapClick(p: Phaser.Input.Pointer): void {
-    if (!this.sim || this.sim.state.status !== 'playing') return;
+    if (!this.driver || this.sim.state.status !== 'playing' || this.view !== this.driver.me || this.halted) return;
     const tile = this.tileAt(p);
     if (!tile) return;
     const tower = towerAt(this.sim, tile.x, tile.y);
@@ -191,29 +231,33 @@ export class GameScene extends Phaser.Scene {
     this.panelKey = '';
   }
 
-  /** Player input only ever queues commands; the sim applies them on the next tick. */
+  /** Player input only ever becomes commands; the match applies them on a later tick. */
   issue(...commands: Command[]): void {
-    this.pending.push(...commands);
+    for (const command of commands) this.driver?.issue(command);
   }
 
-  /** Read-only view of the sim for the launcher's smoke test. */
+  /** Read-only view of the zone on screen, for autoplay and the launcher's smoke test. */
   get state(): Sim['state'] | undefined {
-    return this.sim?.state;
+    return this.driver ? this.sim.state : undefined;
   }
 
   /** Pause menu: throw the run away and go back to the launcher's main menu. */
   quitToMenu(): void {
+    if (this.driver?.online) return this.leaveOnline();
     this.restartRun();
     this.scene.start('Menu');
   }
 
-  /** A fresh run on the next seed: the end-of-run click and the pause menu's Restart. */
+  /** A fresh single-player run on the next seed: the end-of-run click and the pause menu's Restart. */
   restartRun(): void {
     this.seed++;
-    this.sim = createSim(this.sim.data, this.seed);
-    this.log = [];
-    this.pending = [];
-    this.accumulator = 0;
+    this.driver = new LocalDriver(this.gameData, this.seed);
+    this.clearViews();
+    this.endOverlay.setVisible(false);
+  }
+
+  /** Drops every sprite so the next tick rebuilds the zone on screen from scratch. */
+  private clearViews(): void {
     this.lastTick = -1;
     this.selection = undefined;
     this.panelKey = '';
@@ -225,22 +269,61 @@ export class GameScene extends Phaser.Scene {
       for (const s of map.values()) s.destroy();
       map.clear();
     }
-    this.endOverlay.setVisible(false);
+  }
+
+  // ---- online ----
+
+  private onNet(e: MpEvent, lockstep: Lockstep): void {
+    if (e.kind === 'closed') {
+      if (lockstep.match.state.status !== 'over') this.halt(e.reason);
+      return;
+    }
+    if (e.kind !== 'message') return;
+    const m = e.message;
+    if (m.t === 'tick') lockstep.receive(m.tick, m.cmds);
+    else if (m.t === 'left') this.toast(`${m.name} left the game.`);
+    else if (m.t === 'desync') this.halt(`The players' games fell out of step at tick ${m.tick}.\nThis game cannot go on; the log has the details.`);
+  }
+
+  /** Stops an online game for good and says why. */
+  private halt(reason: string): void {
+    if (this.halted) return;
+    this.halted = reason;
+    this.endOverlay.setText(`${reason}\n\nclick to return to the menu`).setFontSize(28).setVisible(true);
+  }
+
+  private toast(text: string): void {
+    this.notice.setText(text).setVisible(true);
+    this.time.delayedCall(4000, () => this.notice.setVisible(false));
+  }
+
+  private leaveOnline(): void {
+    void MpSession.of(this.registry.get('launcher') as LauncherApi).leave();
+    this.clearViews();
+    this.driver = undefined;
+    this.scene.stop('Pause');
+    this.scene.start('Menu');
+  }
+
+  /** Online: show another player's zone. Building waits until you are back on your own. */
+  private watch(zone: number): void {
+    this.view = zone;
+    this.clearViews();
+  }
+
+  private nameOf(slot: number): string {
+    return this.driver?.players.find((p) => p.slot === slot)?.name ?? `Player ${slot + 1}`;
   }
 
   override update(_time: number, delta: number): void {
-    if (!this.sim) return;
+    if (!this.driver) return;
     // Dev: ?speed=N runs N times as many ticks per frame (previews and the smoke test)
     const speed = (this.registry.get('speed') as number | undefined) ?? 1;
-    this.accumulator = Math.min(this.accumulator + delta * speed, TICK_MS * MAX_TICKS_PER_FRAME * speed);
-    while (this.accumulator >= TICK_MS) {
-      this.accumulator -= TICK_MS;
-      const commands = this.pending;
-      this.pending = [];
-      for (const command of commands) this.log.push({ tick: this.sim.state.tick, command });
-      step(this.sim, commands);
-      this.syncTick();
-      this.events.emit('sim-tick', this.sim.state.tick);
+    if (!this.halted) {
+      this.driver.advance(delta, speed, () => {
+        this.syncTick();
+        this.events.emit('sim-tick', this.sim.state.tick);
+      });
     }
     if (this.selection?.kind === 'tower' && !towerById(this.sim, this.selection.id)) this.selection = undefined;
     if (DEBUG && this.game.loop.frame % 60 === 0) {
@@ -555,11 +638,45 @@ export class GameScene extends Phaser.Scene {
 
   private drawHud(): void {
     const { state, data } = this.sim;
+    if (this.driver?.online) return this.drawOnlineHud();
     this.hud.setText(`Gold ${state.gold}   Lives ${state.lives}   Wave ${state.wave}/${data.waves.length}   Kills ${state.kills}`);
     if (state.status !== 'playing' && !this.endOverlay.visible) {
       this.endOverlay
         .setText(`${state.status === 'won' ? 'Victory' : 'Defeat'}\nwave ${state.wave}, ${state.kills} kills\nclick to play again`)
         .setVisible(true);
+    }
+  }
+
+  private drawOnlineHud(): void {
+    const driver = this.driver!;
+    const match = driver.match;
+    const m = match.state;
+    const s = this.sim.state;
+    const waves = match.data.waves.length;
+    const watching = this.view !== driver.me ? `   (watching ${this.nameOf(this.view)})` : '';
+    this.hud.setText(`Gold ${s.gold}   Lives ${livesOf(match, this.view)}   Wave ${m.wavesCalled}/${waves}   Kills ${s.kills}${watching}`);
+
+    const parts: string[] = [];
+    if (m.status === 'playing' && m.wavesCalled < waves) {
+      const waiting = playersIn(match);
+      const ready = waiting.filter((p) => m.ready[p]).length;
+      parts.push(`Next wave in ${Math.max(0, Math.ceil((m.nextWaveTick - m.tick) / TICKS_PER_SECOND))} s, ${ready}/${waiting.length} ready`);
+    }
+    const names = match.zones.map((z, i) => {
+      const tag = m.mode === 'ffa' ? (z.state.status === 'lost' ? ' out' : ` ${z.state.lives}`) : '';
+      return `${i + 1} ${this.nameOf(i)}${tag}${i === this.view ? '*' : ''}`;
+    });
+    parts.push(`${m.mode === 'team' ? 'Zones' : 'Lanes'}: ${names.join('  ')}`);
+    if (match.zones.length > 1) parts.push(`keys 1-${match.zones.length} watch`);
+    this.hud2.setText(parts.join('   |   '));
+
+    if (m.status === 'over' && !this.endOverlay.visible && !this.halted) {
+      const won = m.winners.includes(driver.me);
+      const title =
+        m.mode === 'team'
+          ? won ? 'Your team held!' : 'Your team fell'
+          : won ? 'You win!' : m.winners.length > 0 ? `${m.winners.map((w) => this.nameOf(w)).join(' and ')} won` : 'Nobody survived';
+      this.endOverlay.setText(`${title}\nwave ${m.wavesCalled}\nclick to return to the menu`).setFontSize(48).setVisible(true);
     }
   }
 
@@ -585,12 +702,16 @@ export class GameScene extends Phaser.Scene {
     const sim = this.sim;
     const sel = this.selection;
     const tower = sel?.kind === 'tower' ? towerById(sim, sel.id) : undefined;
-    const key = JSON.stringify([sel, tower && [tower.tier, tower.level, tower.picks, tower.targeting], sim.state.gold, sim.state.towers.length]);
+    const key = JSON.stringify([this.view, sel, tower && [tower.tier, tower.level, tower.picks, tower.targeting], sim.state.gold, sim.state.towers.length]);
     if (key === this.panelKey) return;
     this.panelKey = key;
     for (const o of this.panel) o.destroy();
     this.panel = [];
     this.tooltip.hide();
+    if (this.driver && this.view !== this.driver.me) {
+      this.info.setText(`Watching ${this.nameOf(this.view)}'s zone. Press ${this.driver.me + 1} to go back to yours.`);
+      return;
+    }
 
     const x = 16;
     const y = PANEL_TOP + 38;
