@@ -43,6 +43,10 @@ import { TARGETING_MODES } from '../sim/state.ts';
 import type { DebuffDef, PierceDef, SkillDef } from '../sim/archetypes/types.ts';
 import { SKILL_ART, STATUS_OVERLAYS, SUMMON_BOLTS } from './art.ts';
 import {
+  MAP_KEY,
+  groundKey,
+  sceneryKey,
+  type MapManifest,
   animKey,
   createAnimations,
   heroAttackMode,
@@ -60,7 +64,7 @@ import { D2Hud, hudManifest, preloadHud, type PanelButton, type SlotItem, type T
 import { angle64, spriteDirection } from './directions.ts';
 import { LocalDriver, NetDriver, type Driver } from './driver.ts';
 import { facingFromVector, type Facing8 } from './facing.ts';
-import { ISO_H, ISO_W, WORLD_WIDTH, ellipseOf, project, screenVector, tileAtWorld, tileDiamond } from './iso.ts';
+import { ISO_H, ISO_W, ORIGIN, WORLD_WIDTH, ellipseOf, project, screenVector, tileAtWorld, tileDiamond } from './iso.ts';
 import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, PANEL_TOP } from './layout.ts';
 import { Minimap } from './minimap.ts';
 import { saveCheckpoint } from './saves.ts';
@@ -187,6 +191,9 @@ export class GameScene extends Phaser.Scene {
   private aliveGfx!: Phaser.GameObjects.Graphics;
   private aliveText!: Phaser.GameObjects.Text;
   private groundGfx: Phaser.GameObjects.Graphics | undefined;
+  /** The baked map on screen: its ground and scenery, rebuilt when the act or lair changes. */
+  private mapParts: Phaser.GameObjects.GameObject[] = [];
+  private mapShown = '';
   /** Why an online game stopped early (desync, host gone); empty while it runs. */
   private halted = '';
   private lastTick = -1;
@@ -274,6 +281,8 @@ export class GameScene extends Phaser.Scene {
     this.driver = undefined;
     this.halted = '';
     this.groundGfx = undefined;
+    this.mapParts = [];
+    this.mapShown = '';
     this.camera = new WorldView(this, (p) => this.onMapClick(p));
     this.clearViews();
     if (!TABLE_NAMES.every((name) => this.cache.json.exists(name))) return;
@@ -504,6 +513,7 @@ export class GameScene extends Phaser.Scene {
   private watch(ring: number): void {
     this.view = ring;
     this.clearViews();
+    this.mapShown = '-';
     this.redrawGround();
   }
 
@@ -969,9 +979,20 @@ export class GameScene extends Phaser.Scene {
     const g = (this.groundGfx ??= this.add.graphics().setDepth(DEPTH.ground)).clear();
     const { map } = this.sim;
     const stage = this.stage();
+    this.stageText?.setText(stage.label);
+    if (this.drawBakedMap(stage)) {
+      // On a shared ring, each arc's free tiles keep a faint edge in their owner's colour
+      if ((this.driver?.match.players ?? 1) > 1) {
+        for (let y = 0; y < map.height; y++) {
+          for (let x = 0; x < map.width; x++) {
+            if (!isPathTile(map, x, y) && !isBlocked(map, x, y)) g.lineStyle(1, this.arcColour(arcAt(map, x, y)), 0.14).strokePoints(tileDiamond(x, y), true);
+          }
+        }
+      }
+      return;
+    }
     const grass = ACT_TINTS[stage.act - 1]?.[stage.lair ? 1 : 0] ?? 0x30402a;
     const darker = Phaser.Display.Color.IntegerToColor(grass).darken(8).color;
-    this.stageText?.setText(stage.label);
     for (let y = 0; y < map.height; y++) {
       for (let x = 0; x < map.width; x++) {
         const path = isPathTile(map, x, y);
@@ -997,6 +1018,35 @@ export class GameScene extends Phaser.Scene {
     const place = info ? (lair ? info.lair : info.field) : '';
     const placeholder = act > 1 ? ' (placeholder)' : '';
     return { act, lair, label: `${stageName(wave?.difficulty ?? 0, act)}: ${place}${placeholder}` };
+  }
+
+  /**
+   * Act 1's baked map for the stage (the Blood Moor, or Catacombs 4 on the boss wave), its
+   * scenery depth-sorted with the units. False when the act has no art (or none was
+   * extracted), and the grey box shows instead.
+   */
+  private drawBakedMap(stage: { act: number; lair: boolean }): boolean {
+    const manifest = this.cache.json.get(MAP_KEY) as MapManifest | undefined;
+    const name = stage.lair ? 'lair' : 'field';
+    const baked = stage.act === 1 ? manifest?.maps[name] : undefined;
+    const want = baked && this.textures.exists(groundKey(name)) ? name : '';
+    if (want === this.mapShown) return want !== '';
+    for (const o of this.mapParts) o.destroy();
+    this.mapParts = [];
+    this.mapShown = want;
+    if (!baked || !want || !manifest) return false;
+    // The bake's world origin and ours line up unless the layout changed since
+    const ground = this.add.image(ORIGIN.x - baked.ground.originX, ORIGIN.y - baked.ground.originY, groundKey(name)).setOrigin(0).setDepth(DEPTH.ground - 0.5);
+    this.mapParts.push(ground);
+    for (const obj of baked.objects) {
+      const prefab = manifest.prefabs[obj.prefab];
+      if (!prefab || !this.textures.exists(sceneryKey(obj.prefab))) continue;
+      const p = project(obj.at[0]! * UNITS_PER_TILE, obj.at[1]! * UNITS_PER_TILE);
+      const img = this.add.image(Math.round(p.x), Math.round(p.y), sceneryKey(obj.prefab));
+      img.setOrigin(prefab.anchorX / img.width, prefab.anchorY / img.height).setDepth(DEPTH.units + p.y / 1000);
+      this.mapParts.push(img);
+    }
+    return true;
   }
 
   /** The ring on screen changed (FFA watching): redraw its ground. */

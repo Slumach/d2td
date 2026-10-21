@@ -16,6 +16,7 @@ import { hudJob } from './hud.ts';
 
 import type { DataSource } from './source.ts';
 import { spriteJobs, type SpriteJob } from './sprites.ts';
+import { mapJob } from './map.ts';
 import { tableJobs } from './tables.ts';
 
 export const CHECKSUM_FILE = 'checksums.json';
@@ -28,8 +29,9 @@ export const CHECKSUM_FILE = 'checksums.json';
  * 6: the Act 1 schedule: every wave monster, boss and pack, superunique palettes, superuniques.txt.
  * 7: Green TD pacing: Act 1's twelve superuniques ride inside waves; the old road's bake is gone.
  * 8: the campaign: levels.txt for the placeholder acts' monster levels.
+ * 9: Act 1's ring maps: the Blood Moor and Catacombs 4.
  */
-export const EXTRACT_VERSION = 8;
+export const EXTRACT_VERSION = 9;
 /** What verifyGame reports when the extraction is from an older version of the game. */
 export const OUTDATED = 'version';
 
@@ -61,7 +63,7 @@ function sha256(bytes: Uint8Array): string {
 /** Every job the game needs, and exactly which game files they read. */
 export function planGame(source: DataSource): GamePlan {
   const sprite = spriteJobs(source);
-  const jobs = [...tableJobs(source), ...sprite.jobs, ...sprites.iconClasses.map((c) => iconJob(source, c)), cursorJob(source), fontJob(source), soundJob(source), frontendJob(source), hudJob(source)];
+  const jobs = [...tableJobs(source), ...sprite.jobs, ...sprites.iconClasses.map((c) => iconJob(source, c)), mapJob(source), cursorJob(source), fontJob(source), soundJob(source), frontendJob(source), hudJob(source)];
   const inputs = [...new Set([...sprite.sharedInputs, ...jobs.flatMap((j) => j.inputs)])].sort();
   const missing = [...new Set([...sprite.missing, ...inputs.filter((p) => !source.exists(p))])].sort();
   return { jobs, inputs, missing };

@@ -19,6 +19,16 @@ export interface AtlasMeta {
   explosion?: string;
 }
 
+/** Act 1's baked maps for the ring (tools/extract/map.ts): grounds, scenery prefabs and where each stands. */
+export const MAP_KEY = 'map:act1';
+export const groundKey = (map: string) => `map:act1:${map}`;
+export const sceneryKey = (prefab: string) => `scenery:${prefab}`;
+
+export interface MapManifest {
+  maps: Record<string, { ground: { image: string; originX: number; originY: number }; objects: { prefab: string; at: number[] }[] }>;
+  prefabs: Record<string, { image: string; anchorX: number; anchorY: number }>;
+}
+
 export interface IconIndex {
   skills: Record<string, { id: number; icon: string; name: string; desc: string }>;
 }
@@ -95,6 +105,13 @@ export function preloadAssets(scene: Phaser.Scene): void {
     scene.load.json(MISSILE_INDEX, MISSILE_INDEX);
     scene.load.once(`filecomplete-json-${MISSILE_INDEX}`, (_k: string, _t: string, index: { missiles: string[] }) => {
       for (const id of index.missiles) atlas(missileKey(id), `missiles/${id}.json`, 'missiles/');
+    });
+  }
+  if (!scene.cache.json.exists(MAP_KEY)) {
+    scene.load.json(MAP_KEY, 'map/act1.json');
+    scene.load.once(`filecomplete-json-${MAP_KEY}`, (_k: string, _t: string, m: MapManifest) => {
+      for (const [name, map] of Object.entries(m.maps)) scene.load.image(groundKey(name), map.ground.image);
+      for (const [name, p] of Object.entries(m.prefabs)) scene.load.image(sceneryKey(name), p.image);
     });
   }
   for (const folder of ICON_FOLDERS) {

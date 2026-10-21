@@ -4,7 +4,7 @@
 // Each arc, in walking order: a long outer straight, a U-bend dented into the interior
 // (its one-tile pocket touches all three legs), then a 90 degree corner that hands the
 // path to the next arc. ring.json gives arc 0 (the top edge, walking east) and the scenery
-// on its wedge; the other three are the same turned 90, 180 and 270 degrees about the
+// on its wedge, by kind; the other three are the same turned 90, 180 and 270 degrees about the
 // centre, so every player's arc is identical. That needs a square grid: 42 x 42 has the
 // tile count of the 48 x 36 the design asked for.
 
@@ -85,9 +85,27 @@ export function ringWaypoints(): Point[] {
   return Array.from({ length: ARC_COUNT }, (_, k) => arc.map((p) => rotateTile(p, k))).flat();
 }
 
-/** ring.json's scenery on arc 0's wedge, turned onto all four. */
+export type SceneryKind = keyof typeof ring.scenery;
+
+/**
+ * ring.json's scenery of one kind on arc 0's wedge, turned onto all four: the treeline
+ * round the edge, rocks at the arc boundaries, bushes, and the cottage in the middle. The
+ * map bake puts its art on exactly these tiles, so the mask and the picture agree.
+ */
+export function sceneryTiles(kind: SceneryKind): Point[] {
+  const out = new Map<string, Point>();
+  for (const [x, y] of ring.scenery[kind]) {
+    for (let k = 0; k < ARC_COUNT; k++) {
+      const t = rotateTile({ x: x!, y: y! }, k);
+      out.set(`${t.x},${t.y}`, t);
+    }
+  }
+  return [...out.values()];
+}
+
+/** Every tile scenery stands on. */
 export function blockedTiles(): Point[] {
-  return ring.blocked.flatMap(([x, y]) => Array.from({ length: ARC_COUNT }, (_, k) => rotateTile({ x: x!, y: y! }, k)));
+  return (Object.keys(ring.scenery) as SceneryKind[]).flatMap(sceneryTiles);
 }
 
 export function createMap(): GameMap {
