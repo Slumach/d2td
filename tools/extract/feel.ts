@@ -16,7 +16,9 @@ import { decodePalDat } from '../lib/palette.ts';
 import { encodePng } from '../lib/png.ts';
 import { column, readTable } from './paths.ts';
 import type { DataSource } from './source.ts';
+import { artMissiles } from '../../src/render/art.ts';
 import type { OutputFile, SpriteJob } from './sprites.ts';
+import sprites from '../../src/data/render/sprites.json';
 
 const CURSOR = 'global/ui/cursor/ohand.dc6';
 const PALETTE = 'global/palette/act1/pal.dat';
@@ -91,19 +93,20 @@ export function soundJob(source: DataSource): SpriteJob {
     music: env ? (resolve(column(env, 'Song'), 'global/music/')[0] ?? null) : null,
     ambience: env ? (resolve(column(env, 'Day Ambience'))[0] ?? null) : null,
     gold: resolve(soundsJson.gold),
+    // Every skill's cast (raising a summon is its cast), every missile's flight and impact
     cast: Object.fromEntries(
-      soundsJson.cast.map((id) => {
+      DESIGN.skills.map(({ id }) => {
         const row = skills.find((r) => r['skill'] === skillName(id));
         return [id, row ? resolve(column(row, 'stsound')) : []];
       }),
     ),
-    travel: Object.fromEntries(soundsJson.travel.map((m) => [m, resolve(column(missiles.find((r) => r['Missile'] === m) ?? {}, 'TravelSound'))])),
-    hit: Object.fromEntries(soundsJson.hit.map((m) => [m, resolve(column(missiles.find((r) => r['Missile'] === m) ?? {}, 'HitSound'))])),
+    travel: Object.fromEntries(artMissiles().map((m) => [m, resolve(column(missiles.find((r) => r['Missile'] === m) ?? {}, 'TravelSound'))])),
+    hit: Object.fromEntries(artMissiles().map((m) => [m, resolve(column(missiles.find((r) => r['Missile'] === m) ?? {}, 'HitSound'))])),
     death: {},
     ui: { click: resolve(soundsJson.ui.click), hover: resolve(soundsJson.ui.hover), music: resolve(soundsJson.ui.music, 'global/music/')[0] ?? null },
     volumePct: soundsJson.volumePct,
   };
-  const ids = [...new Set([...Object.keys(monstersJson.roster), ...Object.values(monstersJson.bosses)])];
+  const ids = [...new Set([...Object.keys(monstersJson.roster), ...Object.values(monstersJson.bosses), ...sprites.summons.ids])];
   for (const id of ids) {
     const mon = monstats.find((r) => r['Id'] === id);
     const snd = mon && monsounds.find((r) => r['Id'] === column(mon, 'MonSound'));

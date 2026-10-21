@@ -5,6 +5,7 @@ import Phaser from 'phaser';
 
 import monstersJson from '../data/monsters.json';
 import sprites from '../data/render/sprites.json';
+import { MISSILE_INDEX, artOverlays } from './art.ts';
 
 export interface AtlasMeta {
   frameWidth: number;
@@ -14,9 +15,10 @@ export interface AtlasMeta {
   modes: Record<string, { frames: number; fps: number; directions: number }>;
   blend?: number;
   dccDirections?: number;
+  /** Missiles: the missiles.txt ExplosionMissile that plays where it lands, when it has art. */
+  explosion?: string;
 }
 
-export const ICON_INDEX = 'icons:paladin';
 /** The baked Blood Moor: where its ground image sits and where each scenery object stands. */
 export const MAP_KEY = 'map:bloodmoor';
 export const GROUND_KEY = 'map:ground';
@@ -27,43 +29,59 @@ export interface MapManifest {
   prefabs: Record<string, { image: string; anchorX: number; anchorY: number }>;
   objects: { prefab: string; at: number[] }[];
 }
-const ICON_DIR = 'icons/paladin/';
 
 export interface IconIndex {
   skills: Record<string, { id: number; icon: string; name: string; desc: string }>;
 }
 
+/** Each class's HD skill icons and their index, as the extraction writes them. */
+const ICON_FOLDERS = ['paladin', 'sorceress', 'necromancer'];
+const iconIndexKey = (folder: string) => `icons:${folder}`;
+
 export const BOSSES = new Set(Object.values(monstersJson.bosses));
+export const SUMMON_IDS = sprites.summons.ids;
 export const MONSTER_IDS = [...new Set([...Object.keys(monstersJson.roster), ...BOSSES])];
-export const MISSILE_IDS = [...new Set(Object.values(sprites.missiles).flat())];
-export const MISSILES_FOR = sprites.missiles as Record<string, string[]>;
 
 export function monsterKey(id: string, rank: string): string {
-  const variant = BOSSES.has(id) || rank === 'normal' || rank === 'boss' ? 'normal' : rank;
+  const variant = BOSSES.has(id) || SUMMON_IDS.includes(id) || rank === 'normal' || rank === 'boss' ? 'normal' : rank;
   return `mon:${id}:${variant}`;
 }
 
-/** Hero looks: the line's weapon set at a tier's armour weight, plus the evolved recolour. */
-export const HERO_LINES = Object.keys(sprites.hero.lines);
-const HERO_LOOKS = [...sprites.hero.tiers.map((_, i) => `t${i + 1}`), 'evolved'];
+interface HeroClass {
+  attackMode: string;
+  lines: Record<string, { weapon?: string; shield?: string }>;
+}
+const HEROES = sprites.heroes as Record<string, HeroClass>;
+const HERO_LOOKS = [...sprites.heroTiers.map((_, i) => `t${i + 1}`), 'evolved'];
+
+/** The mode a class's tower plays when it acts: A1 for the Paladin's swings, SC for casters. */
+export function heroAttackMode(cls: string): string {
+  return HEROES[cls]?.attackMode ?? 'A1';
+}
 
 /**
- * The look of a tower: its line picks the weapon (sword, scepter, bare hands), its tier the
- * armour and helm. A tower with no line yet stands unarmed in the lightest armour.
+ * The look of a tower: its class, its line's weapon (sword, staff, wand, bare hands) and its
+ * tier's armour and helm. A tower with no line yet stands in its class's unarmed look (its
+ * first line if it has none) in the lightest armour.
  */
-export function heroKey(tower: { line: string; tier: number; evolved: string }): string {
-  const line = HERO_LINES.includes(tower.line) ? tower.line : 'aura';
-  const look = tower.evolved ? 'evolved' : `t${Math.min(Math.max(tower.tier, 1), sprites.hero.tiers.length)}`;
-  return `hero:${line}:${look}`;
+export function heroKey(tower: { cls: string; line: string; tier: number; evolved: string }): string {
+  const cls = HEROES[tower.cls] ? tower.cls : 'paladin';
+  const lines = HEROES[cls]!.lines;
+  const unarmed = Object.keys(lines).find((l) => !lines[l]!.weapon) ?? Object.keys(lines)[0]!;
+  const line = lines[tower.line] ? tower.line : unarmed;
+  const look = tower.evolved ? 'evolved' : `t${Math.min(Math.max(tower.tier, 1), sprites.heroTiers.length)}`;
+  return `hero:${cls}:${line}:${look}`;
 }
 export const missileKey = (id: string) => `mis:${id}`;
+export const overlayKey = (id: string) => `ovl:${id}`;
 export const iconKey = (skillName: string) => `icon:${skillName}`;
 
 /**
- * Queues every atlas and the icon index; icons follow once the index arrives. Atlases are
- * multi-page (trimmed frames packed onto pages of at most 4096 px) and their page images
- * sit beside the JSON. Textures persist across scene restarts, so a second game (Play
- * after Quit to menu) queues only what is not loaded yet.
+ * Queues every atlas and the icon indexes; icons follow once their index arrives, and
+ * missiles once the extraction's missile list does. Atlases are multi-page (trimmed frames
+ * packed onto pages of at most 4096 px) and their page images sit beside the JSON.
+ * Textures persist across scene restarts, so a second game (Play after Quit to menu)
+ * queues only what is not loaded yet.
  */
 export function preloadAssets(scene: Phaser.Scene): void {
   const atlas = (key: string, json: string, dir: string) => {
@@ -73,10 +91,19 @@ export function preloadAssets(scene: Phaser.Scene): void {
     const variants = BOSSES.has(id) ? ['normal'] : ['normal', 'champion', 'unique'];
     for (const v of variants) atlas(`mon:${id}:${v}`, `monsters/${id}/${v}.json`, `monsters/${id}/`);
   }
-  for (const line of HERO_LINES) {
-    for (const look of HERO_LOOKS) atlas(`hero:${line}:${look}`, `hero/paladin/${line}-${look}.json`, 'hero/paladin/');
+  for (const id of SUMMON_IDS) atlas(`mon:${id}:normal`, `monsters/${id}/normal.json`, `monsters/${id}/`);
+  for (const [cls, h] of Object.entries(HEROES)) {
+    for (const line of Object.keys(h.lines)) {
+      for (const look of HERO_LOOKS) atlas(`hero:${cls}:${line}:${look}`, `hero/${cls}/${line}-${look}.json`, `hero/${cls}/`);
+    }
   }
-  for (const id of MISSILE_IDS) atlas(missileKey(id), `missiles/${id}.json`, 'missiles/');
+  for (const id of artOverlays()) atlas(overlayKey(id), `overlays/${id}.json`, 'overlays/');
+  if (!scene.cache.json.exists(MISSILE_INDEX)) {
+    scene.load.json(MISSILE_INDEX, MISSILE_INDEX);
+    scene.load.once(`filecomplete-json-${MISSILE_INDEX}`, (_k: string, _t: string, index: { missiles: string[] }) => {
+      for (const id of index.missiles) atlas(missileKey(id), `missiles/${id}.json`, 'missiles/');
+    });
+  }
   if (!scene.cache.json.exists(MAP_KEY)) {
     scene.load.json(MAP_KEY, 'map/bloodmoor.json');
     scene.load.once(`filecomplete-json-${MAP_KEY}`, (_k: string, _t: string, m: MapManifest) => {
@@ -84,11 +111,21 @@ export function preloadAssets(scene: Phaser.Scene): void {
       for (const [name, p] of Object.entries(m.prefabs)) scene.load.image(sceneryKey(name), p.image);
     });
   }
-  if (scene.cache.json.exists(ICON_INDEX)) return;
-  scene.load.json(ICON_INDEX, `${ICON_DIR}index.json`);
-  scene.load.once(`filecomplete-json-${ICON_INDEX}`, (_k: string, _t: string, index: IconIndex) => {
-    for (const [name, entry] of Object.entries(index.skills)) scene.load.image(iconKey(name), `${ICON_DIR}${entry.icon}`);
-  });
+  for (const folder of ICON_FOLDERS) {
+    const key = iconIndexKey(folder);
+    if (scene.cache.json.exists(key)) continue;
+    scene.load.json(key, `icons/${folder}/index.json`);
+    scene.load.once(`filecomplete-json-${key}`, (_k: string, _t: string, index: IconIndex) => {
+      for (const [name, entry] of Object.entries(index.skills)) scene.load.image(iconKey(name), `icons/${folder}/${entry.icon}`);
+    });
+  }
+}
+
+/** Every class's icon index merged: skill names are unique across classes. */
+export function iconIndex(scene: Phaser.Scene): IconIndex | undefined {
+  const indexes = ICON_FOLDERS.map((f) => scene.cache.json.get(iconIndexKey(f)) as IconIndex | undefined).filter((i) => i !== undefined);
+  if (indexes.length === 0) return undefined;
+  return { skills: Object.assign({}, ...indexes.map((i) => i.skills)) };
 }
 
 export function metaOf(scene: Phaser.Scene, key: string): AtlasMeta {
@@ -97,13 +134,17 @@ export function metaOf(scene: Phaser.Scene, key: string): AtlasMeta {
 
 export const animKey = (texture: string, mode: string, dir: string) => `${texture}|${mode}|${dir}`;
 
+/** Modes that play once: death, attacks and casts, and a summon rising (S1). */
+const ONCE = new Set(['DT', 'A1', 'SC', 'S1']);
+
 /**
- * Animations for every mode and direction of every loaded atlas. Death and attacks play
- * once; walking, standing and flying missiles loop. One-shot effects override repeat.
+ * Animations for every mode and direction of every loaded atlas. Death, attacks, casts and
+ * rising play once; walking, standing, flying missiles and overlays loop. One-shot effects
+ * override repeat.
  */
 export function createAnimations(scene: Phaser.Scene): void {
   for (const key of scene.textures.getTextureKeys()) {
-    if (!/^(mon|hero|mis):/.test(key)) continue;
+    if (!/^(mon|hero|mis|ovl):/.test(key)) continue;
     const meta = metaOf(scene, key);
     for (const [mode, info] of Object.entries(meta.modes)) {
       for (let d = 0; d < info.directions; d++) {
@@ -113,7 +154,7 @@ export function createAnimations(scene: Phaser.Scene): void {
           key: animKey(key, mode, dir),
           frames: Array.from({ length: info.frames }, (_, f) => ({ key, frame: `${mode}_${dir}_${String(f).padStart(2, '0')}` })),
           frameRate: info.fps,
-          repeat: mode === 'DT' || mode === 'A1' ? 0 : -1,
+          repeat: ONCE.has(mode) ? 0 : -1,
         });
       }
     }

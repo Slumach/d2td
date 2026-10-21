@@ -1,15 +1,20 @@
-// Sprite sheets for the game: monsters, the Paladin hero and missiles, decoded from DCC
-// and COF files, coloured with the act 1 palette and D2's own colour shifts, written as
-// PNG sheets plus Phaser atlas JSON.
+// Sprite sheets for the game: monsters, the class heroes, summons, missiles and overlays,
+// decoded from DCC and COF files, coloured with the act 1 palette and D2's own colour
+// shifts, written as PNG sheets plus Phaser atlas JSON.
 //
 //   Monsters  one atlas per monster and variant holding every mode in sprites.json
 //             (walk, attack, death) in 8 directions, on one shared frame box so the
 //             feet stay put across modes. Variants: normal; champion and unique add a
 //             PL2 hue shift. A monster with a monstats TransLvl first takes that map
 //             from its cof/palshift.dat (Dark One, Gargantuan Beast).
-//   Hero      the Paladin in one armour and weapon set from sprites.json, neutral and
-//             attack; an evolved variant takes a PL2 shift.
-//   Missiles  one atlas per missile, every direction the DCC has.
+//   Summons   the Necromancer's skeletons and skeletal mages, normal only, with their
+//             rising mode (S1).
+//   Heroes    each class in its line's weapon set and its tier's armour, neutral and
+//             attack (A1 for the Paladin, the cast SC for the casters); an evolved
+//             variant takes a PL2 shift.
+//   Missiles  one atlas per missile a skill shows (sprites.json skillArt), plus each
+//             one's missiles.txt ExplosionMissile, every direction the DCC has.
+//   Overlays  overlay.txt effects (curses, Enchant, frozen, poisoned), one atlas each.
 
 import { animFps, decodeAnimData, type AnimData } from '../lib/animdata.ts';
 import { compositeCode, decodeCof } from '../lib/cof.ts';
@@ -24,6 +29,7 @@ import type { DataSource } from './source.ts';
 
 import monstersJson from '../../src/data/monsters.json';
 import sprites from '../../src/data/render/sprites.json';
+import { MISSILE_INDEX, artMissiles, artOverlays } from '../../src/render/art.ts';
 
 /** D2 file direction order for 8-direction animations, by direction index. */
 export const DIRECTION_NAMES_8 = ['sw', 'nw', 'ne', 'se', 's', 'w', 'n', 'e'];
@@ -183,9 +189,10 @@ function atlasFrom(name: string, modes: ModeSheet[], directionNames: string[], m
       pageW = 0;
     }
     placed.push({ ...t, page, px: cx, py: cy });
+    // The page ends at the last frame's edge, not after its padding: never past PAGE_MAX
+    pageW = Math.max(pageW, cx + t.w);
     cx += t.w + PADDING;
     shelf = Math.max(shelf, t.h);
-    pageW = Math.max(pageW, cx);
   }
   pageSizes[page] = { w: pageW, h: cy + shelf };
 
@@ -247,6 +254,8 @@ interface CompositeSpec {
   mode: string;
   weaponClass: string;
   variant: (code: string) => string;
+  /** Heroes: a layer with no file for this pose (a left hand with no bow) draws nothing. */
+  lenient?: boolean;
 }
 
 /** The COF and layer files a composite mode needs, read from the source. */
@@ -260,7 +269,9 @@ function compositeInputs(source: DataSource, spec: CompositeSpec): { cofPath: st
     const variant = spec.variant(code);
     // "nil" is an empty slot (no shield, no pads): D2 draws nothing for that layer
     if (variant === 'nil') continue;
-    layers[code] = `global/${spec.folder}/${code}/${spec.token}${code}${variant}${spec.mode}${layer.weaponClass}.dcc`.toLowerCase();
+    const path = `global/${spec.folder}/${code}/${spec.token}${code}${variant}${spec.mode}${layer.weaponClass}.dcc`.toLowerCase();
+    if (spec.lenient && !source.exists(path)) continue;
+    layers[code] = path;
   }
   return { cofPath, layers };
 }
@@ -292,7 +303,8 @@ function compositeMode(shared: Shared, spec: CompositeSpec, palette: Uint8Array)
 function monsterJobs(shared: Shared): SpriteJob[] {
   const { source, pl2 } = shared;
   const bosses = new Set(Object.values(monstersJson.bosses));
-  const ids = [...new Set([...Object.keys(monstersJson.roster), ...bosses])];
+  const summons = new Set(sprites.summons.ids);
+  const ids = [...new Set([...Object.keys(monstersJson.roster), ...bosses, ...summons])];
   const jobs: SpriteJob[] = [];
   for (const id of ids) {
     const row = shared.monstats.find((r) => r['Id'] === id);
@@ -301,7 +313,8 @@ function monsterJobs(shared: Shared): SpriteJob[] {
     const token = String(row['Code']).toLowerCase();
     const weaponClass = column(ex, 'BaseW').toLowerCase();
     const folder = `monsters/${token}`;
-    const specs = sprites.monsterModes.map((mode) => ({ folder, token, mode, weaponClass, variant: (c: string) => firstVariant(ex, c) }));
+    const modes = summons.has(id) ? sprites.summons.modes : sprites.monsterModes;
+    const specs = modes.map((mode) => ({ folder, token, mode, weaponClass, variant: (c: string) => firstVariant(ex, c) }));
     const transLvl = Number(row['TransLvl'] || 0);
     const palshift = `global/${folder}/cof/palshift.dat`;
     const inputs = [...(transLvl > 0 ? [palshift] : [])];
@@ -310,7 +323,7 @@ function monsterJobs(shared: Shared): SpriteJob[] {
       if (!found) inputs.push(`global/${folder}/cof/${token}${spec.mode}${weaponClass}.cof`.toLowerCase());
       else inputs.push(found.cofPath, ...Object.values(found.layers));
     }
-    const variants: [string, ShiftSpec | undefined][] = bosses.has(id)
+    const variants: [string, ShiftSpec | undefined][] = bosses.has(id) || summons.has(id)
       ? [['normal', undefined]]
       : [
           ['normal', undefined],
@@ -346,16 +359,24 @@ interface HeroTier {
   helm?: string;
 }
 
+interface HeroClass {
+  token: string;
+  /** The mode a tower plays when it acts: A1 for the Paladin's swings, SC for casters. */
+  attackMode: string;
+  lines: Record<string, HeroLine>;
+}
+
 /**
- * A Paladin tower's look is its line and tier: the line picks the weapon and shield (none
- * for the aura line), the tier the armour weight and helm. One job per line, building an
- * atlas per tier plus the evolved recolour in top-tier gear.
+ * A tower's look is its class, line and tier: the line picks the weapon and shield (a
+ * staff or an orb for the Sorceress, a wand or a dagger and a bone shield for the
+ * Necromancer, bare hands for the Paladin's aura line and the Sorceress's support line),
+ * the tier the armour weight and helm. One job per class and line, building an atlas per
+ * tier plus the evolved recolour in top-tier gear.
  */
 function heroJobs(shared: Shared): SpriteJob[] {
   const { source } = shared;
   const armor = readTable(source, 'armor.txt');
   const weapons = readTable(source, 'weapons.txt');
-  const h = sprites.hero;
   const named = (rows: TxtRow[], name: string) => {
     const r = rows.find((x) => x['name'] === name);
     if (!r) throw new Error(`No item named ${name}`);
@@ -363,14 +384,31 @@ function heroJobs(shared: Shared): SpriteJob[] {
   };
   // An item draws with its alternategfx layer when it has one (a Scepter draws as a mace)
   const gfx = (row: TxtRow) => String(column(row, 'alternategfx') || row['code']).toLowerCase();
+  const tiers = sprites.heroTiers as HeroTier[];
+  return Object.entries(sprites.heroes as Record<string, HeroClass>).flatMap(([cls, h]) =>
+    heroClassJobs(shared, cls, h, tiers, (name) => named(weapons, name), (name) => named(armor, name), gfx),
+  );
+}
+
+function heroClassJobs(
+  shared: Shared,
+  cls: string,
+  h: HeroClass,
+  tiers: HeroTier[],
+  weaponNamed: (name: string) => TxtRow,
+  armorNamed: (name: string) => TxtRow,
+  gfx: (row: TxtRow) => string,
+): SpriteJob[] {
+  const { source } = shared;
+  const named = (rows: 'w' | 'a', name: string) => (rows === 'w' ? weaponNamed(name) : armorNamed(name));
   const token = h.token.toLowerCase();
-  const tiers = h.tiers as HeroTier[];
-  return Object.entries(h.lines as Record<string, HeroLine>).map(([line, gear]) => {
-    const weapon = gear.weapon ? named(weapons, gear.weapon) : undefined;
+  const heroModes = ['NU', h.attackMode];
+  return Object.entries(h.lines).map(([line, gear]) => {
+    const weapon = gear.weapon ? named('w', gear.weapon) : undefined;
     // Unarmed is D2's hand-to-hand class; nil leaves the weapon and shield layers empty
     const weaponClass = weapon ? String(weapon['wclass']).toLowerCase() : 'hth';
     const equipmentFor = (tier: HeroTier): Record<string, string> => ({
-      HD: tier.helm ? gfx(named(armor, tier.helm)) : 'lit',
+      HD: tier.helm ? gfx(named('a', tier.helm)) : 'lit',
       TR: tier.body,
       LG: tier.body,
       RA: tier.body,
@@ -379,11 +417,11 @@ function heroJobs(shared: Shared): SpriteJob[] {
       S2: tier.body,
       RH: weapon ? gfx(weapon) : 'nil',
       LH: weapon ? 'lit' : 'nil',
-      SH: gear.shield ? gfx(named(armor, gear.shield)) : 'nil',
+      SH: gear.shield ? gfx(named('a', gear.shield)) : 'nil',
     });
     const looks = tiers.map((tier, i) => {
       const equipment = equipmentFor(tier);
-      const specs = h.modes.map((mode) => ({ folder: `chars/${token}`, token, mode, weaponClass, variant: (c: string) => equipment[c] ?? 'lit' }));
+      const specs = heroModes.map((mode) => ({ folder: `chars/${token}`, token, mode, weaponClass, variant: (c: string) => equipment[c] ?? 'lit', lenient: true }));
       return { name: `t${i + 1}`, equipment, specs };
     });
     const inputs: string[] = [];
@@ -393,19 +431,19 @@ function heroJobs(shared: Shared): SpriteJob[] {
       else inputs.push(found.cofPath, ...Object.values(found.layers));
     }
     return {
-      label: `hero paladin ${line}`,
+      label: `hero ${cls} ${line}`,
       inputs: [...new Set(inputs)],
       run: () => {
         const out: OutputFile[] = [];
         const plain = remapped(shared.palette, []);
         for (const look of looks) {
           const modes = look.specs.map((s) => compositeMode(shared, s, plain));
-          out.push(...atlasFrom(`hero/paladin/${line}-${look.name}`, modes, DIRECTION_NAMES_8, { hero: 'paladin', line, tier: look.name, equipment: look.equipment }));
+          out.push(...atlasFrom(`hero/${cls}/${line}-${look.name}`, modes, DIRECTION_NAMES_8, { hero: cls, line, tier: look.name, equipment: look.equipment }));
         }
         const top = looks.at(-1)!;
         const evolved = remapped(shared.palette, [pl2Shift(shared.pl2, sprites.colorShifts.evolved)]);
         const modes = top.specs.map((s) => compositeMode(shared, s, evolved));
-        out.push(...atlasFrom(`hero/paladin/${line}-evolved`, modes, DIRECTION_NAMES_8, { hero: 'paladin', line, tier: 'evolved', equipment: top.equipment }));
+        out.push(...atlasFrom(`hero/${cls}/${line}-evolved`, modes, DIRECTION_NAMES_8, { hero: cls, line, tier: 'evolved', equipment: top.equipment }));
         return out;
       },
     };
@@ -445,14 +483,32 @@ function dccSheet(dcc: Dcc, palette: Uint8Array, fps: number): ModeSheet {
 
 function missileJobs(shared: Shared): SpriteJob[] {
   const missiles = readTable(shared.source, 'missiles.txt');
-  const ids = [...new Set(Object.values(sprites.missiles).flat())];
-  return ids.map((id) => {
+  const rowOf = (id: string) => {
     const row = missiles.find((r) => r['Missile'] === id);
     if (!row) throw new Error(`missiles.txt has no ${id}`);
-    const path = `global/missiles/${String(row['CelFile']).toLowerCase()}.dcc`;
+    return row;
+  };
+  const dccOf = (row: TxtRow) => `global/missiles/${String(row['CelFile']).toLowerCase()}.dcc`;
+  // Each missile's ExplosionMissile plays where it lands, when it has art of its own
+  const explosionOf = (row: TxtRow) => {
+    const id = column(row, 'ExplosionMissile');
+    const ex = id ? missiles.find((r) => r['Missile'] === id) : undefined;
+    return ex && shared.source.exists(dccOf(ex)) ? id : '';
+  };
+  const named = artMissiles();
+  const ids = [...new Set([...named, ...named.map((id) => explosionOf(rowOf(id))).filter(Boolean)])];
+  const index: SpriteJob = {
+    label: 'missile index',
+    inputs: [],
+    run: () => [{ path: MISSILE_INDEX, bytes: new TextEncoder().encode(JSON.stringify({ missiles: ids }, null, 2)) }],
+  };
+  return [index, ...ids.map((id) => {
+    const row = rowOf(id);
+    const path = dccOf(row);
     // missiles.txt animrate: 1024 plays at D2's full 25 frames per second
     const fps = (25 * Number(row['animrate'] || 1024)) / 1024;
     const blend = Number(row['Trans'] || 0);
+    const explosion = explosionOf(row);
     return {
       label: `missile ${id}`,
       inputs: [path],
@@ -460,7 +516,29 @@ function missileJobs(shared: Shared): SpriteJob[] {
         const dcc = decodeDcc(shared.source.read(path));
         const sheet = dccSheet(dcc, shared.palette, fps);
         const names = Array.from({ length: dcc.numberOfDirections }, (_, i) => String(i));
-        return atlasFrom(`missiles/${id}`, [sheet], names, { missile: id, celFile: row['CelFile'], blend, dccDirections: dcc.numberOfDirections });
+        return atlasFrom(`missiles/${id}`, [sheet], names, { missile: id, celFile: row['CelFile'], blend, dccDirections: dcc.numberOfDirections, explosion });
+      },
+    };
+  })];
+}
+
+function overlayJobs(shared: Shared): SpriteJob[] {
+  const overlays = readTable(shared.source, 'overlay.txt');
+  return artOverlays().map((id) => {
+    const row = overlays.find((r) => r['overlay'] === id);
+    if (!row) throw new Error(`overlay.txt has no ${id}`);
+    const path = `global/overlays/${String(row['Filename']).replace(/\\/g, '/').toLowerCase()}.dcc`;
+    // overlay.txt AnimRate counts frames per second at D2's 25 fps, 16 being its full rate
+    const fps = Math.max(1, (25 * Number(row['AnimRate'] || 16)) / 16);
+    const blend = Number(row['Trans'] || 0);
+    return {
+      label: `overlay ${id}`,
+      inputs: [path],
+      run: () => {
+        const dcc = decodeDcc(shared.source.read(path));
+        const sheet = dccSheet(dcc, shared.palette, fps);
+        const names = Array.from({ length: dcc.numberOfDirections }, (_, i) => String(i));
+        return atlasFrom(`overlays/${id}`, [sheet], names, { overlay: id, blend, dccDirections: dcc.numberOfDirections });
       },
     };
   });
@@ -468,7 +546,17 @@ function missileJobs(shared: Shared): SpriteJob[] {
 
 /** Every sprite job, with its inputs known up front (COFs are read to list their layers). */
 export function spriteJobs(source: DataSource): { jobs: SpriteJob[]; sharedInputs: string[]; missing: string[] } {
-  const sharedInputs = ['global/palette/act1/pal.dat', 'global/palette/act1/pal.pl2', 'global/animdata.d2', 'global/excel/monstats.txt', 'global/excel/monstats2.txt', 'global/excel/armor.txt', 'global/excel/weapons.txt', 'global/excel/missiles.txt'];
+  const sharedInputs = [
+    'global/palette/act1/pal.dat',
+    'global/palette/act1/pal.pl2',
+    'global/animdata.d2',
+    'global/excel/monstats.txt',
+    'global/excel/monstats2.txt',
+    'global/excel/armor.txt',
+    'global/excel/weapons.txt',
+    'global/excel/missiles.txt',
+    'global/excel/overlay.txt',
+  ];
   const missingShared = sharedInputs.filter((p) => !source.exists(p));
   if (missingShared.length > 0) return { jobs: [], sharedInputs, missing: missingShared };
 
@@ -483,7 +571,7 @@ export function spriteJobs(source: DataSource): { jobs: SpriteJob[]; sharedInput
       monstats2: readTable(source, 'monstats2.txt'),
     });
   const s = shared();
-  const jobs = [...monsterJobs(s), ...heroJobs(s), ...missileJobs(s)];
+  const jobs = [...monsterJobs(s), ...heroJobs(s), ...missileJobs(s), ...overlayJobs(s)];
   const missing = [...new Set(jobs.flatMap((j) => j.inputs))].filter((p) => !source.exists(p));
   return { jobs, sharedInputs, missing };
 }

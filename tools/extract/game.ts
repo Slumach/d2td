@@ -24,8 +24,9 @@ export const CHECKSUM_FILE = 'checksums.json';
  * verification and setup asks for a fresh one. 2: M5's map, cursor, font and sounds.
  * 3: the switchback road and D2's frontend for the menus.
  * 4: D2R's HUD pieces, and the ground baked for the whole canvas.
+ * 5: the Sorceress and Necromancer: heroes, summons, missiles, overlays, icons and sounds.
  */
-export const EXTRACT_VERSION = 4;
+export const EXTRACT_VERSION = 5;
 /** What verifyGame reports when the extraction is from an older version of the game. */
 export const OUTDATED = 'version';
 

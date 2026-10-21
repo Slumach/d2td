@@ -49,7 +49,9 @@ export class MenuScene extends Phaser.Scene {
     if (m) {
       smoothHd(this, m);
       if (m.flames && !this.anims.exists(FLAMES_ANIM)) {
-        this.anims.create({ key: FLAMES_ANIM, frames: this.anims.generateFrameNumbers(frontendKey('flames')), frameRate: 18, repeat: -1 });
+        // The sheet wraps into rows; only its first `frames` cells hold frames
+        const frames = this.anims.generateFrameNumbers(frontendKey('flames'), { start: 0, end: m.flames.frames - 1 });
+        this.anims.create({ key: FLAMES_ANIM, frames, frameRate: 18, repeat: -1 });
       }
       this.drawBackdrop();
     }

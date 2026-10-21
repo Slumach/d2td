@@ -6,6 +6,7 @@ import { startGame } from './render/start.ts';
 //   ?m0        the M0 pipeline proof (zombie walk and Paladin icons)
 //   ?autoplay  a scripted opening that keeps calling waves
 //   ?rich      plenty of starting gold, so autoplay reaches tiers and an evolution
+//   ?plan=sorceress or ?plan=necromancer   autoplay builds that class instead
 //   ?speed=4   run the sim 4 times as fast
 const params = new URLSearchParams(window.location.search);
 // The cursor and font come from the extraction; before first setup they simply are not there
@@ -17,6 +18,7 @@ if (window.d2td) {
     m0: params.has('m0'),
     autoplay: params.has('autoplay'),
     rich: params.has('rich'),
+    plan: params.get('plan') ?? undefined,
     speed: Number(params.get('speed') ?? 1),
   });
 }

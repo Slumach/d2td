@@ -33,14 +33,16 @@ import {
 } from '../sim/sim.ts';
 import { TABLE_NAMES, type Tables } from '../sim/tables.ts';
 import { TARGETING_MODES } from '../sim/state.ts';
+import type { DebuffDef, PierceDef, SkillDef } from '../sim/archetypes/types.ts';
+import { SKILL_ART, STATUS_OVERLAYS, SUMMON_BOLTS } from './art.ts';
 import {
   GROUND_KEY,
-  ICON_INDEX,
   MAP_KEY,
-  MISSILES_FOR,
   animKey,
   createAnimations,
+  heroAttackMode,
   heroKey,
+  iconIndex,
   iconKey,
   metaOf,
   missileKey,
@@ -57,22 +59,41 @@ import { LocalDriver, NetDriver, type Driver } from './driver.ts';
 import { facingFromVector, type Facing8 } from './facing.ts';
 import { ISO_H, ISO_W, ORIGIN, ellipseOf, project, screenVector, tileAtScreen, tileDiamond } from './iso.ts';
 import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, PANEL_TOP } from './layout.ts';
+import { SkillFx, type Point } from './skillfx.ts';
 import { SoundBank, preloadSounds } from './sound.ts';
 import { FONT, buttonRow, createTooltip, type ButtonSpec, type Tooltip } from './ui.ts';
 
-const CLASS = 'paladin';
+/** The classes a tile offers, in the order of the build tabs. */
+const BUILD_CLASSES = ['paladin', 'sorceress', 'necromancer'];
 /** How far a tower looks for a monster to face, in units. */
 const FACE_RANGE = 6 * UNITS_PER_TILE;
 
-const LINE_COLOURS: Record<string, number> = { zealot: 0xc84a3a, holy: 0xe0b840, aura: 0x4a84d8 };
+const LINE_COLOURS: Record<string, number> = {
+  zealot: 0xc84a3a,
+  holy: 0xe0b840,
+  aura: 0x4a84d8,
+  fire: 0xe06020,
+  cold: 0x60a8f0,
+  lightning: 0xe0e060,
+  support: 0xa070e0,
+  summoning: 0x80c070,
+  bone: 0xd8d0b0,
+  curses: 0x903040,
+};
 const EVOLVED_COLOUR = 0xa050d0;
+/** Status tints: frozen, chilled or slowed, poisoned. */
+const FROZEN_TINT = 0x6f98ff;
+const CHILL_TINT = 0xa8d4ff;
+const POISON_TINT = 0x9ae07a;
+/** Revived corpses fight for the player; a pale tint tells them from the wave. */
+const REVIVED_TINT = 0xd0ffd0;
+/** Milliseconds per sim tick, for effects timed to the sim. */
+const TICK_MS = 1000 / TICKS_PER_SECOND;
 
 const DEPTH = { ground: 1, rings: 2, corpses: 3, units: 10, overlay: 1500, effects: 2000, chrome: 2900 };
 /** Dev: ?debug logs every sprite the scene creates. */
 const DEBUG = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug');
 
-/** Zones have no art yet; they draw as a translucent ellipse of this radius in units. */
-const ZONE_RADIUS = (UNITS_PER_TILE * 5) / 8;
 
 type Selection = { kind: 'tile'; x: number; y: number } | { kind: 'tower'; id: number } | undefined;
 
@@ -108,16 +129,25 @@ interface TowerView {
   texture: string;
   facing: Facing8;
   cooldown: number;
+  partnerCooldown: number;
 }
 
 interface MissileView {
-  sprite: Phaser.GameObjects.Sprite;
+  /** Missiles with no flying art (zones, novas, lightning) have no sprite. */
+  sprite: Phaser.GameObjects.Sprite | undefined;
   x: number;
   y: number;
-  /** Set for strikes: the skill whose impact art plays when the missile ends. */
   skill: string;
-  /** The missile art, which also names its sounds. */
+  /** The flying art, which also names its sounds; empty if it has none. */
   art: string;
+  age: number;
+}
+
+interface SummonView {
+  sprite: Phaser.GameObjects.Sprite;
+  texture: string;
+  facing: Facing8;
+  cooldown: number;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -152,7 +182,14 @@ export class GameScene extends Phaser.Scene {
   private corpses = new Map<number, Phaser.GameObjects.Sprite>();
   private towers = new Map<number, TowerView>();
   private missiles = new Map<number, MissileView>();
-  private summons = new Map<number, Phaser.GameObjects.Sprite>();
+  private summons = new Map<number, SummonView>();
+  /** Where each corpse lies and how long it had left, to tell a consumed corpse from a rotted one. */
+  private corpseSeen = new Map<number, { x: number; y: number; ticksLeft: number }>();
+  /** Curses each monster carried last tick, to mark fresh ones. */
+  private cursesSeen = new Map<number, Set<string>>();
+  private fx!: SkillFx;
+  /** The class tab the build menu shows. */
+  private buildClass = BUILD_CLASSES[0]!;
 
   constructor() {
     super('Game');
@@ -195,8 +232,9 @@ export class GameScene extends Phaser.Scene {
       this.driver = new LocalDriver(this.gameData, this.seed);
       this.view = 0;
     }
-    this.icons = this.cache.json.get(ICON_INDEX) as IconIndex | undefined;
+    this.icons = iconIndex(this);
     createAnimations(this);
+    this.fx = new SkillFx(this, DEPTH.effects);
     menuMusic(this, false);
     this.sounds = new SoundBank(this);
     this.sounds.startLoops();
@@ -300,14 +338,15 @@ export class GameScene extends Phaser.Scene {
     this.lastTick = -1;
     this.selection = undefined;
     this.panelKey = '';
-    for (const map of [this.monsters, this.towers, this.missiles] as Map<number, { sprite: Phaser.GameObjects.Sprite }>[]) {
-      for (const v of map.values()) v.sprite.destroy();
+    for (const map of [this.monsters, this.towers, this.missiles, this.summons] as Map<number, { sprite?: Phaser.GameObjects.Sprite }>[]) {
+      for (const v of map.values()) v.sprite?.destroy();
       map.clear();
     }
-    for (const map of [this.corpses, this.summons]) {
-      for (const s of map.values()) s.destroy();
-      map.clear();
-    }
+    for (const s of this.corpses.values()) s.destroy();
+    this.corpses.clear();
+    this.corpseSeen.clear();
+    this.cursesSeen.clear();
+    this.fx?.clear();
   }
 
   // ---- online ----
@@ -377,6 +416,7 @@ export class GameScene extends Phaser.Scene {
     this.drawOverlay();
     this.drawHud();
     this.drawPanel();
+    this.fx?.update();
   }
 
   // ---- sprites, synced once per sim tick ----
@@ -391,21 +431,22 @@ export class GameScene extends Phaser.Scene {
 
   private playIfChanged(s: Phaser.GameObjects.Sprite, key: string, keepFrame: boolean): void {
     if (s.anims.currentAnim?.key === key) return;
-    if (!this.anims.exists(key)) return;
+    const anim = this.anims.get(key);
+    if (!anim) return;
+    // Keep the step when only the facing changes; a mode with fewer frames starts within them
     const frame = keepFrame && s.anims.currentAnim && s.anims.currentFrame ? s.anims.currentAnim.frames.indexOf(s.anims.currentFrame) : 0;
-    s.play({ key, startFrame: Math.max(0, frame) });
+    s.play({ key, startFrame: Math.min(Math.max(0, frame), anim.frames.length - 1) });
   }
 
   /** A one-shot effect (hit, impact) that removes itself when its animation ends. */
   private effect(missile: string, x: number, y: number, angle = 0): void {
-    const texture = missileKey(missile);
-    if (!this.textures.exists(texture)) return;
-    const meta = metaOf(this, texture);
-    const dir = String(spriteDirection(angle, meta.dccDirections ?? 1));
-    const s = this.sprite(texture, x, y).setDepth(DEPTH.effects);
-    if ((meta.blend ?? 0) > 0) s.setBlendMode(Phaser.BlendModes.ADD);
-    s.play({ key: animKey(texture, 'MS', dir), repeat: 0 });
-    s.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => s.destroy());
+    this.fx.play(missile, x, y, angle);
+  }
+
+  /** A sim point on screen, lifted to about chest height for effects. */
+  private chest(p: Point): Point {
+    const at = project(p.x, p.y);
+    return { x: at.x, y: at.y - 30 };
   }
 
   private syncTick(): void {
@@ -421,6 +462,9 @@ export class GameScene extends Phaser.Scene {
   private syncMonsters(): void {
     const s = this.sim.state;
     const alive = new Set<number>();
+    const riders = new Set<string>();
+    /** Each curse skill marks one freshly cursed spot per tick with its area art. */
+    const freshCurse = new Map<string, Point>();
     for (const m of s.monsters) {
       alive.add(m.id);
       const { x: px, y: py } = project(m.x, m.y);
@@ -436,20 +480,40 @@ export class GameScene extends Phaser.Scene {
         const v = screenVector(m.x - view.x, m.y - view.y);
         view.facing = facingFromVector(v.x, v.y);
       }
-      // Standing still and not stunned or casting means it is fighting a blocker
-      const mode = moved ? 'WL' : m.stunTicks > 0 || m.castTicks > 0 ? view.mode || 'WL' : 'A1';
+      // Standing still and not stunned, frozen or casting means it is fighting a blocker
+      const held = m.stunTicks > 0 || m.freezeTicks > 0 || m.castTicks > 0;
+      const mode = moved ? 'WL' : held ? view.mode || 'WL' : 'A1';
       if (mode === 'A1' && view.mode === 'A1' && !view.sprite.anims.isPlaying) view.sprite.play(animKey(view.texture, 'A1', view.facing));
       this.playIfChanged(view.sprite, animKey(view.texture, mode, view.facing), mode === 'WL');
-      if (m.stunTicks > 0) view.sprite.anims.pause();
+      if (m.stunTicks > 0 || m.freezeTicks > 0) view.sprite.anims.pause();
       else if (view.sprite.anims.isPaused) view.sprite.anims.resume();
       view.mode = mode;
       view.x = m.x;
       view.y = m.y;
-      view.sprite.setPosition(Math.round(px), Math.round(py)).setDepth(DEPTH.units + py / 1000);
-      const slowed = (this.sim.fx.monsters[m.id]?.slowPct ?? 0) > 0 || m.slowPct > 0;
-      if (slowed) view.sprite.setTint(0xa8d4ff);
+      const depth = DEPTH.units + py / 1000;
+      view.sprite.setPosition(Math.round(px), Math.round(py)).setDepth(depth);
+      // Cold shows blue (frozen deeper than chilled), poison green
+      const slowed = (this.sim.fx.monsters[m.id]?.slowPct ?? 0) > 0 || m.slowPct > 0 || m.chillTicks > 0;
+      const tint = m.freezeTicks > 0 ? FROZEN_TINT : slowed ? CHILL_TINT : m.poisonTicks > 0 ? POISON_TINT : undefined;
+      if (tint !== undefined) view.sprite.setTint(tint);
       else view.sprite.clearTint();
+
+      // The first curse it carries rides on it as its overlay.txt effect; frozen shows ice
+      const key = `m${m.id}`;
+      riders.add(key);
+      const curse = m.curses[0];
+      this.fx.ride(key, curse ? SKILL_ART[curse.skill]?.overlay : undefined, { x: px, y: py }, depth + 0.0005);
+      riders.add(`${key}f`);
+      this.fx.ride(`${key}f`, m.freezeTicks > 0 ? STATUS_OVERLAYS.frozen : undefined, { x: px, y: py }, depth + 0.0004);
+      const before = this.cursesSeen.get(m.id);
+      for (const c of m.curses) if (!before?.has(c.skill) && !freshCurse.has(c.skill)) freshCurse.set(c.skill, { x: px, y: py });
+      this.cursesSeen.set(m.id, new Set(m.curses.map((c) => c.skill)));
     }
+    for (const [skill, at] of freshCurse) {
+      const art = SKILL_ART[skill]?.area;
+      if (art) this.effect(art, at.x, at.y);
+    }
+    for (const id of this.cursesSeen.keys()) if (!alive.has(id)) this.cursesSeen.delete(id);
 
     // Gone this tick: a new corpse in its place means it died, otherwise it leaked
     const fresh = s.corpses.filter((c) => !this.corpses.has(c.id));
@@ -465,6 +529,7 @@ export class GameScene extends Phaser.Scene {
       this.sounds.death(baseMonsterId(view.def));
       this.sounds.gold();
       view.sprite.clearTint().setDepth(DEPTH.corpses);
+      view.sprite.anims.resume();
       view.sprite.play(animKey(view.texture, 'DT', view.facing));
       // Then the body on the ground (D2's DD mode), held until the corpse goes
       const dead = animKey(view.texture, 'DD', view.facing);
@@ -473,19 +538,45 @@ export class GameScene extends Phaser.Scene {
       });
       this.corpses.set(corpse.id, view.sprite);
     }
+
+    // A corpse gone before it rotted was taken: Corpse Explosion bursts it, Revive raises it
+    // (its summon shows that), a Fallen Shaman raises it (its monster shows that)
     const corpseIds = new Set(s.corpses.map((c: Corpse) => c.id));
+    const exploders = this.actedThisTick.filter((t) => activeSkill(this.sim, t)?.skill.archetype === 'corpse');
+    for (const [id, seen] of this.corpseSeen) {
+      if (corpseIds.has(id)) continue;
+      this.corpseSeen.delete(id);
+      if (seen.ticksLeft <= 1 || exploders.length === 0) continue;
+      const near = exploders.find((t) => (t.x - seen.x) ** 2 + (t.y - seen.y) ** 2 <= (activeSkill(this.sim, t)!.skill.rangeUnits + 200) ** 2);
+      if (!near) continue;
+      const art = SKILL_ART[activeSkill(this.sim, near)!.skill.id];
+      const at = project(seen.x, seen.y);
+      if (art?.corpse) this.effect(art.corpse, at.x, at.y);
+      for (const a of art?.impact ?? []) this.effect(a, at.x, at.y);
+    }
+    for (const c of s.corpses) this.corpseSeen.set(c.id, { x: c.x, y: c.y, ticksLeft: c.ticksLeft });
     for (const [id, sprite] of this.corpses) {
       if (!corpseIds.has(id)) {
         sprite.destroy();
         this.corpses.delete(id);
       }
     }
+    // Towers riding Enchant's fire, and every rider of a unit that is gone
+    for (const t of s.towers) {
+      if ((this.sim.fx.towers[t.id]?.fireMax ?? 0) <= 0) continue;
+      const key = `t${t.id}`;
+      riders.add(key);
+      const at = project(t.x, t.y);
+      this.fx.ride(key, SKILL_ART['enchant']?.overlay, at, DEPTH.units + at.y / 1000 + 0.0005);
+    }
+    this.fx.keepRiders(riders);
   }
 
-  private nearestMonster(from: { x: number; y: number }, range: number): Monster | undefined {
+  private nearestMonster(from: { x: number; y: number }, range: number, skip: number[] = []): Monster | undefined {
     let best: Monster | undefined;
     let bestD = range * range;
     for (const m of this.sim.state.monsters) {
+      if (m.hp <= 0 || skip.includes(m.id)) continue;
       const d = (m.x - from.x) ** 2 + (m.y - from.y) ** 2;
       if (d <= bestD) {
         best = m;
@@ -495,9 +586,13 @@ export class GameScene extends Phaser.Scene {
     return best;
   }
 
+  /** Towers whose skill (or evolved partner skill) acted on the tick being drawn. */
+  private actedThisTick: Tower[] = [];
+
   private syncTowers(): void {
     const s = this.sim.state;
     const seen = new Set<number>();
+    this.actedThisTick = [];
     for (const t of s.towers) {
       seen.add(t.id);
       const { x: px, y: py } = project(t.x, t.y);
@@ -509,7 +604,7 @@ export class GameScene extends Phaser.Scene {
       }
       if (!view) {
         if (!this.textures.exists(texture)) continue;
-        view = { sprite: this.sprite(texture, px, py), texture, facing: 's', cooldown: t.cooldown };
+        view = { sprite: this.sprite(texture, px, py), texture, facing: 's', cooldown: t.cooldown, partnerCooldown: t.partnerCooldown };
         this.towers.set(t.id, view);
       }
       const target = this.nearestMonster(t, FACE_RANGE);
@@ -519,22 +614,67 @@ export class GameScene extends Phaser.Scene {
       }
       // The cooldown jumping back up means the tower acted this tick
       const acted = t.cooldown > view.cooldown;
+      const partnerActed = t.partnerCooldown > view.partnerCooldown;
       view.cooldown = t.cooldown;
-      if (acted) {
-        const active = activeSkill(this.sim, t);
-        if (active) this.sounds.cast(active.skill.id);
-        view.sprite.play(animKey(texture, 'A1', view.facing));
+      view.partnerCooldown = t.partnerCooldown;
+      const attack = heroAttackMode(t.cls);
+      if (acted || partnerActed) {
+        this.actedThisTick.push(t);
+        view.sprite.play(animKey(texture, attack, view.facing));
         view.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => view!.sprite.play(animKey(texture, 'NU', view!.facing)));
-        this.meleeHit(t);
       } else if (!view.sprite.anims.isPlaying || view.sprite.anims.currentAnim?.key.includes('|NU|')) {
         this.playIfChanged(view.sprite, animKey(texture, 'NU', view.facing), true);
       }
+      if (acted) {
+        const active = activeSkill(this.sim, t);
+        if (active) this.castEffects(t, active.skill.id, active.lvl);
+        this.meleeHit(t);
+      }
+      if (partnerActed && t.partnerSkill) this.castEffects(t, t.partnerSkill, t.partnerLevel);
       view.sprite.setPosition(px, py).setDepth(DEPTH.units + py / 1000).setAlpha(t.line ? 1 : 0.55);
     }
     for (const [id, view] of this.towers) {
       if (!seen.has(id)) {
         view.sprite.destroy();
         this.towers.delete(id);
+      }
+    }
+  }
+
+  /**
+   * What a tower's cast looks like when the skill leaves no missile: the cast art at the
+   * tower, Chain Lightning's arcs from target to target, Static Field's burst.
+   */
+  private castEffects(t: Tower, skillId: string, lvl: number): void {
+    this.sounds.cast(skillId);
+    const skill = this.sim.data.skills[skillId];
+    const art = SKILL_ART[skillId];
+    if (!skill || !art) return;
+    const at = project(t.x, t.y);
+    if (art.cast) this.effect(art.cast, at.x, at.y);
+    if (skill.archetype === 'pierce' && skill.mode === 'chain' && art.arc) {
+      // The sim jumps from the target to the nearest monster not hit yet; draw the same
+      const { hops, jumpUnits } = (skill as PierceDef).levels[lvl]!;
+      const hit: number[] = [];
+      const points: Point[] = [{ x: at.x, y: at.y - 50 }];
+      let current = this.nearestMonster(t, skill.rangeUnits);
+      for (let hop = 0; current && hop <= hops; hop++) {
+        hit.push(current.id);
+        const p = this.chest(current);
+        points.push(p);
+        this.effect(art.arc, p.x, p.y + 30);
+        current = this.nearestMonster(current, jumpUnits, hit);
+      }
+      this.fx.lightning(points);
+    } else if (skill.archetype === 'debuff' && skill.mode === 'pulse') {
+      const radius = (skill as DebuffDef).levels[lvl]!.radiusUnits;
+      const r = ellipseOf(radius);
+      this.fx.ring(at, r.w / 2, r.h / 2);
+      const struck = this.sim.state.monsters.filter((m) => m.hp > 0 && (m.x - t.x) ** 2 + (m.y - t.y) ** 2 <= radius * radius).slice(0, 6);
+      for (const m of struck) {
+        const p = this.chest(m);
+        this.fx.lightning([{ x: at.x, y: at.y - 50 }, p], 140);
+        if (art.arc) this.effect(art.arc, p.x, p.y + 30);
       }
     }
   }
@@ -549,73 +689,149 @@ export class GameScene extends Phaser.Scene {
     const v = screenVector(target.x - t.x, target.y - t.y);
     const angle = angle64(v.x, v.y);
     const at = project(target.x, target.y);
-    for (const m of MISSILES_FOR[hit] ?? []) this.effect(m, at.x, at.y - 15, angle);
+    for (const m of SKILL_ART[hit]?.impact ?? []) this.effect(m, at.x, at.y - 15, angle);
   }
 
+  /**
+   * Missiles in flight, by their skill's art: the flying missile; Meteor falling onto its
+   * mark; Blizzard's shards over its zone; Frozen Orb spraying shards; Poison Nova's ring;
+   * Lightning drawn along its line. Where one ends, its missiles.txt explosion and the
+   * skill's impact art play.
+   */
   private syncMissiles(): void {
     const s = this.sim.state;
     const seen = new Set<number>();
     for (const m of s.missiles) {
       seen.add(m.id);
       const skill = this.sim.data.skills[m.skill];
-      const art = MISSILES_FOR[m.skill]?.[0];
+      const art = SKILL_ART[m.skill];
       if (!skill || !art) continue;
       const { x: px, y: py } = project(m.x, m.y);
       let view = this.missiles.get(m.id);
       if (!view) {
-        const texture = missileKey(art);
-        if (!this.textures.exists(texture)) continue;
-        const sprite = this.sprite(texture, px, py).setDepth(DEPTH.effects);
-        if ((metaOf(this, texture).blend ?? 0) > 0) sprite.setBlendMode(Phaser.BlendModes.ADD);
-        const strike = skill.archetype === 'splash' && skill.delivery === 'strike';
-        view = { sprite, x: m.x, y: m.y, skill: strike ? m.skill : '', art };
-        this.sounds.travel(art);
+        const texture = art.fly ? missileKey(art.fly) : '';
+        let sprite: Phaser.GameObjects.Sprite | undefined;
+        if (texture && this.textures.exists(texture)) {
+          sprite = this.sprite(texture, px, py).setDepth(DEPTH.effects);
+          if ((metaOf(this, texture).blend ?? 0) > 0) sprite.setBlendMode(Phaser.BlendModes.ADD);
+        }
+        view = { sprite, x: m.x, y: m.y, skill: m.skill, art: art.fly ?? '', age: 0 };
+        if (art.fly) this.sounds.travel(art.fly);
         this.missiles.set(m.id, view);
+        if (art.fall) this.fx.fall(art.fall, { x: px, y: py }, m.ticksLeft * TICK_MS, () => undefined);
+        if (art.ring && skill.archetype === 'splash') {
+          // The nova's ring: missiles thrown outward to its edge over its life
+          const r = ellipseOf(skill.radiusUnits);
+          for (let i = 0; i < 16; i++) {
+            const a = (i / 16) * Math.PI * 2;
+            this.fx.shoot(art.ring, { x: px, y: py - 20 }, { x: px + (Math.cos(a) * r.w) / 2, y: py - 20 + (Math.sin(a) * r.h) / 2 }, m.ticksLeft * TICK_MS, Math.round((i / 16) * 64 + 16) % 64);
+          }
+          this.sounds.travel(art.ring);
+        }
       }
-      const texture = view.sprite.texture.key;
-      const meta = metaOf(this, texture);
-      const v = screenVector(m.x - view.x, m.y - view.y);
-      const dir = String(spriteDirection(angle64(v.x, v.y), meta.dccDirections ?? 1));
-      this.playIfChanged(view.sprite, animKey(texture, 'MS', dir), true);
-      view.sprite.setPosition(px, py);
+      view.age++;
+      if (art.zone && skill.archetype === 'zone' && view.age % 2 === 0) {
+        // Shards falling at random spots inside the zone
+        const r = ellipseOf(skill.radiusUnits);
+        const a = Math.random() * Math.PI * 2;
+        const d = Math.sqrt(Math.random());
+        this.effect(art.zone, px + (Math.cos(a) * d * r.w) / 2, py + (Math.sin(a) * d * r.h) / 2);
+        if (view.age % 10 === 0) this.sounds.travel(art.zone);
+      }
+      if (art.shards && view.age % 2 === 0) {
+        // The orb throws shards out in a turning spiral, as D2's Frozen Orb does
+        const a = view.age * 0.7;
+        const to = { x: px + Math.cos(a) * 110, y: py - 20 + Math.sin(a) * 55 };
+        this.fx.shoot(art.shards, { x: px, y: py - 20 }, to, 260, Math.round(((a / (Math.PI * 2)) * 64 + 16) % 64 + 64) % 64);
+      }
+      if (art.bolt) {
+        const from = project(m.ox, m.oy);
+        this.fx.lightning([{ x: from.x, y: from.y - 50 }, { x: px, y: py - 30 }], 90);
+      }
+      if (view.sprite) {
+        const texture = view.sprite.texture.key;
+        const meta = metaOf(this, texture);
+        const v = screenVector(m.x - view.x, m.y - view.y);
+        const dir = String(spriteDirection(angle64(v.x, v.y), meta.dccDirections ?? 1));
+        this.playIfChanged(view.sprite, animKey(texture, 'MS', dir), true);
+        view.sprite.setPosition(px, py);
+      }
       view.x = m.x;
       view.y = m.y;
     }
     for (const [id, view] of this.missiles) {
       if (seen.has(id)) continue;
-      this.sounds.hit(view.art);
-      // A strike's impact plays the skill's other art there: FoH sprays its holy bolts
-      if (view.skill) for (const art of MISSILES_FOR[view.skill]!.slice(1)) this.effect(art, view.sprite.x, view.sprite.y);
-      view.sprite.destroy();
+      const art = SKILL_ART[view.skill];
+      const at = project(view.x, view.y);
+      if (view.art) this.sounds.hit(view.art);
+      const ex = view.art ? this.fx.explosionOf(view.art) : undefined;
+      if (ex) this.effect(ex, at.x, at.y - 15);
+      for (const a of art?.impact ?? []) this.effect(a, at.x, at.y - 10);
+      view.sprite?.destroy();
       this.missiles.delete(id);
     }
   }
 
+  /**
+   * Summons: skeletons and mages in the art the player has (necroskeleton, necromage),
+   * rising out of the ground when raised; a revived monster in its own art, pale. They face
+   * the nearest monster, attack when their attack comes round, and mages throw their
+   * element's missile.
+   */
   private syncSummons(): void {
     const s = this.sim.state;
     const seen = new Set<number>();
     for (const u of s.summons) {
       seen.add(u.id);
-      const texture = monsterKey('skeleton1', 'normal');
       const { x: px, y: py } = project(u.x, u.y);
-      let sprite = this.summons.get(u.id);
-      if (!sprite) {
+      let view = this.summons.get(u.id);
+      if (!view) {
+        const texture = u.kind === 'revive' ? monsterKey(baseMonsterId(u.def), 'normal') : monsterKey(baseMonsterId(u.def), 'normal');
         if (!this.textures.exists(texture)) continue;
-        sprite = this.sprite(texture, px, py).setTint(0xb0ffb0);
-        this.summons.set(u.id, sprite);
+        const sprite = this.sprite(texture, px, py);
+        if (u.kind === 'revive') {
+          sprite.setTint(REVIVED_TINT);
+          const raise = SKILL_ART['revive']?.raise;
+          if (raise) this.effect(raise, px, py);
+        }
+        view = { sprite, texture, facing: 'n', cooldown: u.cooldown };
+        this.summons.set(u.id, view);
+        // Raised skeletons and mages climb out of the ground (D2's S1)
+        if (this.anims.exists(animKey(texture, 'S1', view.facing))) sprite.play(animKey(texture, 'S1', view.facing));
       }
-      // Summons face up the path, toward where monsters come from
-      const fighting = this.nearestMonster(u, UNITS_PER_TILE) !== undefined;
-      this.playIfChanged(sprite, animKey(texture, fighting ? 'A1' : 'WL', 'w'), false);
-      if (!fighting) sprite.anims.pause();
-      else if (!sprite.anims.isPlaying) sprite.play(animKey(texture, 'A1', 'w'));
-      sprite.setPosition(px, py).setDepth(DEPTH.units + py / 1000);
+      const target = s.monsters.find((m) => m.id === u.targetId && m.hp > 0) ?? this.nearestMonster(u, UNITS_PER_TILE * 4);
+      if (target) {
+        const v = screenVector(target.x - u.x, target.y - u.y);
+        view.facing = facingFromVector(v.x, v.y);
+      }
+      const attacked = u.cooldown > view.cooldown;
+      view.cooldown = u.cooldown;
+      const rising = view.sprite.anims.currentAnim?.key.includes('|S1|') && view.sprite.anims.isPlaying;
+      if (attacked && target) {
+        view.sprite.play(animKey(view.texture, 'A1', view.facing));
+        if (u.kind === 'ranged') {
+          const bolt = SUMMON_BOLTS[u.element];
+          const v = screenVector(target.x - u.x, target.y - u.y);
+          if (bolt) this.fx.shoot(bolt, { x: px, y: py - 40 }, this.chest(target), 220, angle64(v.x, v.y));
+        }
+      } else if (!rising && !view.sprite.anims.currentAnim?.key.includes('|A1|')) {
+        this.playIfChanged(view.sprite, animKey(view.texture, 'NU', view.facing), true);
+      } else if (!rising && !view.sprite.anims.isPlaying) {
+        this.playIfChanged(view.sprite, animKey(view.texture, 'NU', view.facing), false);
+      }
+      view.sprite.setPosition(px, py).setDepth(DEPTH.units + py / 1000);
     }
-    for (const [id, sprite] of this.summons) {
-      if (!seen.has(id)) {
-        sprite.destroy();
-        this.summons.delete(id);
+    for (const [id, view] of this.summons) {
+      if (seen.has(id)) continue;
+      this.summons.delete(id);
+      // A fallen summon plays its death where it has one
+      const death = animKey(view.texture, 'DT', view.facing);
+      if (!this.anims.exists(death)) {
+        view.sprite.destroy();
+        continue;
       }
+      view.sprite.play(death);
+      view.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => view.sprite.destroy());
     }
   }
 
@@ -678,12 +894,13 @@ export class GameScene extends Phaser.Scene {
       g.lineStyle(1, 0xffffff, 0.5).strokeEllipse(c.x, c.y, r.w, r.h);
     }
 
-    // Zones (no Paladin skill makes one) stay translucent circles
+    // Ground zones: a faint ellipse of the zone's radius under its falling shards
     for (const m of state.missiles) {
-      if (this.sim.data.skills[m.skill]?.archetype !== 'zone') continue;
+      const skill = this.sim.data.skills[m.skill];
+      if (skill?.archetype !== 'zone') continue;
       const c = project(m.x, m.y);
-      const r = ellipseOf(ZONE_RADIUS);
-      g.fillStyle(0x80c0ff, 0.2).fillEllipse(c.x, c.y, r.w, r.h);
+      const r = ellipseOf(skill.radiusUnits);
+      g.fillStyle(0x80c0ff, 0.12).fillEllipse(c.x, c.y, r.w, r.h);
     }
 
     // HP bars over monsters
@@ -799,7 +1016,7 @@ export class GameScene extends Phaser.Scene {
     const sim = this.sim;
     const sel = this.selection;
     const tower = sel?.kind === 'tower' ? towerById(sim, sel.id) : undefined;
-    const key = JSON.stringify([this.view, sel, tower && [tower.tier, tower.level, tower.picks, tower.targeting], sim.state.gold, sim.state.towers.length]);
+    const key = JSON.stringify([this.view, sel, this.buildClass, tower && [tower.tier, tower.level, tower.picks, tower.targeting], sim.state.gold, sim.state.towers.length]);
     if (key === this.panelKey) return;
     this.panelKey = key;
     for (const o of this.panel) o.destroy();
@@ -808,6 +1025,7 @@ export class GameScene extends Phaser.Scene {
     if (this.driver && this.view !== this.driver.me) {
       this.info.setText(`Watching ${this.nameOf(this.view)}'s zone. Press ${this.driver.me + 1} to go back to yours.`);
       this.d2?.setSlots([]);
+      this.d2?.setTabs([]);
       this.d2?.setTowerPanel(undefined);
       return;
     }
@@ -820,15 +1038,17 @@ export class GameScene extends Phaser.Scene {
     const specs: ButtonSpec[] = [];
 
     if (sel?.kind === 'tile') {
-      this.info.setText(`Build a Paladin tower (${e.buildCost}g): its T1 skill fixes its line`);
-      for (const line of Object.values(sim.data.classes[CLASS]!.lines)) {
-        const skill = line.tiers[0]![0]!;
-        specs.push(
-          this.skillButton(skill, `${line.name}: ${this.skillName(skill)}`, () => {
-            this.issue({ type: 'build', x: sel.x, y: sel.y, cls: CLASS, skill });
-            this.selection = undefined;
-          }, sim.state.gold >= e.buildCost),
-        );
+      this.info.setText(`Build a tower (${e.buildCost}g): its class and T1 skill fix its line`);
+      for (const cls of BUILD_CLASSES) {
+        for (const line of Object.values(sim.data.classes[cls]?.lines ?? {})) {
+          const skill = line.tiers[0]![0]!;
+          specs.push(
+            this.skillButton(skill, `${line.name}: ${this.skillName(skill)}`, () => {
+              this.issue({ type: 'build', x: sel.x, y: sel.y, cls, skill });
+              this.selection = undefined;
+            }, sim.state.gold >= e.buildCost),
+          );
+        }
       }
     } else if (tower) {
       this.towerPanel(tower, specs);
@@ -844,8 +1064,21 @@ export class GameScene extends Phaser.Scene {
     const e = sim.data.economy;
     const d2 = this.d2!;
     if (sel?.kind === 'tile') {
-      this.info.setText(`Build a Paladin tower (${e.buildCost} gold): its first skill fixes its line`);
-      const items: SlotItem[] = Object.values(sim.data.classes[CLASS]!.lines).map((line) => {
+      // A tab per class over the belt; the belt holds the chosen class's first skills
+      const cls = this.buildClass;
+      const c = sim.data.classes[cls]!;
+      this.info.setText(`Build a ${c.name} tower (${e.buildCost} gold): its first skill fixes its line`);
+      d2.setTabs(
+        BUILD_CLASSES.filter((id) => sim.data.classes[id]).map((id) => ({
+          label: sim.data.classes[id]!.name,
+          chosen: id === cls,
+          onClick: () => {
+            this.buildClass = id;
+            this.panelKey = '';
+          },
+        })),
+      );
+      const items: SlotItem[] = Object.values(c.lines).map((line) => {
         const skill = line.tiers[0]![0]!;
         const spec = this.skillButton(skill, '', () => undefined);
         return {
@@ -854,7 +1087,7 @@ export class GameScene extends Phaser.Scene {
           body: `${spec.tooltip?.body ?? ''}\n\nBuild for ${e.buildCost} gold`.trim(),
           enabled: sim.state.gold >= e.buildCost,
           onClick: () => {
-            this.issue({ type: 'build', x: sel.x, y: sel.y, cls: CLASS, skill });
+            this.issue({ type: 'build', x: sel.x, y: sel.y, cls, skill });
             this.selection = undefined;
           },
         };
@@ -864,11 +1097,34 @@ export class GameScene extends Phaser.Scene {
     } else if (tower) {
       this.info.setText('');
       d2.setSlots([]);
+      d2.setTabs([]);
       d2.setTowerPanel(this.towerModel(tower));
     } else {
       this.info.setText(sim.state.towers.length < 2 ? 'Click a free tile to build. Click a tower to upgrade it.' : '');
       d2.setSlots([]);
+      d2.setTabs([]);
       d2.setTowerPanel(undefined);
+    }
+  }
+
+  /** What a tower with no standard damage number does, in a few words. */
+  private roleOf(skill: SkillDef, lvl: number): string {
+    switch (skill.archetype) {
+      case 'debuff': {
+        const l = skill.levels[lvl]!;
+        if (skill.mode === 'pulse') return `Takes ${l.hpPct}% of current HP in radius`;
+        if (skill.mode === 'curse') return `Curses monsters for ${Math.round(l.durationTicks / TICKS_PER_SECOND)} s`;
+        return 'Aura tower';
+      }
+      case 'summon': {
+        const l = skill.levels[lvl]!;
+        const what = skill.kind === 'revive' ? 'revived corpses' : skill.kind === 'ranged' ? 'skeletal mages' : 'skeletons';
+        return `Up to ${l.count} ${what}`;
+      }
+      case 'corpse':
+        return 'Explodes fresh corpses';
+      default:
+        return 'Aura tower';
     }
   }
 
@@ -880,13 +1136,18 @@ export class GameScene extends Phaser.Scene {
     const recipe = tower.evolved ? sim.data.evolutions.find((r) => r.id === tower.evolved) : undefined;
     const line = sim.data.classes[tower.cls]?.lines[tower.line];
     const lines: string[] = [];
-    lines.push(recipe ? `Evolved, with ${this.skillName(tower.partnerSkill)} built in` : `${line?.name ?? 'No line yet'}   Tier ${tower.tier}   Level ${tower.level}`);
+    const className = sim.data.classes[tower.cls]?.name ?? tower.cls;
+    lines.push(
+      recipe
+        ? `${className}, evolved with ${this.skillName(tower.partnerSkill)} built in`
+        : `${className}, ${line?.name ?? 'no line yet'}   Tier ${tower.tier}   Level ${tower.level}`,
+    );
     if (active) {
       const buff = sim.fx.towers[tower.id];
       const base = standardDps(active.skill, active.lvl);
       // 1/256 HP per 1000 ticks, at 20 ticks a second, lifted by the auras this tower stands in
       const dps = Math.round((((base * TICKS_PER_SECOND) / 1000 / 256) * (100 + (buff?.damagePct ?? 0)) * (100 + (buff?.attackSpeedPct ?? 0))) / 10000);
-      lines.push(base > 0 ? `Damage per second ${dps}` : `${active.skill.archetype === 'buffAura' || active.skill.archetype === 'debuff' || active.skill.archetype === 'control' ? 'Aura' : 'Support'} tower`);
+      lines.push(base > 0 ? `Damage per second ${dps}` : this.roleOf(active.skill, active.lvl));
     }
     const under = [...new Set(sim.fx.emitters.filter((em) => {
       if (em.towerId === tower.id) return false;
@@ -928,7 +1189,7 @@ export class GameScene extends Phaser.Scene {
     });
     const skillId = recipe?.attack.skill ?? active?.skill.id;
     const icon = skillId ? this.skillButton(skillId, '', () => undefined).icon : undefined;
-    const title = recipe ? recipe.name : active ? active.skill.name : 'Paladin tower';
+    const title = recipe ? recipe.name : active ? active.skill.name : `${className} tower`;
     return { icon, title, lines, buttons };
   }
 

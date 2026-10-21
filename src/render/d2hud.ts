@@ -97,6 +97,7 @@ export class D2Hud {
   readonly tooltip: Tooltip;
   private nextWave: HudNumbers['nextWave'];
   private slots: Phaser.GameObjects.GameObject[] = [];
+  private tabs: Phaser.GameObjects.GameObject[] = [];
   private towerParts: Phaser.GameObjects.GameObject[] = [];
   private lastLivesFrac = -1;
 
@@ -111,7 +112,9 @@ export class D2Hud {
     const at = (x: number, y: number) => this.at(x, y);
 
     // The life globe's liquid sits under the panel's glass, drained from the top
-    if (!scene.anims.exists(GLOBE_ANIM)) scene.anims.create({ key: GLOBE_ANIM, frames: scene.anims.generateFrameNumbers(hudKey('globe')), frameRate: 12, repeat: -1 });
+    // The sheet wraps into rows; only its first `frames` cells hold frames
+    const globeFrames = scene.anims.generateFrameNumbers(hudKey('globe'), { start: 0, end: m.globe.frames - 1 });
+    if (!scene.anims.exists(GLOBE_ANIM)) scene.anims.create({ key: GLOBE_ANIM, frames: globeFrames, frameRate: 12, repeat: -1 });
     const g = at(SPOTS.globe.x, SPOTS.globe.y);
     this.globeSize = SPOTS.globe.r * 2 * this.scale;
     this.globe = scene.add.sprite(g.x, g.y, hudKey('globe')).setDisplaySize(this.globeSize, this.globeSize).setDepth(2899).play(GLOBE_ANIM);
@@ -202,8 +205,26 @@ export class D2Hud {
       }
       this.slots.push(icon, frame);
     });
-    // The shared tooltip sits just above the belt
-    this.moveTooltip(this.at(SPOTS.belt.xs[0]!, 0).x - 40, this.at(0, BAR_TOP).y - 6);
+    // The shared tooltip sits above the belt and its class tabs
+    this.moveTooltip(this.at(SPOTS.belt.xs[0]!, 0).x - 40, this.at(0, BAR_TOP).y - 52);
+  }
+
+  /** Stone tabs over the belt (the build menu's classes); the chosen one stands out. */
+  setTabs(tabs: { label: string; chosen: boolean; onClick: () => void }[]): void {
+    for (const o of this.tabs) o.destroy();
+    this.tabs = [];
+    const y = this.at(0, BAR_TOP).y - 24;
+    const centre = this.at((SPOTS.belt.xs[0]! + SPOTS.belt.xs[SPOTS.belt.xs.length - 1]!) / 2, 0).x;
+    // Narrow and a little right of the belt's middle, clear of the wave counter
+    const width = 128;
+    tabs.forEach((tab, i) => {
+      const x = Math.min(GAME_WIDTH - width / 2 - 8, centre + 40 + (i - (tabs.length - 1) / 2) * (width + 6));
+      const parts = stoneButton(this.scene, x, y, tab.label, tab.onClick, { size: 'med', width, fontSize: 13 });
+      for (const o of parts) {
+        if (!tab.chosen) (o as Phaser.GameObjects.Image).setAlpha(0.6);
+        this.tabs.push(o);
+      }
+    });
   }
 
   private moveTooltip(x: number, bottom: number): void {

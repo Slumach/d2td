@@ -23,6 +23,8 @@ export interface StartOptions {
   autoplay?: boolean;
   /** Dev: start with plenty of gold, so autoplay can afford tiers and an evolution. */
   rich?: boolean;
+  /** Dev: which class autoplay builds (paladin, sorceress, necromancer). */
+  plan?: string;
   /** Dev: ticks per frame multiplier, for previews. */
   speed?: number;
   /** 0 to 100. */
@@ -74,7 +76,7 @@ export function startGame(opts: StartOptions = {}): Phaser.Game {
   if (opts.autoplay && !opts.m0) {
     game.events.once(Phaser.Core.Events.READY, () => {
       const scene = game.scene.getScene('Game') as GameScene;
-      scene.events.once('game-ready', () => startAutoplay(scene, { waves: true }));
+      scene.events.once('game-ready', () => startAutoplay(scene, { waves: true, plan: opts.plan }));
     });
   }
   return game;

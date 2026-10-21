@@ -42,14 +42,19 @@ export function hudJob(source: DataSource): SpriteJob {
         const picks = Array.from({ length: Math.ceil(sheet.frameCount / piece.every) }, (_, i) => i * piece.every);
         const w = sheet.frameWidth;
         const h = sheet.frameHeight;
-        const W = w * picks.length;
-        const rgba = new Uint8Array(W * h * 4);
+        // Frames left to right, wrapping into rows so no side passes 4096 px (a common GPU limit)
+        const cols = Math.max(1, Math.min(picks.length, Math.floor(4096 / w)));
+        const rows = Math.ceil(picks.length / cols);
+        const W = w * cols;
+        const rgba = new Uint8Array(W * h * rows * 4);
         picks.forEach((f, i) => {
           const frame = spriteFrame(sheet, f);
-          for (let y = 0; y < h; y++) rgba.set(frame.subarray(y * w * 4, (y + 1) * w * 4), (y * W + i * w) * 4);
+          const x0 = (i % cols) * w;
+          const y0 = Math.floor(i / cols) * h;
+          for (let y = 0; y < h; y++) rgba.set(frame.subarray(y * w * 4, (y + 1) * w * 4), ((y0 + y) * W + x0) * 4);
         });
         const image = `ui/hud/${name}.png`;
-        out.push({ path: image, bytes: encodePng(W, h, rgba) });
+        out.push({ path: image, bytes: encodePng(W, h * rows, rgba) });
         manifest[name] = { image, frameWidth: w, frameHeight: h, frames: picks.length };
       }
       out.push({ path: 'ui/hud/hud.json', bytes: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) });

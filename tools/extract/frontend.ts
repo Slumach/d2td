@@ -80,16 +80,29 @@ function eraseLettering(rgba: Uint8Array, width: number, box: { x0: number; y0: 
   }
 }
 
-/** Joins RGBA frames of one height side by side. */
-function strip(frames: { rgba: Uint8Array; w: number; h: number }[]): { rgba: Uint8Array; w: number; h: number } {
+interface Sheet {
+  rgba: Uint8Array;
+  /** One frame's size, and the whole image's. */
+  w: number;
+  h: number;
+  sheetW: number;
+  sheetH: number;
+}
+
+/** Lays RGBA frames left to right, wrapping into rows so no side passes 4096 px (a common GPU limit). */
+function strip(frames: { rgba: Uint8Array; w: number; h: number }[]): Sheet {
   const w = Math.max(...frames.map((f) => f.w));
   const h = Math.max(...frames.map((f) => f.h));
-  const W = w * frames.length;
-  const rgba = new Uint8Array(W * h * 4);
+  const cols = Math.max(1, Math.min(frames.length, Math.floor(4096 / w)));
+  const W = w * cols;
+  const H = h * Math.ceil(frames.length / cols);
+  const rgba = new Uint8Array(W * H * 4);
   frames.forEach((f, i) => {
-    for (let y = 0; y < f.h; y++) rgba.set(f.rgba.subarray(y * f.w * 4, (y + 1) * f.w * 4), (y * W + i * w) * 4);
+    const x0 = (i % cols) * w;
+    const y0 = Math.floor(i / cols) * h;
+    for (let y = 0; y < f.h; y++) rgba.set(f.rgba.subarray(y * f.w * 4, (y + 1) * f.w * 4), ((y0 + y) * W + x0) * 4);
   });
-  return { rgba, w, h };
+  return { rgba, w, h, sheetW: W, sheetH: H };
 }
 
 function dc6Rgba(source: DataSource, file: string, palette: Palette, index: number): { rgba: Uint8Array; w: number; h: number } {
@@ -127,9 +140,9 @@ export function frontendJob(source: DataSource): SpriteJob {
     run: () => {
       const out: OutputFile[] = [];
       const sheets: Record<string, FrontendSheet | null> = {};
-      const emit = (name: string, s: { rgba: Uint8Array; w: number; h: number }, frames: number, hd: boolean) => {
+      const emit = (name: string, s: { rgba: Uint8Array; w: number; h: number; sheetW?: number; sheetH?: number }, frames: number, hd: boolean) => {
         const image = `ui/frontend/${name.toLowerCase()}.png`;
-        out.push({ path: image, bytes: encodePng(s.w * frames, s.h, s.rgba) });
+        out.push({ path: image, bytes: encodePng(s.sheetW ?? s.w * frames, s.sheetH ?? s.h, s.rgba) });
         sheets[name] = { image, frameWidth: s.w, frameHeight: s.h, frames, hd };
       };
 

@@ -1,32 +1,80 @@
 {
   "monsterModes": ["WL", "A1", "DT", "DD"],
-  "hero": {
-    "token": "PA",
-    "modes": ["NU", "A1"],
-    "lines": {
-      "zealot": { "weapon": "Crystal Sword", "shield": "Kite Shield" },
-      "holy": { "weapon": "Scepter", "shield": "Kite Shield" },
-      "aura": {}
+  "summons": { "ids": ["necroskeleton", "necromage"], "modes": ["NU", "WL", "A1", "DT", "S1"] },
+  "heroes": {
+    "paladin": {
+      "token": "PA",
+      "attackMode": "A1",
+      "lines": {
+        "zealot": { "weapon": "Crystal Sword", "shield": "Kite Shield" },
+        "holy": { "weapon": "Scepter", "shield": "Kite Shield" },
+        "aura": {}
+      }
     },
-    "tiers": [
-      { "body": "lit" },
-      { "body": "med", "helm": "Cap" },
-      { "body": "hvy", "helm": "Full Helm" }
-    ]
+    "sorceress": {
+      "token": "SO",
+      "attackMode": "SC",
+      "lines": {
+        "fire": { "weapon": "Short Staff" },
+        "cold": { "weapon": "Long Staff" },
+        "lightning": { "weapon": "Eagle Orb" },
+        "support": {}
+      }
+    },
+    "necromancer": {
+      "token": "NE",
+      "attackMode": "SC",
+      "lines": {
+        "summoning": { "weapon": "Wand", "shield": "Bone Shield" },
+        "bone": { "weapon": "Dagger", "shield": "Bone Shield" },
+        "curses": { "weapon": "Bone Wand", "shield": "Bone Shield" }
+      }
+    }
   },
+  "heroModes": ["NU", "A1", "SC"],
+  "heroTiers": [
+    { "body": "lit" },
+    { "body": "med", "helm": "Cap" },
+    { "body": "hvy", "helm": "Full Helm" }
+  ],
   "colorShifts": {
     "champion": { "table": "hueVariations", "index": 12 },
     "unique": { "table": "hueVariations", "index": 40 },
     "evolved": { "table": "hueVariations", "index": 76 }
   },
-  "missiles": {
-    "holy-bolt": ["holybolt"],
-    "blessed-hammer": ["blessedhammer"],
-    "fist-of-the-heavens": ["handofgod", "fistoftheheavensbolt"],
-    "zeal-hit": ["blood1"],
-    "vengeance-hit": ["fireexplode", "iceexplode", "lightninghit"]
+  "comment": "What each skill looks like, by missiles.txt row. fly: the missile in flight (its ExplosionMissile plays where it lands). impact: more art where it lands. fall: drops onto a strike's target before it lands (Meteor). zone: shards falling inside a ground zone (Blizzard). shards: sprayed around a flying missile (Frozen Orb). ring: thrown outward by a nova (Poison Nova). arc: drawn lightning, with this art on each monster it hits. bolt: drawn lightning along a line missile. corpse: on the corpse a corpse skill consumes. raise: where a revive rises. cast: at the tower. area: on the cursed spot. overlay: an overlay.txt effect on what the skill touches.",
+  "skillArt": {
+    "holy-bolt": { "fly": "holybolt" },
+    "blessed-hammer": { "fly": "blessedhammer" },
+    "fist-of-the-heavens": { "fly": "handofgod", "impact": ["fistoftheheavensbolt"] },
+    "fire-bolt": { "fly": "firebolt" },
+    "fire-ball": { "fly": "fireball" },
+    "meteor": { "fly": "meteorcenter", "fall": "meteor", "impact": ["meteorexplode", "meteorfire"] },
+    "ice-bolt": { "fly": "icebolt" },
+    "glacial-spike": { "fly": "glacialspike", "impact": ["iceexplode"] },
+    "blizzard": { "zone": "blizzard1" },
+    "frozen-orb": { "fly": "frozenorb", "shards": "frozenorbbolt" },
+    "charged-bolt": { "fly": "chargedbolt" },
+    "lightning": { "bolt": "lightninghit" },
+    "chain-lightning": { "arc": "chainlightning" },
+    "static-field": { "arc": "lightninghit" },
+    "thunder-storm": { "fly": "thunderstorm1" },
+    "teeth": { "fly": "teeth" },
+    "bone-spear": { "fly": "bonespear" },
+    "bone-spirit": { "fly": "bonespirit" },
+    "poison-nova": { "ring": "poisonnova" },
+    "corpse-explosion": { "corpse": "corpseexplosion", "impact": ["explodingarrowexp"] },
+    "revive": { "raise": "revivemedium" },
+    "amplify-damage": { "cast": "cursecast", "area": "curseamplifydamage", "overlay": "curseamplifydamage" },
+    "decrepify": { "cast": "cursecast", "area": "cursedecrepify", "overlay": "cursedecrepify" },
+    "lower-resist": { "cast": "cursecast", "area": "curselowerresist", "overlay": "curselowerresist" },
+    "enchant": { "overlay": "enchant" },
+    "zeal-hit": { "impact": ["blood1"] },
+    "vengeance-hit": { "impact": ["fireexplode", "iceexplode", "lightninghit"] }
   },
-  "iconClasses": ["pal"],
+  "summonBolts": { "pois": "necromage1", "cold": "necromage2", "fire": "necromage3", "ltng": "necromage4" },
+  "statusOverlays": { "frozen": "frozenarmor", "poison": "poisonhit" },
+  "iconClasses": ["pal", "sor", "nec"],
   "palettes": ["act1/pal.dat", "act1/pal.pl2"],
   "strings": ["skills.json"]
 }
