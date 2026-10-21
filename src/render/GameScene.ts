@@ -6,11 +6,12 @@ import Phaser from 'phaser';
 
 import { DESIGN } from '../data/design.ts';
 import type { MpEvent, LauncherApi } from '../launcher/api.ts';
-import { menuMusic } from '../launcher/frontend.ts';
+import { menuMusic, preloadFrontend } from '../launcher/frontend.ts';
 import { MpSession } from '../launcher/session.ts';
 import { Lockstep } from '../net/lockstep.ts';
 import type { LobbyPlayer } from '../net/protocol.ts';
-import { buildGameData, MAX_TOWER_LEVEL, type DesignData, type GameData } from '../sim/data.ts';
+import { buildGameData, MAX_TOWER_LEVEL, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
+import { standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
 import { livesOf, playersIn, type MatchMode } from '../sim/match.ts';
 import { isPathTile } from '../sim/map.ts';
@@ -50,6 +51,7 @@ import {
   type IconIndex,
   type MapManifest,
 } from './assets.ts';
+import { D2Hud, hudManifest, preloadHud, type PanelButton, type SlotItem, type TowerPanelModel } from './d2hud.ts';
 import { angle64, spriteDirection } from './directions.ts';
 import { LocalDriver, NetDriver, type Driver } from './driver.ts';
 import { facingFromVector, type Facing8 } from './facing.ts';
@@ -134,6 +136,8 @@ export class GameScene extends Phaser.Scene {
   private icons: IconIndex | undefined;
   private panel: Phaser.GameObjects.GameObject[] = [];
   private sounds!: SoundBank;
+  /** D2's control panel when its art is extracted; otherwise the plain HUD and panel. */
+  private d2: D2Hud | undefined;
 
   private monsters = new Map<number, MonsterView>();
   private corpses = new Map<number, Phaser.GameObjects.Sprite>();
@@ -149,6 +153,8 @@ export class GameScene extends Phaser.Scene {
     for (const name of TABLE_NAMES) this.load.json(name, `data/${name}.json`);
     preloadAssets(this);
     preloadSounds(this);
+    preloadHud(this);
+    preloadFrontend(this);
     this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
       this.add.text(16, 16, `Missing ${file.src}. Run npm run extract first.`, { color: '#e0c080' }).setDepth(9000);
     });
@@ -183,8 +189,10 @@ export class GameScene extends Phaser.Scene {
     this.sounds = new SoundBank(this);
     this.sounds.startLoops();
 
-    // HUD and panel backgrounds sit over the map, so tall scenery never paints across them
-    this.add.graphics().setDepth(DEPTH.chrome).fillStyle(0x1a1a14).fillRect(0, 0, GAME_WIDTH, HUD_HEIGHT).fillRect(0, PANEL_TOP, GAME_WIDTH, GAME_HEIGHT - PANEL_TOP);
+    const hudArt = hudManifest(this);
+    this.d2 = hudArt ? new D2Hud(this, hudArt, () => this.issue({ type: 'callWave' })) : undefined;
+    // The plain HUD and panel backgrounds sit over the map, so tall scenery never paints across them
+    if (!this.d2) this.add.graphics().setDepth(DEPTH.chrome).fillStyle(0x1a1a14).fillRect(0, 0, GAME_WIDTH, HUD_HEIGHT).fillRect(0, PANEL_TOP, GAME_WIDTH, GAME_HEIGHT - PANEL_TOP);
     this.drawGround();
     this.ringGfx = this.add.graphics().setDepth(DEPTH.rings);
     this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
@@ -196,7 +204,14 @@ export class GameScene extends Phaser.Scene {
     this.notice = this.add.text(GAME_WIDTH / 2, HUD_HEIGHT + 16, '', { ...text, fontSize: '20px', backgroundColor: '#000000a0', padding: { x: 12, y: 6 } }).setOrigin(0.5, 0).setDepth(5500).setVisible(false);
     this.info = this.add.text(16, PANEL_TOP + 8, '', { ...text, fontSize: '20px' }).setDepth(3000);
     this.tooltip = createTooltip(this, 16, PANEL_TOP - 8);
-    buttonRow(this, GAME_WIDTH - 180, 12, [{ label: 'Call Wave', onClick: () => this.issue({ type: 'callWave' }), colour: '#6a3020' }], 200);
+    if (this.d2) {
+      // D2 shows no status line: lives, gold and the wave live in the panel; hints sit just above it
+      this.hud.setVisible(false);
+      this.hud2.setPosition(16, 12).setShadow(1, 1, '#000000', 2);
+      this.info.setPosition(GAME_WIDTH / 2, 816).setOrigin(0.5).setFontSize(15).setColor('#c8bc98').setShadow(1, 1, '#000000', 2);
+    } else {
+      buttonRow(this, GAME_WIDTH - 180, 12, [{ label: 'Call Wave', onClick: () => this.issue({ type: 'callWave' }), colour: '#6a3020' }], 200);
+    }
     this.endOverlay = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, '', { ...text, fontSize: '48px', align: 'center', backgroundColor: '#000000c0', padding: { x: 40, y: 24 } })
       .setOrigin(0.5)
@@ -228,7 +243,7 @@ export class GameScene extends Phaser.Scene {
   // ---- input and commands ----
 
   private tileAt(p: Phaser.Input.Pointer): { x: number; y: number } | undefined {
-    if (p.y < HUD_HEIGHT || p.y >= PANEL_TOP) return undefined;
+    if (this.d2 ? this.d2.covers(p.x, p.y) : p.y < HUD_HEIGHT || p.y >= PANEL_TOP) return undefined;
     return tileAtScreen(p.x, p.y);
   }
 
@@ -682,6 +697,7 @@ export class GameScene extends Phaser.Scene {
     const { state, data } = this.sim;
     if (this.driver?.online) return this.drawOnlineHud();
     this.hud.setText(`Gold ${state.gold}   Lives ${state.lives}   Wave ${state.wave}/${data.waves.length}   Kills ${state.kills}`);
+    this.d2?.update({ gold: state.gold, lives: state.lives, maxLives: data.economy.lives, wave: state.wave, waves: data.waves.length, nextWave: this.nextWaveTip(state.wave) });
     if (state.status !== 'playing' && !this.endOverlay.visible) {
       this.endOverlay
         .setText(`${state.status === 'won' ? 'Victory' : 'Defeat'}\nwave ${state.wave}, ${state.kills} kills\nclick to play again`)
@@ -697,6 +713,7 @@ export class GameScene extends Phaser.Scene {
     const waves = match.data.waves.length;
     const watching = this.view !== driver.me ? `   (watching ${this.nameOf(this.view)})` : '';
     this.hud.setText(`Gold ${s.gold}   Lives ${livesOf(match, this.view)}   Wave ${m.wavesCalled}/${waves}   Kills ${s.kills}${watching}`);
+    this.d2?.update({ gold: s.gold, lives: livesOf(match, this.view), maxLives: match.data.economy.lives, wave: m.wavesCalled, waves, nextWave: this.nextWaveTip(m.wavesCalled) });
 
     const parts: string[] = [];
     if (m.status === 'playing' && m.wavesCalled < waves) {
@@ -720,6 +737,23 @@ export class GameScene extends Phaser.Scene {
           : won ? 'You win!' : m.winners.length > 0 ? `${m.winners.map((w) => this.nameOf(w)).join(' and ')} won` : 'Nobody survived';
       this.endOverlay.setText(`${title}\nwave ${m.wavesCalled}\nclick to return to the menu`).setFontSize(48).setVisible(true);
     }
+  }
+
+  /** The next wave's monsters as a D2 tooltip: counts by type, then champions, uniques and bosses. */
+  private nextWaveTip(index: number): { title: string; body: string } | undefined {
+    const data = this.sim.data;
+    const def: WaveDef | undefined = data.waves[index];
+    if (!def) return undefined;
+    const nice = (id: string) => (data.monsters[id]?.name ?? id).replace(/([a-z])([A-Z])/g, '$1 $2');
+    const mod = (m: string) => m.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
+    const normal = new Map<string, number>();
+    const special: string[] = [];
+    for (const g of def.groups) {
+      if (g.rank === 'normal') normal.set(g.monster, (normal.get(g.monster) ?? 0) + g.count);
+      else special.push(`${g.rank === 'boss' ? 'Boss' : g.rank === 'unique' ? 'Unique' : `${g.count} champion`}: ${nice(g.monster)}${g.mods.length ? ` (${g.mods.map(mod).join(', ')})` : ''}`);
+    }
+    const lines = [...[...normal].map(([id, n]) => `${n} ${nice(id)}`), ...special, '', `Kills so far: ${this.sim.state.kills}`];
+    return { title: `Next: wave ${index + 1}`, body: lines.join('\n') };
   }
 
   private skillName(id: string): string {
@@ -752,8 +786,11 @@ export class GameScene extends Phaser.Scene {
     this.tooltip.hide();
     if (this.driver && this.view !== this.driver.me) {
       this.info.setText(`Watching ${this.nameOf(this.view)}'s zone. Press ${this.driver.me + 1} to go back to yours.`);
+      this.d2?.setSlots([]);
+      this.d2?.setTowerPanel(undefined);
       return;
     }
+    if (this.d2) return this.drawD2Panel(sel, tower);
 
     const x = 16;
     const y = PANEL_TOP + 38;
@@ -778,6 +815,100 @@ export class GameScene extends Phaser.Scene {
       this.info.setText('Click a free tile to build. Click a tower to upgrade, pick branches, evolve or change targeting.');
     }
     this.panel = buttonRow(this, x, y, specs, width, this.tooltip);
+  }
+
+  /** The D2 panel: build choices in the belt slots, the selected tower in its stone panel. */
+  private drawD2Panel(sel: Selection, tower: Tower | undefined): void {
+    const sim = this.sim;
+    const e = sim.data.economy;
+    const d2 = this.d2!;
+    if (sel?.kind === 'tile') {
+      this.info.setText(`Build a Paladin tower (${e.buildCost} gold): its first skill fixes its line`);
+      const items: SlotItem[] = Object.values(sim.data.classes[CLASS]!.lines).map((line) => {
+        const skill = line.tiers[0]![0]!;
+        const spec = this.skillButton(skill, '', () => undefined);
+        return {
+          icon: spec.icon,
+          title: `${line.name}: ${this.skillName(skill)}`,
+          body: `${spec.tooltip?.body ?? ''}\n\nBuild for ${e.buildCost} gold`.trim(),
+          enabled: sim.state.gold >= e.buildCost,
+          onClick: () => {
+            this.issue({ type: 'build', x: sel.x, y: sel.y, cls: CLASS, skill });
+            this.selection = undefined;
+          },
+        };
+      });
+      d2.setSlots(items);
+      d2.setTowerPanel(undefined);
+    } else if (tower) {
+      this.info.setText('');
+      d2.setSlots([]);
+      d2.setTowerPanel(this.towerModel(tower));
+    } else {
+      this.info.setText(sim.state.towers.length < 2 ? 'Click a free tile to build. Click a tower to upgrade it.' : '');
+      d2.setSlots([]);
+      d2.setTowerPanel(undefined);
+    }
+  }
+
+  /** What the selected tower's stone panel shows: who it is, what it does, what it can buy. */
+  private towerModel(tower: Tower): TowerPanelModel {
+    const sim = this.sim;
+    const e = sim.data.economy;
+    const active = activeSkill(sim, tower);
+    const recipe = tower.evolved ? sim.data.evolutions.find((r) => r.id === tower.evolved) : undefined;
+    const line = sim.data.classes[tower.cls]?.lines[tower.line];
+    const lines: string[] = [];
+    lines.push(recipe ? `Evolved, with ${this.skillName(tower.partnerSkill)} built in` : `${line?.name ?? 'No line yet'}   Tier ${tower.tier}   Level ${tower.level}`);
+    if (active) {
+      const buff = sim.fx.towers[tower.id];
+      const base = standardDps(active.skill, active.lvl);
+      // 1/256 HP per 1000 ticks, at 20 ticks a second, lifted by the auras this tower stands in
+      const dps = Math.round((((base * TICKS_PER_SECOND) / 1000 / 256) * (100 + (buff?.damagePct ?? 0)) * (100 + (buff?.attackSpeedPct ?? 0))) / 10000);
+      lines.push(base > 0 ? `Damage per second ${dps}` : `${active.skill.archetype === 'buffAura' || active.skill.archetype === 'debuff' || active.skill.archetype === 'control' ? 'Aura' : 'Support'} tower`);
+    }
+    const under = [...new Set(sim.fx.emitters.filter((em) => {
+      if (em.towerId === tower.id) return false;
+      const src = towerById(sim, em.towerId);
+      return src !== undefined && (src.x - tower.x) ** 2 + (src.y - tower.y) ** 2 <= em.radiusUnits * em.radiusUnits;
+    }).map((em) => this.skillName(em.skill)))];
+    if (under.length) lines.push(`Under ${under.join(', ')}`);
+    const level = active ? upgradeCost(sim, tower) : undefined;
+    const tier = tierCost(sim, tower);
+    if (level !== undefined) lines.push(`Next: level ${tower.level + 1} for ${level} gold`);
+    else if (tier !== undefined) lines.push(`Next: tier ${tower.tier + 1} for ${tier} gold`);
+    lines.push(`Targeting ${tower.targeting}`);
+
+    const buttons: PanelButton[] = [];
+    const type = tower.line ? 'pickBranch' : 'pickSkill';
+    for (const skill of pendingChoices(sim, tower)) buttons.push({ label: `Pick ${this.skillName(skill)}`, enabled: true, onClick: () => this.issue({ type, towerId: tower.id, skill }) });
+    if (level !== undefined) buttons.push({ label: `Upgrade ${level}g`, enabled: sim.state.gold >= level, onClick: () => this.issue({ type: 'upgrade', towerId: tower.id }) });
+    if (tier !== undefined && line) {
+      const options = line.tiers[tower.tier] ?? [];
+      for (const skill of options) {
+        const commands: Command[] = [{ type: 'upgradeTier', towerId: tower.id }];
+        if (options.length > 1) commands.push({ type: 'pickBranch', towerId: tower.id, skill });
+        buttons.push({ label: options.length > 1 ? `Tier up: ${this.skillName(skill)}` : `Tier up ${tier}g`, enabled: sim.state.gold >= tier, onClick: () => this.issue(...commands) });
+      }
+    }
+    for (const other of sim.state.towers) {
+      const match = evolutionFor(sim, tower, other);
+      if (match) buttons.push({ label: `Evolve ${match.recipe.name}`, enabled: sim.state.gold >= e.evolveCost, onClick: () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }) });
+    }
+    const next = TARGETING_MODES[(TARGETING_MODES.indexOf(tower.targeting) + 1) % TARGETING_MODES.length]!;
+    buttons.push({ label: 'Targeting', enabled: true, onClick: () => this.issue({ type: 'setTargeting', towerId: tower.id, mode: next }) });
+    buttons.push({
+      label: `Sell ${sellValue(sim, tower)}g`,
+      enabled: true,
+      onClick: () => {
+        this.issue({ type: 'sell', towerId: tower.id });
+        this.selection = undefined;
+      },
+    });
+    const skillId = recipe?.attack.skill ?? active?.skill.id;
+    const icon = skillId ? this.skillButton(skillId, '', () => undefined).icon : undefined;
+    const title = recipe ? recipe.name : active ? active.skill.name : 'Paladin tower';
+    return { icon, title, lines, buttons };
   }
 
   private towerPanel(tower: Tower, specs: ButtonSpec[]): void {

@@ -13,7 +13,7 @@
 
 import layout from '../../src/data/map/bloodmoor.json';
 import { ORIGIN, project } from '../../src/render/iso.ts';
-import { GAME_WIDTH, HUD_HEIGHT, MAP_AREA_HEIGHT } from '../../src/render/layout.ts';
+import { GAME_HEIGHT, GAME_WIDTH } from '../../src/render/layout.ts';
 import { PATH_TILES } from '../../src/sim/map.ts';
 import { UNITS_PER_TILE } from '../../src/sim/fixed.ts';
 import { decodeDt1, tileImage, type Dt1Tile, type TileImage } from '../lib/dt1.ts';
@@ -22,8 +22,9 @@ import { encodePng } from '../lib/png.ts';
 import type { DataSource } from './source.ts';
 import type { OutputFile, SpriteJob } from './sprites.ts';
 
+/** The whole canvas: the HUD is D2's control panel over the map, not a strip beside it. */
 const W = GAME_WIDTH;
-const H = MAP_AREA_HEIGHT;
+const H = GAME_HEIGHT;
 /** A D2 cell is 160 x 80 px; our sim tile is 64 x 32. */
 const CELL_TILES = 2.5;
 const SHADOW = 13;
@@ -168,8 +169,7 @@ class Canvas {
 
 /** Screen position (in ground-image pixels) of a point in sim tiles. */
 function at(tx: number, ty: number): { x: number; y: number } {
-  const p = project(tx * UNITS_PER_TILE, ty * UNITS_PER_TILE);
-  return { x: p.x, y: p.y - HUD_HEIGHT };
+  return project(tx * UNITS_PER_TILE, ty * UNITS_PER_TILE);
 }
 
 /** The floor diamond's top-left for a D2 cell offset from an anchor at sim (ax, ay): the anchor is cell (0,0)'s centre. */
@@ -256,7 +256,7 @@ function bake(source: DataSource): OutputFile[] {
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const a = (x - ORIGIN.x) / 32;
-      const b = (y + HUD_HEIGHT - ORIGIN.y) / 16;
+      const b = (y - ORIGIN.y) / 16;
       const u = (a + b) / 2;
       const v = (b - a) / 2;
       let d = Infinity;
@@ -311,7 +311,7 @@ function bake(source: DataSource): OutputFile[] {
 
   const out: OutputFile[] = [{ path: 'map/bloodmoor-ground.png', bytes: encodePng(W, H, ground.rgba) }];
   const manifest: MapManifest = {
-    ground: { image: 'map/bloodmoor-ground.png', originX: ORIGIN.x, originY: ORIGIN.y - HUD_HEIGHT },
+    ground: { image: 'map/bloodmoor-ground.png', originX: ORIGIN.x, originY: ORIGIN.y },
     prefabs: {},
     objects: layout.objects.map((o) => ({ prefab: o.prefab, at: o.at })),
   };

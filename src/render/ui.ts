@@ -23,6 +23,8 @@ export interface ButtonSpec {
 export interface Tooltip {
   show(title: string, body: string): void;
   hide(): void;
+  /** Re-anchors the box's bottom-left corner. */
+  move(x: number, bottom: number): void;
 }
 
 /** D2's item and skill box: translucent black, text centred, the name in gold over white lines. */
@@ -30,7 +32,9 @@ const TOOLTIP_GOLD = '#c7b377';
 const TOOLTIP_WHITE = '#e8e8e8';
 
 /** One shared tooltip box, anchored above the panel with its bottom-left at (x, bottom). */
-export function createTooltip(scene: Phaser.Scene, x: number, bottom: number): Tooltip {
+export function createTooltip(scene: Phaser.Scene, ax: number, abottom: number): Tooltip {
+  let x = ax;
+  let bottom = abottom;
   const box = scene.add.graphics().setDepth(5000).setVisible(false);
   const title = scene.add.text(0, 0, '', { fontFamily: FONT, fontSize: '20px', color: TOOLTIP_GOLD, align: 'center' }).setOrigin(0.5, 0).setDepth(5001).setVisible(false);
   const body = scene.add.text(0, 0, '', { fontFamily: FONT, fontSize: '17px', color: TOOLTIP_WHITE, align: 'center', lineSpacing: 4 }).setOrigin(0.5, 0).setDepth(5001).setVisible(false);
@@ -50,6 +54,10 @@ export function createTooltip(scene: Phaser.Scene, x: number, bottom: number): T
       box.setVisible(false);
       title.setVisible(false);
       body.setVisible(false);
+    },
+    move: (nx, nb) => {
+      x = nx;
+      bottom = nb;
     },
   };
 }
