@@ -10,7 +10,7 @@ Non-commercial fan project. The game ships zero Blizzard assets and reads them f
 
 ## Decisions locked (Oct 20)
 
-- Unit art: classic D2 sprites at 1x, nearest-neighbour, never scaled individually. The whole canvas zooms by the largest whole number that fits the window (1 at 1080p, 2 at 4K) and the rest is letterboxed. HD .sprite files for UI, skill icons, item art and fonts. The HD 3D models are a later experiment on one monster and never block the game.
+- Unit art: classic D2 sprites at 1x on 48 px tiles, nearest-neighbour, never scaled individually. The whole canvas zooms by the largest whole number that fits the window (1 at 1080p, 2 at 4K) and the rest is letterboxed (changed from 2x after M2b: at 2x units stood two tiles tall). HD .sprite files for UI, skill icons, item art and fonts. The HD 3D models are a later experiment on one monster and never block the game.
 - Map: fixed path. Towers go on any open tile off the path. No mazing.
 - Evolution: two adjacent prerequisite towers are consumed into one evolved tower. One tile is freed.
 - Launch classes: Paladin, Sorceress, Necromancer. Amazon, Barbarian, Druid and Assassin come after the loop is fun.
@@ -20,22 +20,24 @@ Non-commercial fan project. The game ships zero Blizzard assets and reads them f
 - Difficulty comes from D2's own systems: resistances, immunities and monster mods. Act bosses close acts. No flying enemies.
 - First playable: one map (Blood Moor), endless waves, gold only. Campaign, runes and items later.
 
-* Multiplayer is in: FFA on separate identical lanes, and team mode with shared lives. The simulation is deterministic lockstep from M1, so multiplayer is a transport layer at M5, not a rewrite. Any player can host; there is no central server.
+* Multiplayer is in: FFA on separate identical lanes, and team mode with shared lives. The simulation is deterministic lockstep from M1, so multiplayer is a transport layer at M4, not a rewrite. Any player can host; there is no central server.
 * Team mode chains the zones: your leaks walk into the next teammate's zone, kill gold goes to the killer, and only a leak past the last zone costs a life.
 * No interest on gold. Extra income comes from a Barbarian gold-find line and gold-find gear.
-* Endgame beyond Hell: tiers of harder waves, with runes and items as the power that keeps pace. Built at M6.
+* Endgame beyond Hell: tiers of harder waves, with runes and items as the power that keeps pace. Built at M7.
+
+- Holy Bolt hits everything: 40% damage against non-undead, full damage against undead (house rule, Oct 2026). Upgrade costs and wave HP scale geometrically; the balance harness tunes the multipliers, not play-by-feel, and src/data/balance.json is the only place they are written down.
 
 ## Core loop and map
 
 Build, survive a wave, spend the gold, repeat. A run ends when 20 lives are gone: a leaked monster costs 1 life, a leaked boss costs 5.
 
-- The map is a square tile grid (30 x 17 tiles, drawn at 48 px) with the path as an ordered list of waypoints. Diagonal path segments are allowed; monsters have 8-direction sprites, so they always face the way they walk.
+- The map is a square tile grid (30 x 17 tiles, drawn at 48 px; 1440 x 816 plus HUD and panel fits 1080p at zoom 1) with the path as an ordered list of waypoints. Diagonal path segments are allowed; monsters have 8-direction sprites, so they always face the way they walk.
 - Path tiles and scenery tiles are unbuildable. Everything else is buildable, one tower per tile.
 - Range is measured in tiles from the tower's centre. Melee towers reach 1.5 tiles, so they only work when placed touching the path.
 - Targeting per tower: First, Last, Strongest, Weakest, Closest. Default First.
 - Summons stand on the path tile nearest their tower and block it. Monsters stop and fight blockers (Kingdom Rush barracks). Monsters never attack towers in v0.1.
 - Speed comes from each monster's velocity in monstats.txt, so a Quill Rat really is faster than a Zombie.
-- Calling the next wave early pays a 10% bonus on that wave's bounty.
+- Calling the next wave early pays a bonus on that wave's bounty (see src/data/balance.json).
 
 In team mode the map is one path through every player's zone in order, so a teammate can kill your leaks. In FFA each player has an identical, separate lane. Rules in Multiplayer below.
 
@@ -58,7 +60,7 @@ The Paladin is the reference class: two damage lines and one aura line, and ever
 | Line | T1 | T2 | T3 | Role on the map |
 | --- | --- | --- | --- | --- |
 | Zealot (melee) | Sacrifice | Zeal | Vengeance | Short range, highest single-target DPS. Vengeance adds fire, cold and lightning, so it still hits physical immunes. |
-| Holy (ranged) | Holy Bolt | Blessed Hammer | Fist of the Heavens | Magic damage ignores most immunities. Holy Bolt is single target; hammers spiral around the tower; FoH strikes one target and sprays bolts at undead and demons. |
+| Holy (ranged) | Holy Bolt | Blessed Hammer | Fist of the Heavens | Magic damage ignores most immunities. Holy Bolt is single target and hits everything, at 40% damage against anything not undead and full damage against undead (house rule; in D2 it only hits undead); hammers spiral around the tower; FoH strikes one target and sprays bolts at undead and demons. |
 | Aura (support) | Might | Concentration or Holy Freeze | Fanaticism or Conviction | Might and Concentration add damage to towers in radius. Holy Freeze slows enemies in radius. Fanaticism adds attack speed and damage. Conviction cuts enemy resistances. |
 
 Smite is parked: either the stun alternative at Zealot T1, or saved for the Smiter evolution (open question).
@@ -148,7 +150,7 @@ The Act 1 roster covers every TD archetype without inventing anything. HP, speed
 
 * Hell is not the ceiling. Endgame tiers (next section) scale past it.
 
-## Endgame: tiers, runes and items (M6)
+## Endgame: tiers, runes and items (M7)
 
 Hell is where the tutorial ends. Past it the game scales without limit, and the player's answer is gear, the same way D2's own endgame is gear.
 
@@ -161,11 +163,13 @@ Hell is where the tutorial ends. Past it the game scales without limit, and the 
 
 ## Economy
 
-Gold only in v0.1. All numbers below are placeholders to tune in M2; the shape matters more than the values.
+Gold only in v0.1. The M1 grey-box was far too easy with flat costs and flat HP, so the curves below are geometric; tools/balance.ts tunes the multipliers against three bot strategies (spam, upgrade, mixed) until a mixed bot survives to wave 25 to 30 and the other two lose between 12 and 20.
 
-- Bounty per kill = monster level x 2. Champions x3, uniques x5, Blood Raven x20, Andariel x50.
-- Wave clear bonus = 10% of that wave's total bounty. Calling the wave early adds another 10%.
-- Starting gold 400. Lives 20.
+Target rhythm (Green TD, not a treadmill): tier-ups and evolutions are big jumps, about 2.5x DPS, that buy three or four comfortable waves while HP keeps compounding underneath; levels within a tier are small and few. A player should feel ahead right after a purchase and behind two waves later. The harness logs per-wave margin so the sawtooth is visible, and the 110% floor is only the no-downgrade guarantee, not the target.
+
+- Bounty per kill = monster level x 2, scaled per wave by a harness-tuned multiplier (see src/data/balance.json). Champions x3, uniques x5, Blood Raven x20, Andariel x50. Wave HP compounds per wave (see src/data/balance.json), so the player is always slightly behind.
+- Wave-clear bonus and early-call bonus: see src/data/balance.json.
+- Starting gold 300, enough for two towers. Lives 20. Swarm waves spawn 6 + 2 per wave, tank waves 3 + 1 per wave.
 
 * No interest on banked gold. Extra income is a tower, not a bank: the Barbarian's Find Item line loots corpses in radius for bonus gold, and gold-find gear stacks on it in the endgame.
 
@@ -173,13 +177,13 @@ Gold only in v0.1. All numbers below are placeholders to tune in M2; the shape m
 | --- | --- |
 | Build a class tower | 150 |
 | T1 skill pick | free |
-| Skill level +1 | 40 x tier (40 at T1, 80 at T2, 120 at T3) |
+| Skill level +1 | Geometric from a base of 40 at T1, 80 at T2, 120 at T3; the per-level multiplier is harness-tuned (see src/data/balance.json) |
 | Upgrade to T2 | 250 |
 | Upgrade to T3 | 500 |
 | Evolve to T4 | 400 |
 | Sell | 60% of everything spent on the tower |
 
-A Hammerdin therefore costs about 2,200 gold and two tiles before it costs one: both parents built, levelled and tiered, plus the evolution fee.
+A Hammerdin therefore costs both parents built, levelled and tiered, plus the evolution fee (totals follow from the multipliers; see src/data/balance.json), and two tiles before it costs one.
 
 ## Visuals and asset pipeline
 
@@ -187,7 +191,7 @@ The look is D2R's legacy toggle done well: classic sprites at 1x with nearest-ne
 
 - Monsters, heroes and missiles: classic DCC/DC6 frames composited through COF layer files, coloured with the Act 1 palette (pal.dat) and the PL2 colour shifts for champions and uniques.
 - UI, skill icons, item art, fonts: D2R HD .sprite files, decoded to PNG.
-- Map: flat tile colours in M1. Blood Moor rendered from classic DT1 tiles in M4.
+- Map: flat tile colours in M1. Blood Moor rendered from classic DT1 tiles in M5.
 - Sound: classic WAV from the CASC, same path D2 Survivors takes.
 
 Pipeline, a Node script run locally against files exported with CascView:
@@ -203,7 +207,7 @@ HD 3D experiment, after M2: export one monster's .model (Granny GR2) and texture
 
 ## Multiplayer
 
-FFA on separate lanes and team mode with chained zones and shared lives, built as lockstep from M1 and shipped at M5 with host-and-play. No cloud server needed for a handful of friends.
+FFA on separate lanes and team mode with chained zones and shared lives, built as lockstep from M1 and shipped at M4 with host-and-play. No cloud server needed for a handful of friends.
 
 - Players: 2 to 6. FFA gives everyone an identical lane, the same waves and the same seed; last one standing wins. Sending extra monsters at a rival is the same tech and can come later.
 - Team mode: zones sit along one path in player order. A leak from zone 1 walks into zone 2. Kill gold goes to the owner of the tower that killed. Only a leak past the last zone costs the team a life.
@@ -218,7 +222,7 @@ TypeScript, Vite and Phaser 3 for the game; a Node pipeline for assets; Electron
 - Data layer: pure TypeScript with Vitest tests (damage, resistances, targeting, evolution recipes) so balance changes are cheap to verify.
 - Assets: the Node pipeline in Visuals. Decoders ported from OpenDiablo2 (Go) and libd2 (Zig) rather than written from scratch.
 - Repo: private on GitHub. assets-raw and assets-extracted are gitignored. README states non-commercial, fan project, bring your own D2R install.
-- Distribution (M5): Electron app with a setup screen that finds the D2R install, extracts, then plays. Until then the game runs from a local folder with Vite.
+- Distribution (M3): Electron app with a setup screen that finds the D2R install, extracts with a bundled CASC reader, then plays. Windows installer from electron-builder, unsigned, zero Blizzard assets inside. Until then the game runs from a local folder with Vite.
 - Working method: Claude Code on the PC for anything that touches real game files; chat for design.
 
 ## Milestones
@@ -228,10 +232,11 @@ Each milestone has one gate. Nothing moves to the next until the gate is met, be
 1. M0 Pipeline proof. Zombie walk cycle decoded to a sprite sheet, Paladin HD icons rendered. Gate: the zombie animates in a Phaser scene.
 2. M1 Grey-box TD. One path, waves of coloured boxes with real monstats numbers, one projectile tower, gold, lives. The simulation is deterministic and command-driven from day one. Gate: a full 10-wave run is playable and losable, and two clients replaying the same command log end in the same state.
 3. M2 Paladin complete. Three lines, three tiers, levels, Zealdin and Hammerdin, aura system, targeting modes, Act 1 monsters with sprites. Gate: 30 Normal waves are beatable but not trivially.
-4. M3 Sorceress and Necromancer. Summons that block, corpses, curses, elements, immunities. Gate: Hell waves cannot be cleared with one line.
-5. M4 Blood Moor art and HD UI. Rendered map, panels, fonts, skill icons, sound. Gate: a stranger can play it without being told how.
-6. M5 Electron setup and multiplayer. Setup screen finds D2R, extracts, plays; host and join codes; FFA and team mode. Gate: four friends finish a team game with no desync.
-7. M6 Endgame. Post-Hell tiers, loot, runes, runewords, stash, Barbarian gold-find line. Gate: a Hell+5 run needs gear to clear.
+4. M3 Launcher and extractor. Electron shell with a setup screen that finds the D2R install, extracts what the game needs with a bundled CASC reader, and a main menu (Play, Host, Join, Settings). Windows installer from electron-builder, zero Blizzard assets inside. Gate: a friend with D2R installs it from the exe and reaches the first wave without help.
+5. M4 Multiplayer. Host-and-play relay inside the app, join codes, UPnP, lobby, FFA and team mode with chained zones, desync detection. Gate: four friends finish a team game with no desync.
+6. M5 Blood Moor art and HD UI. Rendered map, panels, fonts, skill icons, sound. Gate: a stranger can play it without being told how.
+7. M6 Sorceress and Necromancer. Summons that block, corpses, curses, elements, immunities. Gate: Hell waves cannot be cleared with one line.
+8. M7 Endgame. Post-Hell tiers, loot, runes, runewords, stash, Barbarian gold-find line. Gate: a Hell+5 run needs gear to clear.
 
 ## Open questions
 
@@ -241,7 +246,7 @@ Answer these in the doc or in chat; each one changes code in M2 or M3.
 - [ ] Aura line: picks at T2 and T3 (Concentration or Holy Freeze, Fanaticism or Conviction), or one fixed skill per tier?
 - [ ] Summons block the path Kingdom Rush style, or stand beside it and shoot?
 - [ ] Corpses as a shared system (Corpse Explosion, Revive, Fallen Shaman, Find Item), or Necromancer-only?
-- [ ] Skill levels per tier: 5, or 20 straight from skills.txt (Joel's 20+ upgrades)?
+- [ ] Skill levels per tier: 5, or 20 straight from skills.txt (Joel's 20+ upgrades)? The harness fixed total spend per tier (see src/data/balance.json); more levels means a gentler multiplier over the same total, not more gold.
 - [ ] Random mode as a lobby toggle: random T1 skill for +25% gold?
 - [ ] Items and runes persist across runs (D2 stash), or reset every run?
 - [ ] Sell refund 60% and 20 lives: keep?
