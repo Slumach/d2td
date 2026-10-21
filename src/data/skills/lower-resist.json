@@ -3,7 +3,6 @@
   "skill": "Lower Resist",
   "archetype": "debuff",
   "damageType": "none",
-  "tierBonus": 3539,
   "rangeTenths": 40,
   "rateTicks": 20,
   "debuff": { "mode": "curse", "radiusCalc": "aurarangecalc", "durationCalc": "auralencalc" }

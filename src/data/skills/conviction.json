@@ -3,6 +3,5 @@
   "skill": "Conviction",
   "archetype": "debuff",
   "damageType": "none",
-  "tierBonus": 3040,
   "debuff": { "mode": "aura", "radiusCalc": "aurarangecalc" }
 }

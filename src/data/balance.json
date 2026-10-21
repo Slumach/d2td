@@ -44,6 +44,18 @@
       "10": ["extraFast"],
       "20": ["extraFast", "magicResistant"],
       "30": ["magicResistant", "extraStrong"]
+    },
+    "added": {
+      "nightmare": {
+        "champions": { "5": ["poisonResistant"], "15": ["poisonResistant"], "25": ["poisonResistant"] },
+        "uniques": { "10": ["magicResistant"], "20": ["magicResistant"] },
+        "bosses": { "30": ["magicResistant", "poisonResistant"] }
+      },
+      "hell": {
+        "champions": { "5": ["poisonImmune"], "15": ["poisonImmune"], "25": ["poisonImmune"] },
+        "uniques": { "10": ["magicImmune"], "20": ["magicImmune"] },
+        "bosses": { "30": ["magicImmune", "poisonImmune"] }
+      }
     }
   },
   "bossHpMultiplier": { "bloodraven": 15, "andariel": 40 },
@@ -52,7 +64,10 @@
     "extraFast": { "speedPct": 50 },
     "extraStrong": { "damagePct": 100 },
     "stoneSkin": { "resist": { "phys": 50 } },
-    "magicResistant": { "resist": { "fire": 40, "cold": 40, "ltng": 40, "mag": 75 } }
+    "magicResistant": { "resist": { "fire": 40, "cold": 40, "ltng": 40, "mag": 75 } },
+    "magicImmune": { "resist": { "mag": 100 } },
+    "poisonResistant": { "resist": { "pois": 40 } },
+    "poisonImmune": { "resist": { "pois": 100 } }
   },
   "skillOverrides": {
     "holy-bolt": { "fullDamageTo": "undead", "otherDamagePct": 40 }

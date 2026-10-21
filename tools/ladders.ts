@@ -45,7 +45,8 @@ export function ladderReport(data: GameData): string[] {
           let note = 'T1, levels from the skill JSON';
           if (ladder) {
             note = `floor ${show(metric, Math.ceil((ladder.previous * dpsPct) / 100))}`;
-            if (!ladder.reached) note += `, not reached by the cap: TIER BONUS x${(ladder.tierBonus / 1000).toFixed(3)}`;
+            if (!ladder.reached && ladder.tierBonus === 1000) note += ', not reached by the cap: a debuff, so no bonus';
+            else if (!ladder.reached) note += `, not reached by the cap: TIER BONUS x${(ladder.tierBonus / 1000).toFixed(3)}`;
           }
           out.push(`  T${t + 1} ${skill.name.padEnd(20)} ${cells.join(' | ')}  (${note})`);
         }

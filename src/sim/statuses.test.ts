@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { DebuffDef, SummonDef } from './archetypes/types.ts';
 import { computeAuras } from './auras.ts';
-import { damageAgainst, poison, strike } from './combat.ts';
+import { damageAgainst, effectiveResist, poison, strike } from './combat.ts';
 import { filterFrom } from './archetypes/common.ts';
 import { fixtureGameData } from './fixture.ts';
 import { speedOf } from './monsters.ts';
 import { step } from './sim.ts';
+import type { Element, Monster } from './state.ts';
 import { addMonster, freeze, placeTower, testSim, ticks } from './testkit.ts';
 
 // The tower stands at tile (2, 4); a monster at path distance 3000 is beside it.
@@ -86,6 +87,105 @@ describe('immunities', () => {
     ticks(sim, 40);
     expect(sim.state.missiles).toHaveLength(0);
     expect(zombie.hp).toBe(1_000_000);
+  });
+});
+
+describe('Hell walls', () => {
+  const nightmare = () => testSim(fixtureGameData(30, { difficulty: 1 }));
+  const fifth = (sim: ReturnType<typeof testSim>, m: Monster, element: Element) => {
+    sim.fx = computeAuras(sim);
+    return effectiveResist(sim, m, element);
+  };
+
+  it('every resistance cut works at a fifth on an immune: Lower Resist, Amplify Damage, Decrepify, Conviction', () => {
+    const sim = hell();
+    const lr = (sim.data.skills['lower-resist'] as DebuffDef).levels[4]!.resistDown;
+    const amp = (sim.data.skills['amplify-damage'] as DebuffDef).levels[4]!.resistDown.phys!;
+    const dec = (sim.data.skills['decrepify'] as DebuffDef).levels[4]!.resistDown.phys!;
+    // Fire 100 from the (H) column; stone skin twice is physical 100
+    const fallen = addMonster(sim, 'fallen1@hell', 0, { hp: 1_000_000 });
+    const brute = addMonster(sim, 'brute1@hell', 0, { hp: 1_000_000, mods: ['stoneSkin', 'stoneSkin'] });
+    const rat = addMonster(sim, 'quillrat1@hell', 0, { hp: 1_000_000 });
+    for (const m of [fallen, brute, rat]) m.curses.push({ skill: 'lower-resist', lvl: 4, ticksLeft: 1000 });
+    brute.curses.push({ skill: 'amplify-damage', lvl: 4, ticksLeft: 1000 });
+    expect(fifth(sim, fallen, 'fire')).toBe(100 - Math.trunc(lr.fire! / 5));
+    expect(fifth(sim, brute, 'phys')).toBe(100 - Math.trunc(amp / 5));
+    // A monster under 100 takes the whole cut
+    expect(fifth(sim, rat, 'fire')).toBe(-lr.fire!);
+    brute.curses = [{ skill: 'decrepify', lvl: 4, ticksLeft: 1000 }];
+    expect(fifth(sim, brute, 'phys')).toBe(100 - Math.trunc(dec / 5));
+    // Conviction and a curse add up, then the fifth applies to the total
+    const tower = placeTower(sim, 2, 4, 'conviction', { tier: 3 });
+    const conviction = (sim.data.skills['conviction'] as DebuffDef).levels[0]!.resistDown.fire!;
+    fallen.x = tower.x;
+    fallen.y = tower.y;
+    expect(fifth(sim, fallen, 'fire')).toBe(100 - Math.trunc((lr.fire! + conviction) / 5));
+  });
+
+  it('an immune stays immune unless the fifth brings it under 100', () => {
+    const sim = hell();
+    const m = addMonster(sim, 'zombie1@hell', 0, { hp: 1_000_000 });
+    // Cold 120: a cut of 100 takes 20 off, still immune; a cut of 105 takes 21, and it is not
+    sim.fx = { towers: {}, emitters: [], monsters: { [m.id]: { slowPct: 0, resistDown: { cold: 100 }, damageDownPct: 0 } } };
+    expect(damageAgainst(sim, m, 1000, 'cold', ALL)).toBe(0);
+    sim.fx.monsters[m.id]!.resistDown.cold = 105;
+    expect(damageAgainst(sim, m, 1000, 'cold', ALL)).toBe(10);
+  });
+
+  it('debuffs take no tier bonus: their values are the skills.txt levels the ladder picks', () => {
+    const sim = testSim();
+    for (const id of ['lower-resist', 'conviction', 'decrepify']) {
+      expect(sim.data.ladders.find((l) => l.skill === id)!.tierBonus).toBe(1000);
+    }
+  });
+
+  it('the Hell schedule: Magic Immune uniques on 10 and 20, Poison Immune champions, Andariel both', () => {
+    const groups = (sim: ReturnType<typeof testSim>, n: number, rank: string) =>
+      sim.data.waves[n - 1]!.groups.filter((g) => g.rank === rank).map((g) => g.mods);
+    const h = hell();
+    for (const n of [10, 20]) expect(groups(h, n, 'unique')[0]).toContain('magicImmune');
+    expect(groups(h, 30, 'unique')[0]).not.toContain('magicImmune');
+    for (const n of [5, 15, 25]) expect(groups(h, n, 'champion')[0]).toContain('poisonImmune');
+    expect(groups(h, 30, 'boss')[0]).toEqual(expect.arrayContaining(['magicImmune', 'poisonImmune']));
+    // Normal's mods stay, each mod once
+    expect(groups(h, 5, 'champion')[0]).toEqual(['extraFast', 'poisonImmune']);
+    expect(groups(h, 20, 'unique')[0]).toEqual(['stoneSkin', 'magicResistant', 'magicImmune']);
+    // Nightmare gets the resistant versions
+    const n = nightmare();
+    expect(groups(n, 5, 'champion')[0]).toEqual(['extraFast', 'poisonResistant']);
+    expect(groups(n, 10, 'unique')[0]).toEqual(['extraStrong', 'stoneSkin', 'magicResistant']);
+    expect(groups(n, 30, 'boss')[0]).toEqual(['magicResistant', 'extraStrong', 'poisonResistant']);
+    expect(groups(testSim(fixtureGameData(30)), 5, 'champion')[0]).toEqual(['extraFast']);
+  });
+
+  it('the immune mods are immunities, the resistant one is not', () => {
+    const sim = hell();
+    const mi = addMonster(sim, 'quillrat1@hell', 0, { mods: ['magicImmune'] });
+    const pi = addMonster(sim, 'quillrat1@hell', 0, { mods: ['poisonImmune'] });
+    const pr = addMonster(sim, 'quillrat1@hell', 0, { mods: ['poisonResistant'] });
+    expect(damageAgainst(sim, mi, 1000, 'mag', ALL)).toBe(0);
+    expect(damageAgainst(sim, pi, 1000, 'pois', ALL)).toBe(0);
+    expect(damageAgainst(sim, pr, 1000, 'pois', ALL)).toBeGreaterThan(0);
+    expect(damageAgainst(sim, mi, 1000, 'pois', ALL)).toBe(1000);
+  });
+});
+
+describe('summons on harder difficulties', () => {
+  it('skeleton HP grows per level by the skill HP percent (calc1)', () => {
+    const skeleton = testSim().data.skills['raise-skeleton'] as SummonDef;
+    const first = skeleton.levels[0]!;
+    const top = skeleton.levels[4]!;
+    expect(first.hpPct).toBe(0);
+    expect(top.hpPct).toBeGreaterThan(0);
+    expect(top.hp).toBe(Math.trunc((first.hp * (100 + top.hpPct)) / 100));
+  });
+
+  it("monsters hit summons with their own difficulty's damage", () => {
+    const normal = testSim().data.monsters['brute1']!;
+    const hellBrute = hell().data.monsters['brute1@hell']!;
+    expect(hellBrute.maxDamage).toBeGreaterThan(normal.maxDamage);
+    // A1MaxD(H) percent of monlvl DM(H) at Level(H)
+    expect(hellBrute.maxDamage).toBe(Math.trunc((120 * (4 + 30 * 2)) / 100) * 256);
   });
 });
 

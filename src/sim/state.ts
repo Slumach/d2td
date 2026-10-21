@@ -13,8 +13,16 @@ export type Targeting = 'first' | 'last' | 'strongest' | 'weakest' | 'closest';
 export const TARGETING_MODES: readonly Targeting[] = ['first', 'last', 'strongest', 'weakest', 'closest'];
 
 export type Rank = 'normal' | 'champion' | 'unique' | 'boss';
-export type MonsterMod = 'extraFast' | 'extraStrong' | 'stoneSkin' | 'magicResistant';
-export const MONSTER_MODS: readonly MonsterMod[] = ['extraFast', 'extraStrong', 'stoneSkin', 'magicResistant'];
+export type MonsterMod = 'extraFast' | 'extraStrong' | 'stoneSkin' | 'magicResistant' | 'magicImmune' | 'poisonResistant' | 'poisonImmune';
+export const MONSTER_MODS: readonly MonsterMod[] = [
+  'extraFast',
+  'extraStrong',
+  'stoneSkin',
+  'magicResistant',
+  'magicImmune',
+  'poisonResistant',
+  'poisonImmune',
+];
 
 export type Command =
   /** `skill` makes the T1 pick in the same command; without it the tower is inert until pickSkill. */

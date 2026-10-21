@@ -164,6 +164,12 @@ describe('data', () => {
           expect(ladder.levels[0]).toBe(1);
           continue;
         }
+        // Debuffs keep skills.txt's own values: an unreached floor climbs cap-4 to cap with no bonus
+        if (data.skills[ladder.skill]!.archetype === 'debuff') {
+          expect(ladder.tierBonus).toBe(1000);
+          if (!ladder.reached) expect(ladder.levels).toEqual([cap - 4, cap - 3, cap - 2, cap - 1, cap]);
+          continue;
+        }
         expect(ladder.start * 100).toBeGreaterThanOrEqual(ladder.previous * dpsPct);
         if (ladder.reached) expect(ladder.tierBonus).toBe(1000);
         else {

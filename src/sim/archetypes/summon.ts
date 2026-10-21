@@ -8,7 +8,9 @@
 //           Fallen Shaman take them too.
 // The unit is the skill's skills.txt "summon" monster. Unlike wild monsters, D2 pets take
 // monstats HP and damage as absolute values (a skeleton has 21 HP and hits for 1-2); the
-// skill adds its EMin per level to the damage (passivecalc2 + edmn) and its damage percent.
+// skill adds its HP percent per level (calc1), its EMin per level to the damage
+// (passivecalc2 + edmn) and its damage percent. Summons are the same on every difficulty;
+// the monsters hitting them are not.
 // A Skeletal Mage shoots one of its skill's missiles (fire, cold, lightning or poison,
 // picked when it is raised) at the missile level of its summon skill calc.
 
@@ -31,8 +33,12 @@ interface SummonJson {
   bolts?: string[];
   boltLevelCalc?: string;
   shotRangeTenths?: number;
-  /** Revive: the calc for the percent of the corpse's HP, and how long the ally lasts. */
+  /**
+   * The calc for the summon's HP percent: for a revive, the percent of the corpse's HP it
+   * rises with; for the others, a bonus on its monstats HP.
+   */
   hpPctCalc?: string;
+  /** Revive: how long the ally lasts. */
   durationTicks?: number;
 }
 
@@ -86,12 +92,13 @@ export const summon: ArchetypeModule<SummonDef> = {
         const added = elementalAtLevel(ctx.skillRow, 'min', level, 'skill');
         const dmg = (col: string) => (stats ? withBonus((int(stats, col) + added) * 256, bonus) : 0);
         const boltLevel = Math.max(1, f.boltLevelCalc ? calcAt(ctx.skillRow, f.boltLevelCalc, level) : level);
+        const hpPct = f.hpPctCalc ? calcAt(ctx.skillRow, f.hpPctCalc, level) : kind === 'revive' ? 100 : 0;
         return {
           count: Math.max(0, calcAt(ctx.skillRow, f.countCalc, level)),
-          hp: stats ? Math.max(1, int(stats, 'minHP')) * 256 : 0,
+          hp: stats ? withBonus(Math.max(1, int(stats, 'minHP')) * 256, hpPct) : 0,
           min: dmg('A1MinD'),
           max: dmg('A1MaxD'),
-          hpPct: f.hpPctCalc ? calcAt(ctx.skillRow, f.hpPctCalc, level) : 100,
+          hpPct,
           damagePct: bonus,
           bolts: bolts.map((row) => ({
             ...damageAt(row, boltLevel, 'missile'),

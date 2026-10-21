@@ -82,6 +82,12 @@ interface WaveKindJson {
   pack?: { min: number; max: number; gapTicks: number };
 }
 
+interface ModScheduleJson {
+  champions: Record<string, MonsterMod[]>;
+  uniques: Record<string, MonsterMod[]>;
+  bosses: Record<string, MonsterMod[]>;
+}
+
 /** src/data/balance.json. Multipliers are integer percents so the sim stays integer. */
 export interface BalanceJson {
   startingGold: number;
@@ -136,14 +142,12 @@ export interface BalanceJson {
     tank: WaveKindJson;
   };
   /**
-   * Normal difficulty's fixed specials, keyed by wave number: champion packs and uniques
-   * with their mods, and the mods each wave's boss carries. Rolled mods return with Random mode.
+   * The fixed specials, keyed by wave number: champion packs and uniques with their mods,
+   * and the mods each wave's boss carries. `added` holds the mods Nightmare and Hell put on
+   * top: Hell's immunities and Nightmare's resistant versions of them. Rolled mods return
+   * with Random mode.
    */
-  modSchedule: {
-    champions: Record<string, MonsterMod[]>;
-    uniques: Record<string, MonsterMod[]>;
-    bosses: Record<string, MonsterMod[]>;
-  };
+  modSchedule: ModScheduleJson & { added: Partial<Record<DifficultyName, Partial<ModScheduleJson>>> };
   /**
    * Per difficulty, percent of Normal's average HP its wave monsters are scaled to (see
    * buildGameData): Nightmare and Hell monsters are tougher than Normal ones, by this much.
@@ -157,9 +161,10 @@ export interface BalanceJson {
    */
   tierLadder: { dpsPct: number; caps: Record<string, number>; referenceSkill: string };
   /**
-   * D2 hardcodes these mod effects, so they are design values. House rule: Magic
-   * Resistant also resists magic (D2's only covers fire, cold and lightning), the wall
-   * for pure Holy builds.
+   * D2 hardcodes these mod effects, so they are design values; resistances add to the
+   * monster's own. House rule: Magic Resistant also resists magic (D2's only covers fire,
+   * cold and lightning), the wall for pure Holy builds. Magic Immune and Poison Immune are
+   * ours (Hell's walls): +100, so the monster is immune, not just resistant.
    */
   monsterMods: Record<MonsterMod, { speedPct?: number; damagePct?: number; resist?: Partial<Record<Element, number>> }>;
   skillOverrides: Record<string, Partial<HitFilter>>;
@@ -196,7 +201,11 @@ export interface MonsterDef {
    */
   minHp: number;
   maxHp: number;
-  /** Attack damage (A1MinD/A1MaxD percent of monlvl DM), 1/256 HP. */
+  /**
+   * Attack damage (A1MinD/A1MaxD percent of monlvl DM at the difficulty's level and
+   * columns), 1/256 HP. Monsters only ever hit summons, so this is what Hell's tougher
+   * monsters do to a skeleton.
+   */
   minDamage: number;
   maxDamage: number;
   speed: number;
@@ -320,13 +329,13 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
   // an empty resistance is 0, as in the game)
   const col = (name: string, normal = name) => (row[`${name}${sfx}`] !== undefined ? `${name}${sfx}` : normal);
   const level = int(row, 'Level');
-  const hpLevel = int(row, col('Level'));
-  // D2: monstats HP and damage are percentages of the monlvl values for the monster's level
-  const hpRow = findRow(tables.monlvl, 'Level', hpLevel);
-  const dmRow = findRow(tables.monlvl, 'Level', level);
-  const pct = (r: TableRow, column: string, of: string) => Math.max(1, idiv(int(row, column) * int(r, of), 100)) * 256;
+  // D2: monstats HP and damage are percentages of the monlvl values for the monster's
+  // level, both at the difficulty's level and columns
+  const lvlRow = findRow(tables.monlvl, 'Level', int(row, col('Level')));
+  const lvlCol = (name: string) => (lvlRow[`${name}${sfx}`] !== undefined ? `${name}${sfx}` : name);
+  const pct = (column: string, of: string) => Math.max(1, idiv(int(row, column) * int(lvlRow, of), 100)) * 256;
   const [minCol, maxCol] = HP_COLUMNS[difficulty]!;
-  const hpOf = (column: string, normal: string) => pct(hpRow, row[column] !== undefined ? column : normal, hpRow[`HP${sfx}`] !== undefined ? `HP${sfx}` : 'HP');
+  const hpOf = (column: string, normal: string) => pct(row[column] !== undefined ? column : normal, lvlCol('HP'));
   const resist = {} as Record<Element, number>;
   for (const element of ELEMENTS) resist[element] = int(row, `${RESIST_COLUMNS[element]}${sfx}`);
   const resurrect = design.roster[id]?.resurrect;
@@ -339,9 +348,8 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
     level,
     minHp: hpOf(minCol!, 'minHP'),
     maxHp: hpOf(maxCol!, 'maxHP'),
-    // Monsters only ever hit summons, and summons keep Normal's stats: so does their damage
-    minDamage: pct(dmRow, 'A1MinD', 'DM'),
-    maxDamage: pct(dmRow, 'A1MaxD', 'DM'),
+    minDamage: pct(col('A1MinD'), lvlCol('DM')),
+    maxDamage: pct(col('A1MaxD'), lvlCol('DM')),
     speed: int(row, 'Velocity') * VELOCITY_TO_UNITS_PER_TICK,
     resist,
     undead: int(row, 'lUndead') === 1 || int(row, 'hUndead') === 1,
@@ -420,8 +428,15 @@ export function generateWaves(
     const key = String(n);
     const lead = picked[0]!;
     const schedule = balance.modSchedule;
-    const uniqueMods = schedule.uniques[key];
-    const championMods = schedule.champions[key];
+    const added = schedule.added[DIFFICULTIES[difficulty]!] ?? {};
+    // The difficulty's mods on top of Normal's, each mod once
+    const modsOf = (rank: keyof ModScheduleJson): MonsterMod[] | undefined => {
+      const base = schedule[rank][key];
+      const more = added[rank]?.[key];
+      return base || more ? [...new Set([...(base ?? []), ...(more ?? [])])] : undefined;
+    };
+    const uniqueMods = modsOf('uniques');
+    const championMods = modsOf('champions');
     if (uniqueMods) groups.push({ monster: lead, count: 1, spacingTicks: spec.spacingTicks, delayTicks: pause, rank: 'unique', mods: uniqueMods });
     if (championMods) {
       groups.push({ monster: lead, count: w.championPackSize, spacingTicks: spec.spacingTicks, delayTicks: pause, rank: 'champion', mods: championMods });
@@ -446,7 +461,7 @@ export function generateWaves(
         spacingTicks: spec.spacingTicks,
         delayTicks: pause,
         rank: 'boss',
-        mods: schedule.bosses[key] ?? [],
+        mods: modsOf('bosses') ?? [],
         hp: Math.max(256, idiv(total, monstersInWave) * multiplier),
       });
     }
@@ -556,7 +571,9 @@ export interface BuildOptions {
  * attack skills and the reference-neighbour multiplier for auras (see dps.ts). A skill
  * that cannot reach the floor by its cap climbs cap-4 to cap instead, with a flat
  * tierBonus that lifts its level 1 to the floor; the bonus is stored in the skill JSON and
- * must match what the data needs.
+ * must match what the data needs. Debuffs never take a bonus: their values are skills.txt's
+ * own, so a resistance cut stays one the game could cast (an unreached floor still climbs
+ * cap-4 to cap).
  */
 function buildLadders(
   tables: Tables,
@@ -608,7 +625,7 @@ function buildLadders(
           const base = resolveAt(levels);
 
           let tierBonus = 1000;
-          if (!reached) {
+          if (!reached && json.archetype !== 'debuff') {
             // The lowest flat bonus that lifts level 1 to the floor
             let lo = 1000;
             let hi = 1000;

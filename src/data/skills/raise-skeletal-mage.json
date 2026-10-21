@@ -8,6 +8,7 @@
   "summon": {
     "kind": "ranged",
     "countCalc": "petmax",
+    "hpPctCalc": "calc1",
     "respawnTicks": 100,
     "bolts": ["necromage1", "necromage2", "necromage3", "necromage4"],
     "boltLevelCalc": "sumsk1calc",

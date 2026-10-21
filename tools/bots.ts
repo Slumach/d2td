@@ -213,19 +213,29 @@ interface Foe {
   resist: Record<Element, number>;
 }
 
-/** Normal monsters of the coming waves with their resistances, weighted by total HP. */
+/**
+ * The coming waves' monsters with their resistances, weighted by total HP. Champions,
+ * uniques and bosses count with their mods' resistances, so an immune special (Hell's Magic
+ * and Poison Immunes) is a foe the bot has to cover like any other.
+ */
 function comingFoes(sim: Sim): Foe[] {
-  const byId = new Map<string, number>();
+  const byKey = new Map<string, { hp: number; resist: Record<Element, number> }>();
+  const rules = sim.data.rules;
   for (let w = sim.state.wave; w < Math.min(sim.data.waves.length, sim.state.wave + LOOKAHEAD_WAVES); w++) {
     const wave = sim.data.waves[w]!;
     for (const g of wave.groups) {
-      if (g.rank !== 'normal') continue;
       const d = sim.data.monsters[g.monster]!;
-      byId.set(g.monster, (byId.get(g.monster) ?? 0) + avg({ min: d.minHp, max: d.maxHp }) * (wave.hpPermille / 1000) * g.count);
+      const rankPct = g.rank === 'champion' ? rules.championHpPct : g.rank === 'unique' ? rules.uniqueHpPct : 0;
+      const each = g.hp ?? avg({ min: d.minHp, max: d.maxHp }) * (wave.hpPermille / 1000) * (1 + rankPct / 100);
+      const key = `${g.monster}:${g.mods.join(',')}`;
+      const foe = byKey.get(key) ?? { hp: 0, resist: { ...d.resist } };
+      if (!byKey.has(key)) for (const mod of g.mods) for (const [e, v] of Object.entries(rules.mods[mod].resist) as [Element, number][]) foe.resist[e] += v;
+      foe.hp += each * g.count;
+      byKey.set(key, foe);
     }
   }
-  const total = [...byId.values()].reduce((n, v) => n + v, 0) || 1;
-  return [...byId].map(([id, hp]) => ({ weight: hp / total, resist: sim.data.monsters[id]!.resist }));
+  const total = [...byKey.values()].reduce((n, f) => n + f.hp, 0) || 1;
+  return [...byKey.values()].map((f) => ({ weight: f.hp / total, resist: f.resist }));
 }
 
 /** Average HP of the next wave's normal monsters, in 1/256 HP. */

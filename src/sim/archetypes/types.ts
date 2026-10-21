@@ -215,7 +215,7 @@ export interface SummonDef extends SkillCommon {
   levels: (DamageRange & {
     count: number;
     hp: number;
-    /** Revive: percent of the corpse's max HP, and its damage bonus. */
+    /** HP percent (revive: of the corpse's max HP; others: the bonus already in hp), and the damage bonus. */
     hpPct: number;
     damagePct: number;
     /** Ranged: one bolt per element; each summon picks one when raised. */
