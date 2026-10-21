@@ -52,12 +52,6 @@ export function baseResist(sim: Sim, monster: Monster, element: Element): number
   return withMods(sim.data.rules, def.resist[element], element, monster.mods, monster.rank, def.difficulty);
 }
 
-/** Lives a leak of this monster costs; Andariel's ends the run (all of them). */
-export function leakCost(sim: Sim, m: Pick<Monster, 'rank' | 'def'>): number {
-  const e = sim.data.economy;
-  const cost = m.rank === 'boss' ? (e.bossLeakCost[baseMonsterId(m.def)] ?? e.leakCost.boss) : e.leakCost[m.rank];
-  return cost === 'all' ? e.lives : cost;
-}
 
 /**
  * Resistance after Conviction-style reductions. D2's rule for immunities: a monster at
@@ -107,6 +101,7 @@ export function dealDamage(
 ): number {
   if (monster.hp <= 0) return 0;
   const dealt = damageAgainst(sim, monster, amount, element, filter);
+  if (dealt > 0) monster.lastHit = sim.actor;
   monster.hp -= dealt;
   if (monster.hp <= 0) killMonster(sim, monster);
   return dealt;
@@ -136,7 +131,7 @@ export function strike(
   let dealt = 0;
   const poisonTicks = element === 'pois' ? (skill.poisonTicks[lvl] ?? 0) : 0;
   if (poisonTicks > 0) {
-    poison(monster, damageAgainst(sim, monster, amount, element, filter), poisonTicks);
+    poison(sim, monster, damageAgainst(sim, monster, amount, element, filter), poisonTicks);
   } else {
     dealt = dealDamage(sim, monster, amount, element, filter);
   }
@@ -149,16 +144,18 @@ export function strike(
   return dealt;
 }
 
-/** Poison over `ticks`; replaces what is left only if the new dose is bigger. */
-export function poison(monster: Monster, total: number, ticks: number): void {
+/** Poison over `ticks`, the acting player's; replaces what is left only if the new dose is bigger. */
+export function poison(sim: Sim, monster: Monster, total: number, ticks: number): void {
   if (total <= 0 || total <= monster.poisonPerTick * monster.poisonTicks) return;
   monster.poisonPerTick = idiv(total + ticks - 1, ticks);
   monster.poisonTicks = ticks;
+  monster.poisonBy = sim.actor;
 }
 
 /** Damage that already went through resistance (poison ticks, Static Field). */
 export function dealRaw(sim: Sim, monster: Monster, amount: number): void {
   if (monster.hp <= 0 || amount <= 0) return;
+  monster.lastHit = sim.actor;
   monster.hp -= amount;
   if (monster.hp <= 0) killMonster(sim, monster);
 }
@@ -175,12 +172,14 @@ export function bounty(sim: Sim, monster: Monster): number {
   return idiv(base * sim.data.waves[monster.wave]!.bountyPermille, 1000);
 }
 
+/** A kill: its bounty goes to the player whose tower last hurt it. */
 export function killMonster(sim: Sim, monster: Monster): void {
   const s = sim.state;
   monster.hp = 0;
   const gold = bounty(sim, monster);
-  s.gold += gold;
-  s.waves[monster.wave]!.bounty += gold;
+  const killer = Math.min(monster.lastHit, s.gold.length - 1);
+  s.gold[killer]! += gold;
+  s.waves[monster.wave]!.bounty[killer]! += gold;
   s.kills++;
   s.corpses.push({
     id: s.nextId++,
@@ -195,7 +194,7 @@ export function killMonster(sim: Sim, monster: Monster): void {
   removeMonster(sim, monster);
 }
 
-/** Removes a killed or leaked monster and pays the wave bonus once its wave is fully gone. */
+/** Removes a killed monster and pays the wave bonus, on each player's share of its bounty, once the wave is gone. */
 export function removeMonster(sim: Sim, monster: Monster): void {
   const s = sim.state;
   s.monsters = s.monsters.filter((m) => m.id !== monster.id);
@@ -204,7 +203,7 @@ export function removeMonster(sim: Sim, monster: Monster): void {
   if (wave.remaining === 0) {
     const e = sim.data.economy;
     const pct = e.waveClearBonusPct + (wave.early ? e.earlyCallBonusPct : 0);
-    s.gold += idiv(wave.bounty * pct, 100);
+    wave.bounty.forEach((b, p) => (s.gold[p]! += idiv(b * pct, 100)));
   }
 }
 
@@ -225,8 +224,8 @@ export function findTarget(
   for (const m of sim.state.monsters) {
     if (m.hp <= 0 || !within(tower, m, range) || !eligible(m)) continue;
     const key =
-      mode === 'first' ? m.dist
-      : mode === 'last' ? -m.dist
+      mode === 'first' ? m.walked
+      : mode === 'last' ? -m.walked
       : mode === 'strongest' ? m.hp
       : mode === 'weakest' ? -m.hp
       : -distSq(tower, m);

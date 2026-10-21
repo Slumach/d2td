@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { createBot } from '../../tools/bots.ts';
 import { fixtureGameData } from './fixture.ts';
-import { createMatch, livesOf, matchHash, playersIn, stepMatch, type Match, type PlayerCommand } from './match.ts';
+import { arcAt } from './map.ts';
+import { aliveOf, createMatch, matchHash, playersIn, stepMatch, type Match, type PlayerCommand } from './match.ts';
 import { createSim, runLog } from './sim.ts';
 import type { TimedCommand } from './state.ts';
 import { stateHash } from './hash.ts';
-import { addMonster } from './testkit.ts';
+import { addMonster, placeTower } from './testkit.ts';
 
 const data = fixtureGameData(3);
 
@@ -14,10 +15,18 @@ function run(match: Match, n: number, commands: PlayerCommand[] = []): void {
   for (let i = 0; i < n; i++) stepMatch(match, i === 0 ? commands : []);
 }
 
+/** A free tile on `arc` of the ring: arc 0's tile (6, 5) turned onto it. */
+function tileOn(match: Match, arc: number): { x: number; y: number } {
+  const size = match.zones[0]!.map.width;
+  let t = { x: 6, y: 5 };
+  for (let i = 0; i < arc; i++) t = { x: size - 1 - t.y, y: t.x };
+  return t;
+}
+
 describe('solo match', () => {
   it('is the single-player game: same commands, same state', () => {
     const log: TimedCommand[] = [
-      { tick: 0, command: { type: 'build', x: 3, y: 4, cls: 'paladin', skill: 'holy-bolt' } },
+      { tick: 0, command: { type: 'build', x: 11, y: 6, cls: 'paladin', skill: 'holy-bolt' } },
       { tick: 5, command: { type: 'callWave' } },
     ];
     const sim = createSim(data, 7);
@@ -29,38 +38,57 @@ describe('solo match', () => {
 });
 
 describe('team match', () => {
-  it('hands a leak to the next zone with its damage, and only the last zone loses lives', () => {
-    const match = createMatch(data, 1, 'team', 3);
-    const [z0, z1, z2] = match.zones;
-    const m = addMonster(z0!, 'zombie1', z0!.map.length - 1);
-    m.hp = 777;
-    run(match, 2);
-    expect(z0!.state.monsters).toHaveLength(0);
-    expect(z0!.state.lives).toBe(data.economy.lives);
-    expect(z1!.state.monsters).toHaveLength(1);
-    expect(z1!.state.monsters[0]!.hp).toBe(777);
-    expect(z1!.state.monsters[0]!.dist).toBeLessThan(z1!.map.length / 10);
-
-    // Walk it through zone 2 and out of zone 3
-    z1!.state.monsters[0]!.dist = z1!.map.length - 1;
-    run(match, 2);
-    z2!.state.monsters[0]!.dist = z2!.map.length - 1;
-    run(match, 2);
-    expect(livesOf(match, 0)).toBe(data.economy.lives - data.economy.leakCost.normal);
-    expect(livesOf(match, 2)).toBe(livesOf(match, 0));
+  it('is one shared ring: each player builds on their own arc only, with their own gold', () => {
+    const match = createMatch(data, 1, 'team', 2);
+    expect(match.zones).toHaveLength(1);
+    const ring = match.zones[0]!;
+    // Two players own arcs 0 and 2, and 1 and 3
+    expect(ring.arcOwners).toEqual([0, 1, 0, 1]);
+    const mine = tileOn(match, 0);
+    const theirs = tileOn(match, 1);
+    expect(arcAt(ring.map, theirs.x, theirs.y)).toBe(1);
+    run(match, 1, [
+      { player: 0, command: { type: 'build', ...theirs, cls: 'paladin', skill: 'holy-bolt' } },
+      { player: 1, command: { type: 'build', ...theirs, cls: 'paladin', skill: 'holy-bolt' } },
+      { player: 0, command: { type: 'build', ...mine, cls: 'paladin', skill: 'holy-bolt' } },
+    ]);
+    expect(ring.state.towers.map((t) => [t.owner, t.tileX, t.tileY])).toEqual([
+      [1, theirs.x, theirs.y],
+      [0, mine.x, mine.y],
+    ]);
+    const cost = data.economy.buildCost;
+    expect(ring.state.gold).toEqual([data.economy.startingGold - cost, data.economy.startingGold - cost]);
+    // Nobody can change another player's tower
+    const other = ring.state.towers.find((t) => t.owner === 1)!;
+    run(match, 1, [{ player: 0, command: { type: 'sell', towerId: other.id } }]);
+    expect(ring.state.towers).toHaveLength(2);
   });
 
-  it('spawns waves in the first zone only', () => {
+  it("spawns each player's wave at their own arc, and pays a kill to the killer", () => {
     const match = createMatch(data, 1, 'team', 2);
-    run(match, data.economy.firstWaveTicks + 30);
+    const ring = match.zones[0]!;
+    run(match, data.economy.firstWaveTicks + 1);
     expect(match.state.wavesCalled).toBe(1);
-    expect(match.zones[0]!.state.wave).toBe(1);
-    expect(match.zones[1]!.state.wave).toBe(0);
+    const spawnAt = new Set(ring.state.spawns.map((s) => s.dist));
+    expect([...spawnAt].sort((a, b) => a - b)).toEqual([ring.map.arcs[0]!.spawn, ring.map.arcs[1]!.spawn]);
+
+    // Player 1's tower kills a monster on player 0's arc: the gold is player 1's
+    const quiet = createMatch(data, 1, 'team', 2);
+    const r = quiet.zones[0]!;
+    const tower = placeTower(r, 6, 5, 'holy-bolt');
+    tower.owner = 1;
+    const m = addMonster(r, 'zombie1', 3000, { hp: 300 });
+    m.stunTicks = 1_000_000;
+    const before = [...r.state.gold];
+    run(quiet, 200);
+    expect(r.state.monsters).toHaveLength(0);
+    expect(r.state.gold[0]).toBe(before[0]);
+    expect(r.state.gold[1]).toBeGreaterThan(before[1]!);
   });
 });
 
 describe('ffa match', () => {
-  it('starts each wave in every lane on the clock, or as soon as everyone is ready', () => {
+  it('starts each wave on every ring on the clock, or as soon as everyone is ready', () => {
     const match = createMatch(data, 1, 'ffa', 3);
     run(match, data.economy.firstWaveTicks);
     expect(match.state.wavesCalled).toBe(0);
@@ -76,13 +104,18 @@ describe('ffa match', () => {
     expect(match.state.ready).toEqual([false, false, false]);
   });
 
-  it('drops a player who runs out of lives, and the last one standing wins', () => {
+  it('drops a player whose ring fills up, and the last ring standing wins', () => {
     const match = createMatch(data, 1, 'ffa', 3);
-    match.zones[0]!.state.lives = 0;
+    const fill = (ring: number) => {
+      const z = match.zones[ring]!;
+      for (let i = 0; i < data.rules.aliveLimit; i++) addMonster(z, 'zombie1', i * 100).stunTicks = 1_000_000;
+    };
+    fill(0);
     run(match, 1);
+    expect(aliveOf(match, 0)).toBeGreaterThanOrEqual(data.rules.aliveLimit);
     expect(playersIn(match)).toEqual([1, 2]);
     expect(match.state.status).toBe('playing');
-    match.zones[2]!.state.lives = 0;
+    fill(2);
     run(match, 1);
     expect(match.state.status).toBe('over');
     expect(match.state.winners).toEqual([1]);
@@ -91,10 +124,10 @@ describe('ffa match', () => {
 
 describe('lockstep', () => {
   it('two clients fed the same commands agree on the match hash every 100 ticks', () => {
-    // Four bots play a team match; their commands are recorded per tick, then replayed
+    // Four bots play an FFA match; their commands are recorded per tick, then replayed
     const recorded: PlayerCommand[][] = [];
     const hashes: number[] = [];
-    const a = createMatch(data, 42, 'team', 4);
+    const a = createMatch(data, 42, 'ffa', 4);
     const bots = a.zones.map((z, i) => createBot((['BOLT', 'HOLY', 'TWOLINE', 'PALADIN'] as const)[i]!, z));
     while (a.state.status === 'playing' && a.state.tick < 6000) {
       const now = bots.flatMap((bot, player) => bot.decide(a.zones[player]!).map((command) => ({ player, command })));
@@ -104,7 +137,7 @@ describe('lockstep', () => {
     }
     expect(a.state.wavesCalled).toBeGreaterThan(0);
 
-    const b = createMatch(data, 42, 'team', 4);
+    const b = createMatch(data, 42, 'ffa', 4);
     recorded.forEach((now) => {
       stepMatch(b, now);
       if (b.state.tick % 100 === 0) expect(matchHash(b), `tick ${b.state.tick}`).toBe(hashes[b.state.tick / 100 - 1]);

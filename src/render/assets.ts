@@ -19,17 +19,6 @@ export interface AtlasMeta {
   explosion?: string;
 }
 
-/** The baked Blood Moor: where its ground image sits and where each scenery object stands. */
-export const MAP_KEY = 'map:bloodmoor';
-export const GROUND_KEY = 'map:ground';
-export const sceneryKey = (prefab: string) => `scenery:${prefab}`;
-
-export interface MapManifest {
-  ground: { image: string; originX: number; originY: number };
-  prefabs: Record<string, { image: string; anchorX: number; anchorY: number }>;
-  objects: { prefab: string; at: number[] }[];
-}
-
 export interface IconIndex {
   skills: Record<string, { id: number; icon: string; name: string; desc: string }>;
 }
@@ -106,13 +95,6 @@ export function preloadAssets(scene: Phaser.Scene): void {
     scene.load.json(MISSILE_INDEX, MISSILE_INDEX);
     scene.load.once(`filecomplete-json-${MISSILE_INDEX}`, (_k: string, _t: string, index: { missiles: string[] }) => {
       for (const id of index.missiles) atlas(missileKey(id), `missiles/${id}.json`, 'missiles/');
-    });
-  }
-  if (!scene.cache.json.exists(MAP_KEY)) {
-    scene.load.json(MAP_KEY, 'map/bloodmoor.json');
-    scene.load.once(`filecomplete-json-${MAP_KEY}`, (_k: string, _t: string, m: MapManifest) => {
-      scene.load.image(GROUND_KEY, m.ground.image);
-      for (const [name, p] of Object.entries(m.prefabs)) scene.load.image(sceneryKey(name), p.image);
     });
   }
   for (const folder of ICON_FOLDERS) {

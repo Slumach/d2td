@@ -98,10 +98,9 @@ interface ModScheduleJson {
 /** src/data/balance.json. Multipliers are integer percents so the sim stays integer. */
 export interface BalanceJson {
   startingGold: number;
-  lives: number;
-  /** Lives a leaked monster costs by rank; bossLeakCost overrides a boss by id, where "all" ends the run. */
-  leakCost: Record<Rank, number>;
-  bossLeakCost: Record<string, number | 'all'>;
+  /** The run is lost when the weight of everything alive on the ring reaches aliveLimit; weights by rank. */
+  aliveLimit: number;
+  aliveWeight: Record<Rank, number>;
   buildCost: number;
   /** Cost of the first level-up at T1, T2, T3. */
   levelCostBase: number[];
@@ -293,9 +292,6 @@ export interface WaveDef {
 
 export interface Economy {
   startingGold: number;
-  lives: number;
-  leakCost: Record<Rank, number>;
-  bossLeakCost: Record<string, number | 'all'>;
   buildCost: number;
   /** levelCosts[tier - 1][n] is the gold to go from level n + 1 to n + 2 in that tier. */
   levelCosts: number[][];
@@ -321,6 +317,8 @@ export interface ModResist {
 }
 
 export interface Rules {
+  aliveLimit: number;
+  aliveWeight: Record<Rank, number>;
   chillPct: number;
   staticFloorPct: number[];
   corpseLifetimeTicks: number;
@@ -588,9 +586,6 @@ export function economyFrom(balance: BalanceJson): Economy {
   const steps = compound(balance.levelCostPctPerLevel, MAX_TOWER_LEVEL - 1);
   return {
     startingGold: balance.startingGold,
-    lives: balance.lives,
-    leakCost: balance.leakCost,
-    bossLeakCost: balance.bossLeakCost,
     buildCost: balance.buildCost,
     levelCosts: balance.levelCostBase.map((base) => steps.map((permille) => idiv(base * permille, 1000))),
     tierCosts: balance.tierCosts,
@@ -617,6 +612,8 @@ export function rulesFrom(tables: Tables, balance: BalanceJson): Rules {
     mods[mod] = { speedPct: m.speedPct ?? 0, damagePct: m.damagePct ?? 0, resist };
   }
   return {
+    aliveLimit: balance.aliveLimit,
+    aliveWeight: balance.aliveWeight,
     chillPct: balance.chillPct,
     staticFloorPct: balance.staticFloorPct,
     corpseLifetimeTicks: balance.corpseLifetimeTicks,

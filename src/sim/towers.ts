@@ -1,9 +1,11 @@
 // Tower commands and the rules behind them: build, T1 pick, levels, tiers and branches,
-// targeting, evolution and selling. Invalid commands do nothing, deterministically.
+// targeting, evolution and selling. Invalid commands do nothing, deterministically. A
+// player builds only on the arcs they own, pays from their own gold, and changes only
+// their own towers.
 
 import { MAX_TIER, MAX_TOWER_LEVEL, type EvolutionDef } from './data.ts';
 import { idiv } from './fixed.ts';
-import { inBounds, isBlocked, isPathTile, tileCenter } from './map.ts';
+import { arcAt, inBounds, isBlocked, isPathTile, tileCenter } from './map.ts';
 import { TARGETING_MODES, type Sim, type Targeting, type Tower } from './state.ts';
 
 export function towerAt(sim: Sim, x: number, y: number): Tower | undefined {
@@ -14,8 +16,23 @@ export function towerById(sim: Sim, id: number): Tower | undefined {
   return sim.state.towers.find((t) => t.id === id);
 }
 
-export function canBuild(sim: Sim, x: number, y: number): boolean {
-  return inBounds(sim.map, x, y) && !isPathTile(sim.map, x, y) && !isBlocked(sim.map, x, y) && towerAt(sim, x, y) === undefined;
+/** A free tile off the path and the scenery, on an arc `player` owns. */
+export function canBuild(sim: Sim, x: number, y: number, player = 0): boolean {
+  return (
+    inBounds(sim.map, x, y) &&
+    !isPathTile(sim.map, x, y) &&
+    !isBlocked(sim.map, x, y) &&
+    sim.arcOwners[arcAt(sim.map, x, y)] === player &&
+    towerAt(sim, x, y) === undefined
+  );
+}
+
+/** Takes `cost` from the player's gold if they have it. */
+function pay(sim: Sim, player: number, cost: number): boolean {
+  const gold = sim.state.gold;
+  if ((gold[player] ?? 0) < cost) return false;
+  gold[player]! -= cost;
+  return true;
 }
 
 function lineOf(sim: Sim, tower: Tower) {
@@ -77,14 +94,14 @@ function removeTower(sim: Sim, id: number): void {
   s.summons = s.summons.filter((u) => u.towerId !== id);
 }
 
-export function build(sim: Sim, x: number, y: number, cls: string, skill?: string): void {
+export function build(sim: Sim, player: number, x: number, y: number, cls: string, skill?: string): void {
   const s = sim.state;
   const cost = sim.data.economy.buildCost;
-  if (!sim.data.classes[cls] || !canBuild(sim, x, y) || s.gold < cost) return;
+  if (!sim.data.classes[cls] || !canBuild(sim, x, y, player) || !pay(sim, player, cost)) return;
   const center = tileCenter({ x, y });
-  s.gold -= cost;
   const tower: Tower = {
     id: s.nextId++,
+    owner: player,
     cls,
     tileX: x,
     tileY: y,
@@ -118,16 +135,14 @@ export function pickSkill(sim: Sim, tower: Tower, skill: string): void {
 
 export function upgrade(sim: Sim, tower: Tower): void {
   const cost = upgradeCost(sim, tower);
-  if (cost === undefined || sim.state.gold < cost) return;
-  sim.state.gold -= cost;
+  if (cost === undefined || !pay(sim, tower.owner, cost)) return;
   tower.spent += cost;
   tower.level++;
 }
 
 export function upgradeTier(sim: Sim, tower: Tower): void {
   const cost = tierCost(sim, tower);
-  if (cost === undefined || sim.state.gold < cost) return;
-  sim.state.gold -= cost;
+  if (cost === undefined || !pay(sim, tower.owner, cost)) return;
   tower.spent += cost;
   tower.tier++;
   tower.level = 1;
@@ -150,12 +165,11 @@ export function evolve(sim: Sim, a: Tower, b: Tower): void {
   const s = sim.state;
   const cost = sim.data.economy.evolveCost;
   const match = evolutionFor(sim, a, b);
-  if (!match || s.gold < cost) return;
+  if (!match || a.owner !== b.owner || !pay(sim, a.owner, cost)) return;
   const { recipe, attack, partner } = match;
   // The partner aura keeps the level it reached: its current level if it still has it,
   // otherwise it was maxed to tier past it
   const partnerLevel = partner.picks[partner.tier - 1] === recipe.partner.skill ? partner.level - 1 : MAX_TOWER_LEVEL - 1;
-  s.gold -= cost;
   removeTower(sim, attack.id);
   removeTower(sim, partner.id);
   s.towers.push({
@@ -175,6 +189,6 @@ export function evolve(sim: Sim, a: Tower, b: Tower): void {
 }
 
 export function sell(sim: Sim, tower: Tower): void {
-  sim.state.gold += sellValue(sim, tower);
+  sim.state.gold[tower.owner]! += sellValue(sim, tower);
   removeTower(sim, tower.id);
 }

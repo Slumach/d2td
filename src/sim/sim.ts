@@ -1,17 +1,20 @@
 // The deterministic simulation. State changes only through step(), and step() takes only
 // the commands for its tick. All values are integers; HP and damage are in 1/256 HP like D2.
 //
-// One tick, in order: commands, spawns, the aura field, monsters (abilities, movement,
-// leaks), summons, towers, missiles, corpses, then the win/loss check.
+// One ring, one or more players: single player and each FFA ring have one, a team ring one
+// per player, each owning arcs. Monsters lap the ring until killed; the run is lost when
+// the weight of everything alive reaches rules.aliveLimit.
+//
+// One tick, in order: commands, spawns, the aura field, monsters (abilities, movement),
+// summons, towers, missiles, corpses, the alive count, then the win/loss check.
 
 import { archetypeOf } from './archetypes/index.ts';
 import type { SkillDef, TowerBuff } from './archetypes/types.ts';
 import { activeSkill, computeAuras, EMPTY_FIELD } from './auras.ts';
 import type { GameData } from './data.ts';
 import { idiv } from './fixed.ts';
-import { createMap } from './map.ts';
+import { ARC_COUNT, createMap } from './map.ts';
 import { decayCorpses, spawnMonsters, updateMonsters } from './monsters.ts';
-export { injectMonster } from './monsters.ts';
 import { createRng } from './rng.ts';
 import type { Command, Sim, TimedCommand, Tower } from './state.ts';
 import { updateSummons } from './archetypes/summon.ts';
@@ -23,25 +26,31 @@ export { activeSkill } from './auras.ts';
 export { damageAgainst, effectiveResist } from './combat.ts';
 
 export interface SimOptions {
-  /** Team mode zones before the last: leaks are handed on instead of costing lives. */
-  passLeaks?: boolean;
+  /**
+   * Players sharing this ring (team mode), 1 to ARC_COUNT. Player p owns arc p; with fewer
+   * players than arcs the rest go round, so the whole ring is always someone's.
+   */
+  players?: number;
 }
 
 export function createSim(data: GameData, seed: number, opts: SimOptions = {}): Sim {
+  const players = opts.players ?? 1;
+  if (players < 1 || players > ARC_COUNT) throw new Error(`A ring takes 1 to ${ARC_COUNT} players, not ${players}`);
   return {
     data,
     map: createMap(),
-    passLeaks: opts.passLeaks ?? false,
+    players,
+    arcOwners: Array.from({ length: ARC_COUNT }, (_, k) => k % players),
     fx: EMPTY_FIELD,
+    actor: 0,
     state: {
       tick: 0,
       rng: createRng(seed),
-      gold: data.economy.startingGold,
-      lives: data.economy.lives,
+      gold: Array.from({ length: players }, () => data.economy.startingGold),
+      alive: 0,
       wave: 0,
       status: 'playing',
       kills: 0,
-      leaks: 0,
       nextId: 1,
       monsters: [],
       towers: [],
@@ -50,7 +59,6 @@ export function createSim(data: GameData, seed: number, opts: SimOptions = {}): 
       corpses: [],
       spawns: [],
       waves: [],
-      passed: [],
     },
   };
 }
@@ -67,9 +75,16 @@ export function step(sim: Sim, commands: readonly Command[]): void {
     updateTowers(sim);
     updateMissiles(sim);
     decayCorpses(sim);
+    s.alive = aliveWeight(sim);
     checkEnd(sim);
   }
   s.tick++;
+}
+
+/** The weight of every monster on the ring (rules.aliveWeight by rank). */
+export function aliveWeight(sim: Sim): number {
+  const w = sim.data.rules.aliveWeight;
+  return sim.state.monsters.reduce((n, m) => n + (m.hp > 0 ? w[m.rank] : 0), 0);
 }
 
 /** Runs a command log up to (not including) `untilTick`. The log must be sorted by tick. */
@@ -85,16 +100,18 @@ export function runLog(sim: Sim, log: readonly TimedCommand[], untilTick: number
 }
 
 function applyCommand(sim: Sim, command: Command): void {
-  if (command.type === 'build') return build(sim, command.x, command.y, command.cls, command.skill);
+  const player = command.player ?? 0;
+  if (player < 0 || player >= sim.players) return;
+  if (command.type === 'build') return build(sim, player, command.x, command.y, command.cls, command.skill);
   if (command.type === 'callWave') return callWave(sim);
   if (command.type === 'evolve') {
     const a = towerById(sim, command.towerA);
     const b = towerById(sim, command.towerB);
-    if (a && b) evolve(sim, a, b);
+    if (a && b && a.owner === player) evolve(sim, a, b);
     return;
   }
   const tower = towerById(sim, command.towerId);
-  if (!tower) return;
+  if (!tower || tower.owner !== player) return;
   switch (command.type) {
     case 'pickSkill':
       return pickSkill(sim, tower, command.skill);
@@ -111,6 +128,11 @@ function applyCommand(sim: Sim, command: Command): void {
   }
 }
 
+/**
+ * The next wave enters the ring. On a shared ring every player's arc spawns the whole wave
+ * at its spawn point; a single player owns every arc, so their wave is dealt out over the
+ * four spawn points, a pack or a tank at a time.
+ */
 function callWave(sim: Sim): void {
   const s = sim.state;
   const waveDef = sim.data.waves[s.wave];
@@ -118,17 +140,21 @@ function callWave(sim: Sim): void {
   const early = s.monsters.length > 0 || s.spawns.length > 0;
   const wave = s.wave;
   let count = 0;
-  let offset = 1;
-  for (const group of waveDef.groups) {
-    offset += group.delayTicks ?? 0;
-    for (let i = 0; i < group.count; i++) {
-      s.spawns.push({ tick: s.tick + offset, def: group.monster, wave, rank: group.rank, mods: [...group.mods] });
-      offset += group.spacingTicks;
-      count++;
-    }
+  for (let p = 0; p < sim.players; p++) {
+    let offset = 1;
+    waveDef.groups.forEach((group, g) => {
+      const arc = sim.players === 1 ? g % ARC_COUNT : p;
+      const dist = sim.map.arcs[arc]!.spawn;
+      offset += group.delayTicks ?? 0;
+      for (let i = 0; i < group.count; i++) {
+        s.spawns.push({ tick: s.tick + offset, def: group.monster, wave, rank: group.rank, mods: [...group.mods], dist });
+        offset += group.spacingTicks;
+        count++;
+      }
+    });
   }
   s.spawns.sort((a, b) => a.tick - b.tick);
-  s.waves.push({ remaining: count, bounty: 0, early });
+  s.waves.push({ remaining: count, bounty: Array.from({ length: sim.players }, () => 0), early });
   s.wave++;
 }
 
@@ -148,6 +174,7 @@ export function attackInterval(sim: Sim, tower: Tower, skill: SkillDef, lvl: num
  */
 function updateTowers(sim: Sim): void {
   for (const tower of sim.state.towers) {
+    sim.actor = tower.owner;
     if (tower.summonCooldown > 0) tower.summonCooldown--;
     const buff = sim.fx.towers[tower.id] ?? NO_BUFF;
     if (tower.evolved && tower.partnerSkill) {
@@ -175,6 +202,7 @@ function updateMissiles(sim: Sim): void {
   const s = sim.state;
   const gone = new Set<number>();
   for (const missile of [...s.missiles]) {
+    sim.actor = towerById(sim, missile.towerId)?.owner ?? 0;
     const skill = sim.data.skills[missile.skill]!;
     const update = archetypeOf(skill).updateMissile;
     if (!update || !update(sim, missile, skill)) gone.add(missile.id);
@@ -184,7 +212,7 @@ function updateMissiles(sim: Sim): void {
 
 function checkEnd(sim: Sim): void {
   const s = sim.state;
-  if (s.lives <= 0) {
+  if (s.alive >= sim.data.rules.aliveLimit) {
     s.status = 'lost';
   } else if (s.wave >= sim.data.waves.length && s.monsters.length === 0 && s.spawns.length === 0) {
     s.status = 'won';

@@ -41,10 +41,10 @@ describe('rng', () => {
 describe('map', () => {
   it('marks a connected path and leaves the rest buildable', () => {
     const map = createMap();
-    expect([map.width, map.height]).toEqual([28, 17]);
-    expect(isPathTile(map, 0, 2)).toBe(true);
+    expect([map.width, map.height]).toEqual([42, 42]);
+    expect(isPathTile(map, 3, 3) && isPathTile(map, 20, 3) && isPathTile(map, 38, 20)).toBe(true);
     expect(isPathTile(map, 0, 0)).toBe(false);
-    expect(isPathTile(map, 14, 12) && isPathTile(map, 16, 14)).toBe(true);
+    expect(isPathTile(map, 20, 20)).toBe(false);
   });
 });
 
@@ -140,7 +140,7 @@ describe('data', () => {
     const modsOn = (seed: number, wave: number) => {
       const sim = createSim(fixtureGameData(30), seed);
       sim.state.wave = wave - 1;
-      sim.state.waves = Array.from({ length: wave - 1 }, () => ({ remaining: 0, bounty: 0, early: false }));
+      sim.state.waves = Array.from({ length: wave - 1 }, () => ({ remaining: 0, bounty: [0], early: false }));
       step(sim, [{ type: 'callWave' }]);
       return sim.state.spawns.filter((sp) => sp.rank !== 'normal').map((sp) => `${sp.rank}:${sp.mods.join('+')}`);
     };
@@ -151,7 +151,7 @@ describe('data', () => {
     const data = fixtureGameData(30);
     const sim = createSim(data, 1);
     sim.state.wave = 29;
-    sim.state.waves = Array.from({ length: 29 }, () => ({ remaining: 0, bounty: 0, early: false }));
+    sim.state.waves = Array.from({ length: 29 }, () => ({ remaining: 0, bounty: [0], early: false }));
     step(sim, [{ type: 'callWave' }]);
     sim.state.spawns = sim.state.spawns.map((sp) => ({ ...sp, tick: sim.state.tick }));
     step(sim, []);

@@ -1,8 +1,7 @@
 {
   "startingGold": 300,
-  "lives": 20,
-  "leakCost": { "normal": 1, "champion": 2, "unique": 3, "boss": 5 },
-  "bossLeakCost": { "andariel": "all" },
+  "aliveLimit": 100,
+  "aliveWeight": { "normal": 1, "champion": 2, "unique": 3, "boss": 10 },
   "buildCost": 150,
   "levelCostBase": [40, 80, 120],
   "levelCostPctPerLevel": 220,

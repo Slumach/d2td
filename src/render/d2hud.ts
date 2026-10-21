@@ -1,5 +1,6 @@
 // The in-game HUD as D2's control panel, from the player's files (ui/hud): the stone bar
-// across the bottom with the angel's life globe on the left draining as lives go, gold in
+// across the bottom with the angel's life globe on the left filling as monsters pile up on
+// the ring (full is a lost run), gold in
 // the long slot, the wave counter over the centre with the next wave on hover, build
 // buttons as skill icons in the belt slots, and the selected tower in a small stone panel.
 // GameScene decides what to show; this only draws it.
@@ -56,8 +57,9 @@ const BAR_TOP = 150;
 
 export interface HudNumbers {
   gold: number;
-  lives: number;
-  maxLives: number;
+  /** The alive weight on the ring, and the limit that loses the run. */
+  alive: number;
+  aliveLimit: number;
   /** "Hell 12/30". */
   wave: string;
   /** The next wave's tooltip, or undefined after the last. */
@@ -91,7 +93,7 @@ export class D2Hud {
   private readonly globe: Phaser.GameObjects.Sprite;
   private readonly globeTop: number;
   private readonly globeSize: number;
-  private readonly livesText: Phaser.GameObjects.Text;
+  private readonly aliveText: Phaser.GameObjects.Text;
   private readonly goldText: Phaser.GameObjects.Text;
   private readonly waveText: Phaser.GameObjects.Text;
   readonly tooltip: Tooltip;
@@ -99,7 +101,7 @@ export class D2Hud {
   private slots: Phaser.GameObjects.GameObject[] = [];
   private tabs: Phaser.GameObjects.GameObject[] = [];
   private towerParts: Phaser.GameObjects.GameObject[] = [];
-  private lastLivesFrac = -1;
+  private lastAliveFrac = -1;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -111,7 +113,7 @@ export class D2Hud {
     this.panelHeight = m.panel.frameHeight;
     const at = (x: number, y: number) => this.at(x, y);
 
-    // The life globe's liquid sits under the panel's glass, drained from the top
+    // The life globe's liquid sits under the panel's glass, filled from the bottom
     // The sheet wraps into rows; only its first `frames` cells hold frames
     const globeFrames = scene.anims.generateFrameNumbers(hudKey('globe'), { start: 0, end: m.globe.frames - 1 });
     if (!scene.anims.exists(GLOBE_ANIM)) scene.anims.create({ key: GLOBE_ANIM, frames: globeFrames, frameRate: 12, repeat: -1 });
@@ -126,7 +128,7 @@ export class D2Hud {
     this.globe.setDepth(2902).setBlendMode(Phaser.BlendModes.SCREEN);
 
     const big = { fontFamily: FONT, fontSize: '28px', color: '#f0e6d0' };
-    this.livesText = scene.add.text(g.x, g.y, '', big).setOrigin(0.5).setDepth(2903).setShadow(2, 2, '#000000', 3);
+    this.aliveText = scene.add.text(g.x, g.y, '', big).setOrigin(0.5).setDepth(2903).setShadow(2, 2, '#000000', 3);
 
     const gold = at(SPOTS.gold.x, SPOTS.gold.y);
     const coin = scene.add.image(gold.x, gold.y, hudKey('gold')).setDisplaySize(38, 38).setDepth(2903);
@@ -162,12 +164,12 @@ export class D2Hud {
 
   update(n: HudNumbers): void {
     this.goldText.setText(String(n.gold));
-    this.livesText.setText(String(n.lives));
+    this.aliveText.setText(String(n.alive));
     this.waveText.setText(n.wave);
     this.nextWave = n.nextWave;
-    const frac = Math.max(0, Math.min(1, n.lives / Math.max(1, n.maxLives)));
-    if (frac !== this.lastLivesFrac) {
-      this.lastLivesFrac = frac;
+    const frac = Math.max(0, Math.min(1, n.alive / Math.max(1, n.aliveLimit)));
+    if (frac !== this.lastAliveFrac) {
+      this.lastAliveFrac = frac;
       // Crop in texture pixels: keep the bottom `frac` of the liquid
       const h = this.globe.frame.height;
       const keep = Math.round(h * frac);

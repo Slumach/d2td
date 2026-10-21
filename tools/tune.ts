@@ -8,7 +8,7 @@
 import { parseArgs } from 'node:util';
 
 import { DESIGN } from '../src/data/design.ts';
-import { HAMMERDIN_BY_WAVE, LOSS_WAVES, PALADIN_MAX_LIVES, checkTargets, endWave, median, runAll, withMultipliers } from './balance.ts';
+import { HAMMERDIN_BY_WAVE, LOSS_WAVES, checkTargets, endWave, median, runAll, withMultipliers } from './balance.ts';
 
 const { values: args } = parseArgs({
   options: {
@@ -30,7 +30,7 @@ const range = (spec: string) => {
 const seeds = args.seeds.split(',').map(Number);
 const waves = Number(args.waves);
 
-/** How far a combination is from the targets: waves off for each bot, plus lives and Hammerdin timing. */
+/** How far a combination is from the targets: waves off for each bot, plus Hammerdin timing. */
 function score(results: ReturnType<typeof runAll>): number {
   let miss = 0;
   for (const [bot, wanted] of Object.entries(LOSS_WAVES)) {
@@ -40,8 +40,6 @@ function score(results: ReturnType<typeof runAll>): number {
   const pal = results.filter((r) => r.strategy === 'PALADIN');
   const palEnd = median(pal.map(endWave));
   miss += Math.max(0, waves + 1 - palEnd) * 2;
-  const lives = median(pal.map((r) => (r.won ? r.lives : 0)));
-  if (palEnd > waves && lives > PALADIN_MAX_LIVES) miss += (lives - PALADIN_MAX_LIVES) * 0.5;
   const late = pal.filter((r) => (r.evolvedOn['hammerdin'] ?? 99) > HAMMERDIN_BY_WAVE).length;
   return miss + late * 0.5;
 }
@@ -57,7 +55,7 @@ for (const hp of range(args.hp)) {
         .map((b) => {
           const rs = results.filter((r) => r.strategy === b);
           const m = median(rs.map(endWave));
-          return `${b} ${m > waves ? `won/${median(rs.map((r) => r.lives))}` : `w${m}`}`;
+          return `${b} ${m > waves ? `won/${median(rs.map((r) => r.peakAlive))}` : `w${m}`}`;
         })
         .join('  ');
       rows.push({ hp, bounty, cost, score: score(results), ok: t.ok, summary });

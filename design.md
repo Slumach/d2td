@@ -11,7 +11,7 @@ Non-commercial fan project. The game ships zero Blizzard assets and reads them f
 ## Decisions locked (Oct 20)
 
 - Unit art: classic D2 sprites at 1x in D2's own 2:1 isometric view (M5), nearest-neighbour, never scaled individually. The whole canvas zooms by the largest whole number that fits the window (1 at 1080p, 2 at 4K) and the rest is letterboxed (changed from 2x after M2b: at 2x units stood two tiles tall). HD .sprite files for UI, skill icons, item art and fonts. The HD 3D models are a later experiment on one monster and never block the game.
-- Map: fixed path. Towers go on any open tile off the path. No mazing.
+- Map: a ring (Oct 2026, Green TD style). Monsters spawn on it and keep lapping until killed; nothing leaves, so there are no lives. Towers go on any open tile off the path. No mazing.
 - Evolution: two adjacent prerequisite towers are consumed into one evolved tower. One tile is freed.
 - Launch classes: Paladin, Sorceress, Necromancer. Amazon, Barbarian, Druid and Assassin come after the loop is fun.
 - Tower structure: 3 lines per class, 3 tiers per line, T4 evolutions from two towers. T5 evolutions from three towers later.
@@ -20,8 +20,8 @@ Non-commercial fan project. The game ships zero Blizzard assets and reads them f
 - Difficulty comes from D2's own systems: resistances, immunities and monster mods. Act bosses close acts. No flying enemies.
 - First playable: one map (Blood Moor), endless waves, gold only. Campaign, runes and items later.
 
-* Multiplayer is in: FFA on separate identical lanes, and team mode with shared lives. The simulation is deterministic lockstep from M1, so multiplayer is a transport layer at M4, not a rewrite. Any player can host; there is no central server.
-* Team mode chains the zones: your leaks walk into the next teammate's zone, kill gold goes to the killer, and only a leak past the last zone costs a life.
+* Multiplayer is in: FFA on a ring each, and team mode on one shared ring. The simulation is deterministic lockstep from M1, so multiplayer is a transport layer at M4, not a rewrite. Any player can host; there is no central server.
+* Team mode shares one ring, an arc per player: one alive count for the team, and kill gold goes to the killer.
 * No interest on gold. Extra income comes from a Barbarian gold-find line and gold-find gear.
 * Endgame beyond Hell: tiers of harder waves, with runes and items as the power that keeps pace. Built at M7.
 
@@ -29,17 +29,23 @@ Non-commercial fan project. The game ships zero Blizzard assets and reads them f
 
 ## Core loop and map
 
-Build, survive a wave, spend the gold, repeat. A run ends when 20 lives are gone: a leaked monster costs 1 life, a champion 2, a unique 3 and Blood Raven 5; a leaked Andariel ends the run. The wave tooltip shows each special's cost.
+Build, kill, spend the gold, repeat. Monsters walk a ring and lap it until they die. The run is lost when the weight of everything alive on the ring reaches 100: a regular monster weighs 1, a champion 2, a unique 3 and an act boss 10 (balance.json aliveLimit and aliveWeight). The HUD shows it as a bar filling across the top of the screen, and the life globe fills with it; the wave tooltip says what each special weighs.
 
-- The map is a square tile grid (28 x 17 tiles since M5, when 30 x 17 no longer fit the canvas isometrically; the waypoints moved so the path kept its length to the unit) with the path as an ordered list of waypoints. The renderer shows it in D2's isometric view; the sim grid stays square. Diagonal path segments are allowed; monsters have 8-direction sprites, so they always face the way they walk.
-- Path tiles and scenery tiles are unbuildable. Everything else is buildable, one tower per tile.
+- The ring (src/data/map/ring.json, src/sim/map.ts) is four arcs, each the same turned a quarter more, so every player's arc is identical. Each arc in walking order: a long outer straight, a U-bend dented into the interior (its one-tile pocket touches all three legs), then a 90 degree corner that hands the path to the next arc. Each arc's spawn point is one tile past its handoff corner. Four-fold symmetry needs a square grid: 42 x 42 tiles, the tile count of the 48 x 36 first asked for, a 172-tile loop. ring.json gives arc 0 and the scenery on its wedge; the code turns both onto the other three.
+- Every tile belongs to the arc whose wedge holds it (the four triangles between the diagonals); each arc owns the corner handed to it. Path tiles and scenery tiles are unbuildable; everything else is buildable, one tower per tile, by whoever owns its arc. The renderer shows the square sim grid in D2's isometric view.
 - Range is measured in tiles from the tower's centre. Melee towers reach 1.5 tiles, so they only work when placed touching the path.
-- Targeting per tower: First, Last, Strongest, Weakest, Closest. Default First.
+- Targeting per tower: First, Last, Strongest, Weakest, Closest. Default First. First and Last go by how far a monster has walked in all, laps included.
 - Summons stand on the path tile nearest their tower and block it. Monsters stop and fight blockers (Kingdom Rush barracks), but a monster held for 6 seconds breaks through, shoving the summon aside (it survives), and bosses are never blocked. Monsters never attack towers in v0.1.
 - Speed comes from each monster's velocity in monstats.txt, so a Quill Rat really is faster than a Zombie.
 - Calling the next wave early pays a bonus on that wave's bounty (see src/data/balance.json).
 
-In team mode the map is one path through every player's zone in order, so a teammate can kill your leaks. In FFA each player has an identical, separate lane. Rules in Multiplayer below.
+Modes (built Oct 2026):
+
+- Single player owns the whole ring. Their wave is dealt out over the four spawn points, a pack or a tank at a time.
+- Team: one shared ring, an arc per player (up to four; with fewer, the arcs go round so the whole ring is someone's). Every player's arc spawns the whole wave at its spawn point; the team shares the alive count; kill gold goes to the player whose tower last hurt the monster (poison counts as its caster's); each player has their own gold and changes only their own towers.
+- FFA: a ring per player from the same seed, each with its own alive count; the last ring standing wins.
+
+The camera: the ring is bigger than the screen. Drag (any mouse button) or WASD and the arrow keys pan, the wheel zooms, and zoom is whole numbers only (1x, 2x, 3x). The default view is your own arc at 2x. A minimap in the top-right corner shows the ring, each arc in its owner's colour, a dot per monster, and the camera's view; clicking it moves the camera. Anyone's towers can be looked at; on a team ring, keys 1 to n jump to a player's arc, and in FFA they watch that player's ring.
 
 ## Tower system
 
@@ -155,7 +161,7 @@ The Act 1 schedule (Oct 2026, src/data/monsters.json) walks the act in 30 waves 
 - Monster mods are D2's: Extra Fast, Extra Strong, Stone Skin (physical resist), Magic Resistant, Fire, Cold and Lightning Enchanted, Cursed, Teleportation (skips one path segment). Enchanted adds 75 to its element's resistance, so on an already resistant Hell monster it is an immunity; its death burst that stuns nearby summons, and Cursed's aura (towers in radius lose 25% damage), are not built yet: the bosses carry the mods for their resistances only.
 - Normal, Nightmare and Hell use the three HP and resistance columns of monstats.txt. Hell immunities are the point: no single line clears Hell, so the player has to mix elements and magic.
 - Hell's walls (Oct 2026), as rules: an immune mod (+100, ours: Magic, Poison and Physical Immune) replaces the matching resistant mod (Magic Resistant, Poison Resistant, Stone Skin) and never stacks with it, on every boss and special (balance.json monsterMods replaces). Every Hell champion pack carries Stone Skin and Poison Immune: Stone Skin lifts a Hell champion's physical resistance to 100, so each pack is physical and poison immune. Stone Skin is +50 on Normal and D2's +80 on Nightmare and Hell elsewhere, stopping at 99. Hell's Treehead (12) is Magic Immune and Griswold (19) Magic and Physical Immune; Hell's Andariel is Physical, Magic and Poison Immune with fire, cold and lightning from her raw Hell columns (-50, 66, 66), so any elemental line can kill her. Nightmare gets the resistant versions: Poison Resistant (+40) on the champions and Andariel, Magic Resistant on Treehead and Griswold, and Andariel keeps her Magic Resistant. They sit on top of Normal's mods (balance.json modSchedule.added), each mod once.
-- Leaks: a monster costs 1 life, a champion 2, a unique 3, a named boss 5; a leaked Andariel ends the run. Bosses are never blocked.
+- Nothing leaks: a monster laps the ring until it dies, and weighs on the alive count while it lives (champion 2, unique 3, act boss 10). Bosses are never blocked.
 - How difficulty is built (M6): a Nightmare or Hell monster is its own entry (`fallen1@hell`) with that difficulty's resistances, immunities and HP columns. The wave curve compounds HP per wave, so raw Hell columns on top of it would be impossible; instead each difficulty's wave monsters are scaled to a percent of Normal's average HP (balance.json difficultyHpPct). The columns decide who is tough against whom, the curve and the percent how tough. Bounty follows each monster's Normal level, so gold keeps to the curve. The lobby and single player pick where a run starts; after its 30 waves the map loops at the next difficulty, up to Hell, and the curve starts again. Act 1's Hell columns hold fire, cold and lightning immunities (Fallen, Zombies and Rogues, Skeletons) but nothing against magic or poison.
 - Enemies never attack towers in v0.1. They only fight summons blocking the path.
 
@@ -180,7 +186,7 @@ Target rhythm (Green TD, not a treadmill): tier-ups and evolutions are big jumps
 
 - Bounty per kill = monster level x 2, scaled per wave by a harness-tuned multiplier (see src/data/balance.json). Champions x3, uniques x5, Blood Raven x20, Andariel x50. Wave HP compounds per wave (see src/data/balance.json), so the player is always slightly behind.
 - Wave-clear bonus and early-call bonus: see src/data/balance.json.
-- Starting gold 300, enough for two towers. Lives 20. Swarm waves spawn 6 + 2 per wave, tank waves 3 + 1 per wave.
+- Starting gold 300, enough for two towers. No lives: the alive count is the loss condition. Swarm waves spawn 6 + 2 per wave, tank waves 3 + 1 per wave.
 
 * No interest on banked gold. Extra income is a tower, not a bank: the Barbarian's Find Item line loots corpses in radius for bonus gold, and gold-find gear stacks on it in the endgame.
 
@@ -198,11 +204,11 @@ A Hammerdin therefore costs both parents built, levelled and tiered, plus the ev
 
 ## Visuals and asset pipeline
 
-The look is D2R's legacy toggle done well: classic sprites at 1x with nearest-neighbour sampling, HD panels, fonts and skill icons around them. Since M5 the renderer projects the square sim grid into D2's 2:1 view: one sim tile is a 64 x 32 diamond, two by two of D2's subtiles, so 28 x 17 tiles make a 1440 x 720 diamond inside the 1440 x 816 map area, and the canvas with HUD and panel is 1440 x 1000, which fits 1080p at zoom 1 with a title bar above the taskbar. Sprites, missiles, HP bars, range ellipses, the build highlight and clicks all go through the projection and its inverse, and everything on the map sorts by projected y; the HUD and panel stay flat. The canvas zooms as a whole by the largest whole number that fits the window and letterboxes the rest; no sprite is scaled on its own and nothing is ever scaled by a fraction. Tile size is render-only: the sim's tile stays 1000 units, so ranges and path lengths do not change.
+The look is D2R's legacy toggle done well: classic sprites at 1x with nearest-neighbour sampling, HD panels, fonts and skill icons around them. Since M5 the renderer projects the square sim grid into D2's 2:1 view: one sim tile is a 64 x 32 diamond, two by two of D2's subtiles, so the 42 x 42 ring is a 2688 x 1344 diamond in world space, bigger than the screen. A world camera pans and zooms over it (1x, 2x, 3x) and a second, flat camera draws the HUD, panel and minimap over it; the canvas with HUD and panel is 1440 x 1000, which fits 1080p at zoom 1 with a title bar above the taskbar. Sprites, missiles, HP bars, range ellipses, the build highlight and clicks all go through the projection and its inverse, and everything on the map sorts by projected y. The canvas zooms as a whole by the largest whole number that fits the window and letterboxes the rest; no sprite is scaled on its own and nothing is ever scaled by a fraction. Tile size is render-only: the sim's tile stays 1000 units, so ranges and path lengths do not change. (The ring keeps D2's 64 x 32 diamond rather than the 48 px square tiles first asked for, because the isometric view is locked above.)
 
 - Monsters, heroes and missiles: classic DCC/DC6 frames composited through COF layer files, coloured with the Act 1 palette (pal.dat) and the PL2 colour shifts for champions and uniques.
 - UI, skill icons, item art, fonts: D2R HD .sprite files, decoded to PNG.
-- Map (M5): the Blood Moor, baked at extraction from the player's DT1 tiles (decoder ported from OpenDiablo2) and our layout in src/data/map/bloodmoor.json. Grass and dirt floor tiles from Act1/Town/Floor.dt1 cover the map area, a dirt road follows the sim path with a noisy blended edge, rock floor tiles are sprinkled in, and trees, rock piles, fences and ruins stand around and on the map as prefabs of DT1 pieces. Each prefab is its own image anchored at its foot so units sort in front of and behind it; shadows are baked into the ground. Scenery on the playable grid blocks building on those tiles.
+- Map: the ring is grey-boxed (flat tiles: dirt path, dark scenery, grass edged in each arc owner's colour) until its Blood Moor bake. The M5 bake of the old straight road is gone with that road.
 - Sound (M5): D2R's own FLAC from the CASC, chosen through the tables: skills.txt cast sounds, missiles.txt travel and hit sounds, monsounds.txt death sounds, the gold chime, and the Wilderness song and day ambience from levels.txt and soundenviron.txt. D2's hand cursor and D2R's Exocet font come from the same extraction.
 
 Pipeline, a Node script run locally against files exported with CascView:
@@ -218,14 +224,14 @@ HD 3D experiment, after M2: export one monster's .model (Granny GR2) and texture
 
 ## Multiplayer
 
-FFA on separate lanes and team mode with chained zones and shared lives, built as lockstep from M1 and shipped at M4 with host-and-play. No cloud server needed for a handful of friends.
+FFA on a ring each and team mode on one shared ring, built as lockstep from M1 and shipped at M4 with host-and-play. No cloud server needed for a handful of friends.
 
-- Players: 2 to 6. FFA gives everyone an identical lane, the same waves and the same seed; last one standing wins. Sending extra monsters at a rival is the same tech and can come later.
-- Team mode: zones sit along one path in player order. A leak from zone 1 walks into zone 2. Kill gold goes to the owner of the tower that killed. Only a leak past the last zone costs the team a life.
+- Players: 2 to 6 in FFA, 2 to 4 in team. FFA gives everyone an identical ring, the same waves and the same seed; the last ring standing wins. Sending extra monsters at a rival is the same tech and can come later.
+- Team mode: one ring, an arc per player (see Core loop and map). Kill gold goes to the owner of the tower that killed; the team shares the alive count. The relay refuses a team start with more than four players.
 - Lockstep: every client runs the same deterministic simulation from the same seed. The only network traffic is the ordered command stream (build, upgrade, sell, evolve, call wave), relayed by the host. Fixed 20 ticks per second, seeded RNG, integer math in gameplay code, a state hash every 100 ticks to catch desync. A TD tolerates 200 ms of command delay without anyone noticing.
 - Hosting: the host's Electron app carries the relay, so any friend who clicks Host is the server for that game; the others join with a code that carries the host's address. One forwarded TCP port on the host's router is the only setup; the app asks the router to open it by UPnP first, so most friends never touch router settings. Behind CGNAT with no public IP, Tailscale (free for a few people) replaces the port forward. For games the host is not in, the same relay runs as a service on a Pi, a NAS or an existing web server. If the host drops, the game ends.
 - Wave clock (built in M4): in FFA and team, waves start in every lane together, either when every player still in has pressed Call Wave or when the clock runs out (time to wave 1 and between waves: see src/data/balance.json, multiplayer). Independent wave calls could not settle "last one standing". Solo keeps Call Wave as it was.
-- How it is built (M4): each player's zone is the single-player sim; a Match steps them together and moves team leaks to the next zone with their damage kept. The relay never runs the game: it keeps the lobby, stamps commands into one bundle per tick, and compares the hashes players report. Commands are validated at the relay. Players must have the same app version and the same extracted tables (checked at join), or their sims would differ. Join codes are 12 characters carrying the host's IPv4 address and port with a check against typos. An online game cannot pause; Escape opens a menu over the running game. Players can watch any zone with the number keys but only build in their own. Port 47310.
+- How it is built (M4, ring Oct 2026): a ring is one sim; single player and team run one, FFA one per player, and a Match steps them together. On a team ring every command carries its player (set by the match from the relay's slot), towers carry their owner, and gold is per player. The relay never runs the game: it keeps the lobby, stamps commands into one bundle per tick, and compares the hashes players report. Commands are validated at the relay. Players must have the same app version and the same extracted tables (checked at join), or their sims would differ. Join codes are 12 characters carrying the host's IPv4 address and port with a check against typos. An online game cannot pause; Escape opens a menu over the running game. Players can look at anyone's towers but only build on their own arc or ring. Port 47310.
 
 ## Tech stack
 
@@ -255,7 +261,7 @@ Each milestone has one gate. Nothing moves to the next until the gate is met, be
 
 Answer these in the doc or in chat; each one changes code in M2 or M3.
 
-- [ ] Team mode gold: zones after the first only earn from what leaks to them, so the last players starve while the first carries the team. In the M4 soak four bots lost a team game the same bots win alone. Share kill gold across the team, give every zone a trickle, or spawn a share of each wave in every zone?
+- [x] Team mode gold: chained zones starved the last players. Answered by the ring (Oct 2026): every player's arc spawns its own wave and kill gold goes to the killer.
 
 - [ ] Smite: the stun alternative at Zealot T1, or saved for the Smiter evolution?
 - [ ] Aura line: picks at T2 and T3 (Concentration or Holy Freeze, Fanaticism or Conviction), or one fixed skill per tier?
@@ -267,5 +273,5 @@ Answer these in the doc or in chat; each one changes code in M2 or M3.
 - [ ] Skill levels per tier: 5, or 20 straight from skills.txt (Joel's 20+ upgrades)? The harness fixed total spend per tier (see src/data/balance.json); more levels means a gentler multiplier over the same total, not more gold.
 - [ ] Random mode as a lobby toggle: random T1 skill for +25% gold?
 - [ ] Items and runes persist across runs (D2 stash), or reset every run?
-- [ ] Sell refund 60% and 20 lives: keep?
+- [ ] Sell refund 60%: keep?
 - [ ] Working title.

@@ -134,7 +134,7 @@ describe('relay game', () => {
     expect(await ann.next('desync')).toEqual({ t: 'desync', tick: 100 });
   });
 
-  it('four bots play a team match over TCP and stay in lockstep', async () => {
+  it('four bots play an FFA match over TCP and stay in lockstep', async () => {
     const LIMIT = 3000;
     const port = await relay();
     const strategies: Strategy[] = ['PALADIN', 'HOLY', 'TWOLINE', 'BOLT'];
@@ -163,6 +163,8 @@ describe('relay game', () => {
     });
     await players[0]!.next('welcome');
     for (const p of players.slice(1)) await p.next('welcome');
+    // The bots play a ring of their own; a team shares one ring
+    players[0]!.conn.send({ t: 'mode', mode: 'ffa' });
     players[0]!.conn.send({ t: 'start' });
     const hashes = await Promise.all(finals);
     expect(desync).toBe(false);

@@ -6,7 +6,7 @@ import Phaser from 'phaser';
 
 import { LOBBY_MODES, type LobbyPlayer } from '../net/protocol.ts';
 import { DIFFICULTY_NAMES } from '../sim/data.ts';
-import type { MatchMode } from '../sim/match.ts';
+import { MAX_TEAM_PLAYERS, type MatchMode } from '../sim/match.ts';
 import type { OnlineStart } from '../render/GameScene.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
 import { FONT, button } from '../render/ui.ts';
@@ -23,8 +23,8 @@ const MUTED = { ...TEXT, fontSize: '18px', color: '#a8a088' };
 const ERROR = { ...TEXT, color: '#ff8060' };
 
 const MODE_TEXT: Record<MatchMode, { name: string; about: string }> = {
-  team: { name: 'Team', about: "One path runs through everyone's zone in turn. Whatever gets past you walks into the next player's zone, and the team shares its lives." },
-  ffa: { name: 'Free for all', about: 'Everyone gets the same lane and the same waves. Run out of lives and you are out; the last one standing wins.' },
+  team: { name: 'Team', about: 'One ring, an arc each (up to four players). Monsters lap the ring until someone kills them, kill gold goes to the killer, and the team loses when 100 are alive at once.' },
+  ffa: { name: 'Free for all', about: 'Everyone gets their own ring and the same waves. Let 100 pile up on yours and you are out; the last ring standing wins.' },
   solo: { name: 'Solo', about: '' },
 };
 
@@ -212,7 +212,9 @@ export class LobbyScene extends Phaser.Scene {
     const loop = add(this.add.text(LEFT, y, 'After wave 30 the map loops at the next difficulty, up to Hell.', MUTED));
     y += loop.height + 30;
 
-    if (this.isHost) {
+    if (this.isHost && this.mode === 'team' && this.players.length > MAX_TEAM_PLAYERS) {
+      add(this.add.text(LEFT, y + 6, `A team takes up to ${MAX_TEAM_PLAYERS} players: pick Free for all, or wait for someone to leave.`, TEXT));
+    } else if (this.isHost) {
       this.parts.push(...button(this, LEFT, y, { label: 'Start', onClick: () => this.session.send({ t: 'start' }), colour: '#6a3020', width: 200 }));
     } else {
       add(this.add.text(LEFT, y + 6, 'Waiting for the host to start.', TEXT));

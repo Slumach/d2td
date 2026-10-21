@@ -53,7 +53,8 @@ export interface SmokeResult {
   setup: SetupResult;
   wave: number;
   kills: number;
-  lives: number;
+  /** The alive weight on the ring when the smoke test stopped. */
+  alive: number;
   waveCleared: boolean;
   error?: string;
 }

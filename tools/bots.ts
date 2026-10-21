@@ -22,8 +22,8 @@ import { auraSources } from '../src/sim/auras.ts';
 import { EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, type GameData } from '../src/sim/data.ts';
 import { tileCenter, isPathTile } from '../src/sim/map.ts';
 import { activeSkill, canBuild, createSim, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
-import { leakCost, withMods } from '../src/sim/combat.ts';
-import { ELEMENTS, type Command, type Element, type Rank, type Sim, type TimedCommand, type Tower } from '../src/sim/state.ts';
+import { withMods } from '../src/sim/combat.ts';
+import { ELEMENTS, type Command, type Element, type Sim, type TimedCommand, type Tower } from '../src/sim/state.ts';
 
 export type Strategy = 'BOLT' | 'HOLY' | 'TWOLINE' | 'PALADIN' | 'SORC' | 'NECRO' | 'MIXED3';
 /** The Normal balance targets' bots; the class bots play the Hell gate. */
@@ -468,7 +468,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
     for (const spot of candidates) {
       const c = tileCenter(spot);
       const fresh: Tower = {
-        id: -1, cls, tileX: spot.x, tileY: spot.y, x: c.x, y: c.y, line, tier: 1, level: 1,
+        id: -1, owner: 0, cls, tileX: spot.x, tileY: spot.y, x: c.x, y: c.y, line, tier: 1, level: 1,
         picks: [skill], spent: 0, cooldown: 0, targeting: 'first', evolved: '', partnerSkill: '', partnerLevel: 0, summonCooldown: 0, partnerCooldown: 0,
       };
       out.push({
@@ -574,11 +574,11 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
 
   const levelUp = (s: Sim, t: Tower): Command[] => {
     const cost = upgradeCost(s, t);
-    return cost !== undefined && s.state.gold >= cost ? [{ type: 'upgrade', towerId: t.id }] : [];
+    return cost !== undefined && (s.state.gold[0] ?? 0) >= cost ? [{ type: 'upgrade', towerId: t.id }] : [];
   };
   const tierUp = (s: Sim, t: Tower, skill: (options: string[]) => string): Command[] => {
     const cost = tierCost(s, t);
-    if (cost === undefined || s.state.gold < cost) return [];
+    if (cost === undefined || (s.state.gold[0] ?? 0) < cost) return [];
     const opts = s.data.classes[t.cls]!.lines[t.line]!.tiers[t.tier] ?? [];
     const out: Command[] = [{ type: 'upgradeTier', towerId: t.id }];
     if (opts.length > 1) out.push({ type: 'pickBranch', towerId: t.id, skill: skill(opts) });
@@ -599,7 +599,7 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
           goals.shift();
           continue;
         }
-        if (!canBuild(s, spot.x, spot.y) || s.state.gold < s.data.economy.buildCost) return [];
+        if (!canBuild(s, spot.x, spot.y) || (s.state.gold[0] ?? 0) < s.data.economy.buildCost) return [];
         tags[goal.tag] = s.state.nextId;
         return [{ type: 'build', x: spot.x, y: spot.y, cls: lineOf(s, goal.skill).cls, skill: goal.skill }];
       }
@@ -625,7 +625,7 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
         goals.shift();
         continue;
       }
-      if (s.state.gold < s.data.economy.evolveCost) return [];
+      if ((s.state.gold[0] ?? 0) < s.data.economy.evolveCost) return [];
       evolvedOn[match.recipe.id] = s.state.wave;
       goals.shift();
       return [{ type: 'evolve', towerA: a.id, towerB: b.id }];
@@ -648,7 +648,7 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
         if (o.gain <= 0) continue;
         if (!best || o.gain / o.cost > best.gain / best.cost) best = o;
       }
-      if (!best || s.state.gold < (best.stepCost ?? best.cost)) return out;
+      if (!best || (s.state.gold[0] ?? 0) < (best.stepCost ?? best.cost)) return out;
       return [...best.commands, ...out];
     },
   };
@@ -718,7 +718,8 @@ export interface RunResult {
   won: boolean;
   /** Last wave called; the wave that ended the run on a loss. */
   wave: number;
-  lives: number;
+  /** The most weight alive on the ring at any tick. */
+  peakAlive: number;
   gold: number;
   towers: number;
   /** Sum of tower progress: (tier - 1) * 5 + level. */
@@ -733,38 +734,32 @@ export interface RunResult {
 }
 
 /**
- * How close a wave came. livesLost counts leaks from that wave's own monsters; finish is
- * how far along the path (per mille) its last monster got before it died, 1000 if it leaked.
+ * How close a wave came: the most weight alive on the ring while it was out, and how far
+ * round the ring (per mille of a lap) its last monster walked before it died.
  */
 export interface WaveMargin {
   wave: number;
-  livesLost: number;
-  finish: number;
+  peakAlive: number;
+  laps: number;
 }
 
 /** Watches state tick by tick to log margins, without touching the sim. */
 class MarginLog {
   readonly margins: WaveMargin[] = [];
-  private prev = new Map<number, { wave: number; dist: number; rank: Rank; def: string }>();
-  private lost = new Map<number, number>();
+  private prev = new Map<number, { wave: number; walked: number }>();
+  private peak = new Map<number, number>();
   private done = new Set<number>();
 
   observe(sim: Sim): void {
     const s = sim.state;
-    const now = new Map(s.monsters.map((m) => [m.id, { wave: m.wave, dist: m.dist, rank: m.rank, def: m.def }]));
+    for (const w of new Set(s.monsters.map((m) => m.wave))) this.peak.set(w, Math.max(this.peak.get(w) ?? 0, s.alive));
+    const now = new Map(s.monsters.map((m) => [m.id, { wave: m.wave, walked: m.walked }]));
     for (const [id, m] of this.prev) {
       if (now.has(id)) continue;
-      // Gone this tick: leaked if it was on the last stretch and lives dropped, else killed where it stood
-      const leaked = m.dist + 400 >= sim.map.length;
-      if (leaked) this.lost.set(m.wave, (this.lost.get(m.wave) ?? 0) + leakCost(sim, m));
       const w = s.waves[m.wave];
       if (w && w.remaining === 0 && !this.done.has(m.wave)) {
         this.done.add(m.wave);
-        this.margins.push({
-          wave: m.wave + 1,
-          livesLost: this.lost.get(m.wave) ?? 0,
-          finish: leaked ? 1000 : Math.round((m.dist * 1000) / sim.map.length),
-        });
+        this.margins.push({ wave: m.wave + 1, peakAlive: this.peak.get(m.wave) ?? 0, laps: Math.round((m.walked * 1000) / sim.map.length) });
       }
     }
     this.prev = now;
@@ -786,11 +781,13 @@ export function runBot(
   const log: TimedCommand[] = [];
   const margins = new MarginLog();
   let topTier = 0;
+  let peakAlive = 0;
   while (sim.state.status === 'playing' && sim.state.tick < maxTicks) {
     const commands = bot.decide(sim);
     for (const command of commands) log.push({ tick: sim.state.tick, command });
     step(sim, commands);
     margins.observe(sim);
+    peakAlive = Math.max(peakAlive, sim.state.alive);
     for (const t of sim.state.towers) topTier = Math.max(topTier, t.tier);
     onTick?.(sim);
   }
@@ -800,8 +797,8 @@ export function runBot(
     seed,
     won: s.status === 'won',
     wave: s.wave,
-    lives: s.lives,
-    gold: s.gold,
+    peakAlive,
+    gold: s.gold[0] ?? 0,
     towers: s.towers.length,
     levels: s.towers.reduce((n, t) => n + progress(t), 0),
     topTier,

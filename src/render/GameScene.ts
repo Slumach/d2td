@@ -1,6 +1,9 @@
 // The game scene: the sim's state drawn with the pipeline's D2 sprites. It reads sim state
 // and never writes to it: every player action becomes a Command stamped with the tick it
 // runs on, the same stream a lockstep peer would get.
+//
+// The ring is drawn in world space under a camera that pans and zooms (view.ts); the HUD,
+// panel and minimap sit flat over it on their own camera.
 
 import Phaser from 'phaser';
 
@@ -10,12 +13,11 @@ import { menuMusic, preloadFrontend } from '../launcher/frontend.ts';
 import { MpSession } from '../launcher/session.ts';
 import { Lockstep } from '../net/lockstep.ts';
 import type { LobbyPlayer } from '../net/protocol.ts';
-import { leakCost } from '../sim/combat.ts';
 import { baseMonsterId, buildGameData, DIFFICULTY_NAMES, MAX_TOWER_LEVEL, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
 import { standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
-import { livesOf, playersIn, type MatchMode } from '../sim/match.ts';
-import { isPathTile } from '../sim/map.ts';
+import { aliveOf, arcOwner, playersIn, ringOf, seatOf, type MatchMode } from '../sim/match.ts';
+import { ARC_COUNT, arcAt, isBlocked, isPathTile, positionAt } from '../sim/map.ts';
 import {
   activeSkill,
   canBuild,
@@ -37,8 +39,6 @@ import { TARGETING_MODES } from '../sim/state.ts';
 import type { DebuffDef, PierceDef, SkillDef } from '../sim/archetypes/types.ts';
 import { SKILL_ART, STATUS_OVERLAYS, SUMMON_BOLTS } from './art.ts';
 import {
-  GROUND_KEY,
-  MAP_KEY,
   animKey,
   createAnimations,
   heroAttackMode,
@@ -50,16 +50,16 @@ import {
   monsterKey,
   originOf,
   preloadAssets,
-  sceneryKey,
   type IconIndex,
-  type MapManifest,
 } from './assets.ts';
 import { D2Hud, hudManifest, preloadHud, type PanelButton, type SlotItem, type TowerPanelModel } from './d2hud.ts';
 import { angle64, spriteDirection } from './directions.ts';
 import { LocalDriver, NetDriver, type Driver } from './driver.ts';
 import { facingFromVector, type Facing8 } from './facing.ts';
-import { ISO_H, ISO_W, ORIGIN, ellipseOf, project, screenVector, tileAtScreen, tileDiamond } from './iso.ts';
+import { ISO_H, ISO_W, WORLD_WIDTH, ellipseOf, project, screenVector, tileAtWorld, tileDiamond } from './iso.ts';
 import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, PANEL_TOP } from './layout.ts';
+import { Minimap } from './minimap.ts';
+import { WorldView } from './view.ts';
 import { SkillFx, type Point } from './skillfx.ts';
 import { SoundBank, preloadSounds } from './sound.ts';
 import { FONT, buttonRow, createTooltip, type ButtonSpec, type Tooltip } from './ui.ts';
@@ -94,6 +94,10 @@ const SHOVE_PX = 14;
 const TICK_MS = 1000 / TICKS_PER_SECOND;
 
 const DEPTH = { ground: 1, rings: 2, corpses: 3, units: 10, overlay: 1500, effects: 2000, chrome: 2900 };
+/** Each player's colour: their arcs on the map and the minimap. */
+const PLAYER_COLOURS = [0xc8a040, 0x4a84d8, 0xc84a3a, 0x60b060, 0xa070e0, 0x50c0c0];
+/** The alive bar across the top of the screen. */
+const ALIVE_BAR = { width: 440, height: 16, y: 10 };
 /** Dev: ?debug logs every sprite the scene creates. */
 const DEBUG = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug');
 
@@ -157,8 +161,13 @@ export class GameScene extends Phaser.Scene {
   private driver: Driver | undefined;
   private gameData!: GameData;
   private seed = 1;
-  /** The zone on screen: your own, or another player's while watching. */
+  /** The ring on screen: your own, or another FFA player's while watching. */
   private view = 0;
+  private camera!: WorldView;
+  private minimap!: Minimap;
+  private aliveGfx!: Phaser.GameObjects.Graphics;
+  private aliveText!: Phaser.GameObjects.Text;
+  private groundGfx: Phaser.GameObjects.Graphics | undefined;
   /** Why an online game stopped early (desync, host gone); empty while it runs. */
   private halted = '';
   private lastTick = -1;
@@ -209,14 +218,44 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** The zone on screen. */
+  /** The ring on screen. */
   private get sim(): Sim {
     return this.driver!.match.zones[this.view]!;
+  }
+
+  /** Who this player is on the ring on screen (their slot on a team ring). */
+  private get seat(): number {
+    return this.driver ? seatOf(this.driver.match, this.driver.me) : 0;
+  }
+
+  /** This player's gold. */
+  private get gold(): number {
+    return this.sim.state.gold[this.seat] ?? 0;
+  }
+
+  /** The colour of whoever defends an arc of the ring on screen. */
+  private arcColour(arc: number): number {
+    return PLAYER_COLOURS[this.driver ? arcOwner(this.driver.match, this.view, arc) % PLAYER_COLOURS.length : 0]!;
+  }
+
+  /** Puts the camera over a player's own arc. */
+  private lookAtArcOf(player: number): void {
+    const match = this.driver!.match;
+    const sim = match.zones[ringOf(match, player)]!;
+    const arc = sim.arcOwners.indexOf(seatOf(match, player));
+    const a = sim.map.arcs[Math.max(0, arc)]!;
+    // The middle of its long straight, pulled a little into the interior
+    const p = positionAt(sim.map, a.start + sim.map.length / ARC_COUNT / 2);
+    const mid = { x: (p.x + (sim.map.width * UNITS_PER_TILE) / 2) / 2, y: (p.y + (sim.map.height * UNITS_PER_TILE) / 2) / 2 };
+    const at = project((p.x * 3 + mid.x) / 4, (p.y * 3 + mid.y) / 4);
+    this.camera.centreOn(at.x, at.y);
   }
 
   create(start?: OnlineStart | SoloStart): void {
     this.driver = undefined;
     this.halted = '';
+    this.groundGfx = undefined;
+    this.camera = new WorldView(this, (p) => this.onMapClick(p));
     this.clearViews();
     if (!TABLE_NAMES.every((name) => this.cache.json.exists(name))) return;
     const tables = Object.fromEntries(TABLE_NAMES.map((name) => [name, this.cache.json.get(name)])) as unknown as Tables;
@@ -237,7 +276,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.icons = iconIndex(this);
     createAnimations(this);
-    this.fx = new SkillFx(this, DEPTH.effects);
+    this.fx = this.camera.asWorld(() => new SkillFx(this, DEPTH.effects));
     menuMusic(this, false);
     this.sounds = new SoundBank(this);
     this.sounds.startLoops();
@@ -246,9 +285,19 @@ export class GameScene extends Phaser.Scene {
     this.d2 = hudArt ? new D2Hud(this, hudArt, () => this.issue({ type: 'callWave' })) : undefined;
     // The plain HUD and panel backgrounds sit over the map, so tall scenery never paints across them
     if (!this.d2) this.add.graphics().setDepth(DEPTH.chrome).fillStyle(0x1a1a14).fillRect(0, 0, GAME_WIDTH, HUD_HEIGHT).fillRect(0, PANEL_TOP, GAME_WIDTH, GAME_HEIGHT - PANEL_TOP);
-    this.drawGround();
-    this.ringGfx = this.add.graphics().setDepth(DEPTH.rings);
-    this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
+    this.camera.asWorld(() => {
+      this.drawGround();
+      this.ringGfx = this.add.graphics().setDepth(DEPTH.rings);
+      this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
+    });
+    this.minimap = new Minimap(this, this.camera, GAME_WIDTH - WORLD_WIDTH / 16 - 12, 84, 3100);
+    this.aliveGfx = this.add.graphics().setDepth(3100);
+    this.aliveText = this.add
+      .text(GAME_WIDTH / 2, ALIVE_BAR.y + ALIVE_BAR.height / 2, '', { fontFamily: FONT, fontSize: '15px', color: '#f0e6d0' })
+      .setOrigin(0.5)
+      .setDepth(3101)
+      .setShadow(1, 1, '#000000', 2);
+    this.lookAtArcOf(this.driver.me);
 
     const text = { fontFamily: FONT, fontSize: '24px', color: '#e8e0c0' };
     const online = this.driver.online;
@@ -274,6 +323,7 @@ export class GameScene extends Phaser.Scene {
       .on('pointerdown', () => (this.driver?.online ? this.leaveOnline() : this.restartRun()));
 
     this.input.mouse?.disableContextMenu();
+    // Keys 1 to n: on a team ring, look at that player's arc; in FFA, watch their ring
     this.input.keyboard?.on('keydown-ESC', () => {
       if (!this.scene.isActive() || this.scene.isActive('Pause')) return;
       // An online game cannot stop for one player: the menu opens over it while it runs
@@ -283,13 +333,13 @@ export class GameScene extends Phaser.Scene {
     if (online) {
       this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
         const n = Number(e.key);
-        if (Number.isInteger(n) && n >= 1 && n <= this.driver!.match.zones.length && n - 1 !== this.view) this.watch(n - 1);
+        const match = this.driver!.match;
+        if (!Number.isInteger(n) || n < 1 || n > match.players) return;
+        if (match.state.mode === 'ffa' && n - 1 !== this.view) this.watch(n - 1);
+        else this.lookAtArcOf(n - 1);
       });
     }
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => (this.hover = this.tileAt(p)));
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
-      if (over.length === 0) this.onMapClick(p);
-    });
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => (this.hover = this.camera.dragging ? undefined : this.tileAt(p)));
     this.events.emit('game-ready');
   }
 
@@ -297,16 +347,23 @@ export class GameScene extends Phaser.Scene {
 
   private tileAt(p: Phaser.Input.Pointer): { x: number; y: number } | undefined {
     if (this.d2 ? this.d2.covers(p.x, p.y) : p.y < HUD_HEIGHT || p.y >= PANEL_TOP) return undefined;
-    return tileAtScreen(p.x, p.y);
+    const w = this.camera.worldPoint(p.x, p.y);
+    return tileAtWorld(w.x, w.y);
+  }
+
+  /** True when the ring on screen is this player's own. */
+  private get onOwnRing(): boolean {
+    return !!this.driver && this.view === ringOf(this.driver.match, this.driver.me);
   }
 
   private onMapClick(p: Phaser.Input.Pointer): void {
-    if (!this.driver || this.sim.state.status !== 'playing' || this.view !== this.driver.me || this.halted) return;
+    if (!this.driver || this.sim.state.status !== 'playing' || this.halted) return;
     const tile = this.tileAt(p);
     if (!tile) return;
+    // Anyone's tower can be looked at; only your own arc's free tiles can be built on
     const tower = towerAt(this.sim, tile.x, tile.y);
     if (tower) this.selection = { kind: 'tower', id: tower.id };
-    else if (canBuild(this.sim, tile.x, tile.y)) this.selection = { kind: 'tile', x: tile.x, y: tile.y };
+    else if (this.onOwnRing && canBuild(this.sim, tile.x, tile.y, this.seat)) this.selection = { kind: 'tile', x: tile.x, y: tile.y };
     else this.selection = undefined;
     this.panelKey = '';
   }
@@ -386,10 +443,11 @@ export class GameScene extends Phaser.Scene {
     this.scene.start('Menu');
   }
 
-  /** Online: show another player's zone. Building waits until you are back on your own. */
-  private watch(zone: number): void {
-    this.view = zone;
+  /** FFA: show another player's ring. Building waits until you are back on your own. */
+  private watch(ring: number): void {
+    this.view = ring;
     this.clearViews();
+    this.redrawGround();
   }
 
   private nameOf(slot: number): string {
@@ -400,9 +458,10 @@ export class GameScene extends Phaser.Scene {
     if (!this.driver) return;
     // Dev: ?speed=N runs N times as many ticks per frame (previews and the smoke test)
     const speed = (this.registry.get('speed') as number | undefined) ?? 1;
+    this.camera.update(delta);
     if (!this.halted) {
       this.driver.advance(delta, speed, () => {
-        this.syncTick();
+        this.camera.asWorld(() => this.syncTick());
         this.events.emit('sim-tick', this.sim.state.tick);
       });
     }
@@ -419,7 +478,8 @@ export class GameScene extends Phaser.Scene {
     this.drawOverlay();
     this.drawHud();
     this.drawPanel();
-    this.fx?.update();
+    this.camera.asWorld(() => this.fx?.update());
+    this.minimap.draw(this.sim, (arc) => this.arcColour(arc));
   }
 
   // ---- sprites, synced once per sim tick ----
@@ -843,30 +903,27 @@ export class GameScene extends Phaser.Scene {
 
   // ---- shapes that stay shapes: ground, rings, bars ----
 
+  /**
+   * The ring as flat tiles until its art is baked: dirt on the path, dark scenery, grass
+   * where towers go, each arc's grass edged in the colour of the player who defends it.
+   */
   private drawGround(): void {
-    const manifest = this.cache.json.get(MAP_KEY) as MapManifest | undefined;
-    if (manifest && this.textures.exists(GROUND_KEY)) {
-      // The baked Blood Moor; a layout change since the bake only shifts it
-      const dx = ORIGIN.x - manifest.ground.originX;
-      const dy = ORIGIN.y - HUD_HEIGHT - manifest.ground.originY;
-      this.add.image(dx, HUD_HEIGHT + dy, GROUND_KEY).setOrigin(0).setDepth(DEPTH.ground);
-      for (const obj of manifest.objects) {
-        const prefab = manifest.prefabs[obj.prefab];
-        if (!prefab || !this.textures.exists(sceneryKey(obj.prefab))) continue;
-        const p = project(obj.at[0]! * UNITS_PER_TILE, obj.at[1]! * UNITS_PER_TILE);
-        const img = this.add.image(Math.round(p.x), Math.round(p.y), sceneryKey(obj.prefab));
-        img.setOrigin(prefab.anchorX / img.width, prefab.anchorY / img.height).setDepth(DEPTH.units + p.y / 1000);
-      }
-      return;
-    }
-    const g = this.add.graphics().setDepth(DEPTH.ground);
+    const g = (this.groundGfx ??= this.add.graphics().setDepth(DEPTH.ground)).clear();
     const { map } = this.sim;
     for (let y = 0; y < map.height; y++) {
       for (let x = 0; x < map.width; x++) {
-        g.fillStyle(isPathTile(map, x, y) ? 0x6a5a3a : (x + y) % 2 ? 0x2c3a24 : 0x30402a);
+        const path = isPathTile(map, x, y);
+        const blocked = isBlocked(map, x, y);
+        g.fillStyle(path ? 0x6a5a3a : blocked ? 0x1c2416 : (x + y) % 2 ? 0x2c3a24 : 0x30402a);
         g.fillPoints(tileDiamond(x, y), true);
+        if (!path && !blocked) g.lineStyle(1, this.arcColour(arcAt(map, x, y)), 0.18).strokePoints(tileDiamond(x, y), true);
       }
     }
+  }
+
+  /** The ring on screen changed (FFA watching): redraw its ground. */
+  private redrawGround(): void {
+    this.camera.asWorld(() => this.drawGround());
   }
 
   private drawOverlay(): void {
@@ -923,20 +980,31 @@ export class GameScene extends Phaser.Scene {
 
     if (this.hover && state.status === 'playing') {
       const { x, y } = this.hover;
-      const ok = canBuild(this.sim, x, y) || towerAt(this.sim, x, y) !== undefined;
+      const ok = (this.onOwnRing && canBuild(this.sim, x, y, this.seat)) || towerAt(this.sim, x, y) !== undefined;
       g.lineStyle(2, ok ? 0xffffff : 0xff4040, 0.6).strokePoints(tileDiamond(x, y), true);
     }
+  }
+
+  /** The alive count across the top: it fills as monsters pile up, and the run is lost when it is full. */
+  private drawAlive(alive: number): void {
+    const limit = this.sim.data.rules.aliveLimit;
+    const frac = Math.max(0, Math.min(1, alive / limit));
+    const { width, height, y } = ALIVE_BAR;
+    const x = GAME_WIDTH / 2 - width / 2;
+    const colour = frac < 0.5 ? 0x60a040 : frac < 0.8 ? 0xd0a030 : 0xd03020;
+    this.aliveGfx.clear().fillStyle(0x000000, 0.6).fillRect(x - 2, y - 2, width + 4, height + 4).fillStyle(colour).fillRect(x, y, Math.round(width * frac), height);
+    this.aliveText.setText(`Alive ${alive} / ${limit}`);
   }
 
   private drawHud(): void {
     const { state, data } = this.sim;
     if (this.driver?.online) return this.drawOnlineHud();
-    this.hud.setText(`Gold ${state.gold}   Lives ${state.lives}   Wave ${state.wave}/${data.waves.length}   Kills ${state.kills}`);
-    this.d2?.update({ gold: state.gold, lives: state.lives, maxLives: data.economy.lives, wave: this.waveLabel(state.wave), nextWave: this.nextWaveTip(state.wave) });
+    this.drawAlive(state.alive);
+    this.hud.setText(`Gold ${this.gold}   Wave ${state.wave}/${data.waves.length}   Kills ${state.kills}`);
+    this.d2?.update({ gold: this.gold, alive: state.alive, aliveLimit: data.rules.aliveLimit, wave: this.waveLabel(state.wave), nextWave: this.nextWaveTip(state.wave) });
     if (state.status !== 'playing' && !this.endOverlay.visible) {
-      this.endOverlay
-        .setText(`${state.status === 'won' ? 'Victory' : 'Defeat'}\nwave ${state.wave}, ${state.kills} kills\nclick to play again`)
-        .setVisible(true);
+      const why = state.status === 'won' ? 'Victory' : `Defeat: ${data.rules.aliveLimit} alive on the ring`;
+      this.endOverlay.setText(`${why}\nwave ${state.wave}, ${state.kills} kills\nclick to play again`).setVisible(true);
     }
   }
 
@@ -946,9 +1014,10 @@ export class GameScene extends Phaser.Scene {
     const m = match.state;
     const s = this.sim.state;
     const waves = match.data.waves.length;
-    const watching = this.view !== driver.me ? `   (watching ${this.nameOf(this.view)})` : '';
-    this.hud.setText(`Gold ${s.gold}   Lives ${livesOf(match, this.view)}   Wave ${m.wavesCalled}/${waves}   Kills ${s.kills}${watching}`);
-    this.d2?.update({ gold: s.gold, lives: livesOf(match, this.view), maxLives: match.data.economy.lives, wave: this.waveLabel(m.wavesCalled), nextWave: this.nextWaveTip(m.wavesCalled) });
+    const watching = !this.onOwnRing ? `   (watching ${this.nameOf(this.view)})` : '';
+    this.drawAlive(s.alive);
+    this.hud.setText(`Gold ${this.onOwnRing ? this.gold : '-'}   Alive ${s.alive}   Wave ${m.wavesCalled}/${waves}   Kills ${s.kills}${watching}`);
+    this.d2?.update({ gold: this.onOwnRing ? this.gold : 0, alive: s.alive, aliveLimit: match.data.rules.aliveLimit, wave: this.waveLabel(m.wavesCalled), nextWave: this.nextWaveTip(m.wavesCalled) });
 
     const parts: string[] = [];
     if (m.status === 'playing' && m.wavesCalled < waves) {
@@ -956,12 +1025,13 @@ export class GameScene extends Phaser.Scene {
       const ready = waiting.filter((p) => m.ready[p]).length;
       parts.push(`Next wave in ${Math.max(0, Math.ceil((m.nextWaveTick - m.tick) / TICKS_PER_SECOND))} s, ${ready}/${waiting.length} ready`);
     }
-    const names = match.zones.map((z, i) => {
-      const tag = m.mode === 'ffa' ? (z.state.status === 'lost' ? ' out' : ` ${z.state.lives}`) : '';
-      return `${i + 1} ${this.nameOf(i)}${tag}${i === this.view ? '*' : ''}`;
+    const names = Array.from({ length: match.players }, (_, p) => {
+      const tag = m.mode === 'ffa' ? (match.zones[p]!.state.status === 'lost' ? ' out' : ` ${aliveOf(match, p)}`) : '';
+      const here = m.mode === 'ffa' ? p === this.view : p === driver.me;
+      return `${p + 1} ${this.nameOf(p)}${tag}${here ? '*' : ''}`;
     });
-    parts.push(`${m.mode === 'team' ? 'Zones' : 'Lanes'}: ${names.join('  ')}`);
-    if (match.zones.length > 1) parts.push(`keys 1-${match.zones.length} watch`);
+    parts.push(`${m.mode === 'team' ? 'Arcs' : 'Rings'}: ${names.join('  ')}`);
+    if (match.players > 1) parts.push(`keys 1-${match.players} ${m.mode === 'team' ? 'look' : 'watch'}`);
     this.hud2.setText(parts.join('   |   '));
 
     if (m.status === 'over' && !this.endOverlay.visible && !this.halted) {
@@ -990,12 +1060,8 @@ export class GameScene extends Phaser.Scene {
     if (!def) return undefined;
     const nice = (id: string) => (data.monsters[id]?.name ?? id).replace(/([a-z])([A-Z])/g, '$1 $2');
     const mod = (m: string) => m.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
-    // What letting a special through costs: lives each, or the whole run
-    const leak = (g: WaveDef['groups'][number]) => {
-      if (g.rank === 'boss' && data.economy.bossLeakCost[baseMonsterId(g.monster)] === 'all') return 'a leak ends the run';
-      const n = leakCost(this.sim, { rank: g.rank, def: g.monster });
-      return `a leak costs ${n} ${n === 1 ? 'life' : 'lives'}${g.count > 1 ? ' each' : ''}`;
-    };
+    // What a special weighs on the alive count while it lives
+    const leak = (g: WaveDef['groups'][number]) => `weighs ${data.rules.aliveWeight[g.rank]} on the alive count${g.count > 1 ? ' each' : ''}`;
     const normal = new Map<string, number>();
     const special: string[] = [];
     for (const g of def.groups) {
@@ -1031,14 +1097,15 @@ export class GameScene extends Phaser.Scene {
     const sim = this.sim;
     const sel = this.selection;
     const tower = sel?.kind === 'tower' ? towerById(sim, sel.id) : undefined;
-    const key = JSON.stringify([this.view, sel, this.buildClass, tower && [tower.tier, tower.level, tower.picks, tower.targeting], sim.state.gold, sim.state.towers.length]);
+    const key = JSON.stringify([this.view, sel, this.buildClass, tower && [tower.tier, tower.level, tower.picks, tower.targeting], this.gold, sim.state.towers.length]);
     if (key === this.panelKey) return;
     this.panelKey = key;
     for (const o of this.panel) o.destroy();
     this.panel = [];
     this.tooltip.hide();
-    if (this.driver && this.view !== this.driver.me) {
-      this.info.setText(`Watching ${this.nameOf(this.view)}'s zone. Press ${this.driver.me + 1} to go back to yours.`);
+    if (!this.onOwnRing || (tower && tower.owner !== this.seat)) {
+      const whose = tower ? `${this.nameOf(this.driver?.match.state.mode === 'team' ? tower.owner : this.view)}'s tower` : `${this.nameOf(this.view)}'s ring`;
+      this.info.setText(`Looking at ${whose}.${this.onOwnRing ? '' : ` Press ${(this.driver?.me ?? 0) + 1} to go back to yours.`}`);
       this.d2?.setSlots([]);
       this.d2?.setTabs([]);
       this.d2?.setTowerPanel(undefined);
@@ -1061,7 +1128,7 @@ export class GameScene extends Phaser.Scene {
             this.skillButton(skill, `${line.name}: ${this.skillName(skill)}`, () => {
               this.issue({ type: 'build', x: sel.x, y: sel.y, cls, skill });
               this.selection = undefined;
-            }, sim.state.gold >= e.buildCost),
+            }, this.gold >= e.buildCost),
           );
         }
       }
@@ -1100,7 +1167,7 @@ export class GameScene extends Phaser.Scene {
           icon: spec.icon,
           title: `${line.name}: ${this.skillName(skill)}`,
           body: `${spec.tooltip?.body ?? ''}\n\nBuild for ${e.buildCost} gold`.trim(),
-          enabled: sim.state.gold >= e.buildCost,
+          enabled: this.gold >= e.buildCost,
           onClick: () => {
             this.issue({ type: 'build', x: sel.x, y: sel.y, cls, skill });
             this.selection = undefined;
@@ -1179,18 +1246,18 @@ export class GameScene extends Phaser.Scene {
     const buttons: PanelButton[] = [];
     const type = tower.line ? 'pickBranch' : 'pickSkill';
     for (const skill of pendingChoices(sim, tower)) buttons.push({ label: `Pick ${this.skillName(skill)}`, enabled: true, onClick: () => this.issue({ type, towerId: tower.id, skill }) });
-    if (level !== undefined) buttons.push({ label: `Upgrade ${level}g`, enabled: sim.state.gold >= level, onClick: () => this.issue({ type: 'upgrade', towerId: tower.id }) });
+    if (level !== undefined) buttons.push({ label: `Upgrade ${level}g`, enabled: this.gold >= level, onClick: () => this.issue({ type: 'upgrade', towerId: tower.id }) });
     if (tier !== undefined && line) {
       const options = line.tiers[tower.tier] ?? [];
       for (const skill of options) {
         const commands: Command[] = [{ type: 'upgradeTier', towerId: tower.id }];
         if (options.length > 1) commands.push({ type: 'pickBranch', towerId: tower.id, skill });
-        buttons.push({ label: options.length > 1 ? `Tier up: ${this.skillName(skill)}` : `Tier up ${tier}g`, enabled: sim.state.gold >= tier, onClick: () => this.issue(...commands) });
+        buttons.push({ label: options.length > 1 ? `Tier up: ${this.skillName(skill)}` : `Tier up ${tier}g`, enabled: this.gold >= tier, onClick: () => this.issue(...commands) });
       }
     }
     for (const other of sim.state.towers) {
       const match = evolutionFor(sim, tower, other);
-      if (match) buttons.push({ label: `Evolve ${match.recipe.name}`, enabled: sim.state.gold >= e.evolveCost, onClick: () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }) });
+      if (match) buttons.push({ label: `Evolve ${match.recipe.name}`, enabled: this.gold >= e.evolveCost, onClick: () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }) });
     }
     const next = TARGETING_MODES[(TARGETING_MODES.indexOf(tower.targeting) + 1) % TARGETING_MODES.length]!;
     buttons.push({ label: 'Targeting', enabled: true, onClick: () => this.issue({ type: 'setTargeting', towerId: tower.id, mode: next }) });
@@ -1227,7 +1294,7 @@ export class GameScene extends Phaser.Scene {
       const level = upgradeCost(sim, tower);
       if (level !== undefined) {
         specs.push({
-          ...this.skillButton(active.skill.id, `Level ${tower.level + 1} (${level}g)`, () => this.issue({ type: 'upgrade', towerId: tower.id }), sim.state.gold >= level),
+          ...this.skillButton(active.skill.id, `Level ${tower.level + 1} (${level}g)`, () => this.issue({ type: 'upgrade', towerId: tower.id }), this.gold >= level),
         });
       }
     }
@@ -1237,7 +1304,7 @@ export class GameScene extends Phaser.Scene {
       for (const skill of options) {
         const commands: Command[] = [{ type: 'upgradeTier', towerId: tower.id }];
         if (options.length > 1) commands.push({ type: 'pickBranch', towerId: tower.id, skill });
-        specs.push(this.skillButton(skill, `T${tower.tier + 1}: ${this.skillName(skill)} (${tier}g)`, () => this.issue(...commands), sim.state.gold >= tier));
+        specs.push(this.skillButton(skill, `T${tower.tier + 1}: ${this.skillName(skill)} (${tier}g)`, () => this.issue(...commands), this.gold >= tier));
       }
     } else if (!tower.evolved && line && tower.level < MAX_TOWER_LEVEL && tower.tier < line.tiers.length) {
       specs.push({ label: `T${tower.tier + 1} unlocks at level ${MAX_TOWER_LEVEL}`, enabled: false, onClick: () => undefined });
@@ -1246,7 +1313,7 @@ export class GameScene extends Phaser.Scene {
       const match = evolutionFor(sim, tower, other);
       if (!match) continue;
       specs.push({
-        ...this.skillButton(match.recipe.attack.skill, `Evolve ${match.recipe.name} (${e.evolveCost}g)`, () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }), sim.state.gold >= e.evolveCost),
+        ...this.skillButton(match.recipe.attack.skill, `Evolve ${match.recipe.name} (${e.evolveCost}g)`, () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }), this.gold >= e.evolveCost),
         colour: '#5a2a70',
       });
     }

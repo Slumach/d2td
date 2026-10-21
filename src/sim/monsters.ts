@@ -1,11 +1,11 @@
-// Monster spawning, abilities, movement and leaks.
+// Monster spawning, abilities and movement. Monsters walk the ring and lap it until killed.
 
 import { blockerAhead } from './archetypes/summon.ts';
-import { dealRaw, distSq, leakCost, monsterFx, removeMonster } from './combat.ts';
+import { dealRaw, distSq, monsterFx } from './combat.ts';
 import { idiv } from './fixed.ts';
-import { positionAt } from './map.ts';
+import { ahead, positionAt, wrap } from './map.ts';
 import { rollInt } from './rng.ts';
-import type { Monster, MonsterMod, PassedMonster, Rank, Sim } from './state.ts';
+import type { Monster, MonsterMod, Rank, Sim } from './state.ts';
 
 /** How long a shoved summon shows it, for the renderer. */
 const SHOVE_TICKS = 10;
@@ -26,6 +26,9 @@ export function createMonster(sim: Sim, def: string, wave: number, rank: Rank, m
   const at = positionAt(sim.map, dist);
   return {
     id: s.nextId++,
+    walked: 0,
+    lastHit: 0,
+    poisonBy: 0,
     def,
     wave,
     rank,
@@ -35,7 +38,7 @@ export function createMonster(sim: Sim, def: string, wave: number, rank: Rank, m
     maxHp,
     minDamage: d.minDamage + idiv(d.minDamage * damagePct, 100),
     maxDamage: d.maxDamage + idiv(d.maxDamage * damagePct, 100),
-    dist,
+    dist: wrap(sim.map, dist),
     x: at.x,
     y: at.y,
     slowPct: 0,
@@ -60,7 +63,7 @@ export function spawnMonsters(sim: Sim): void {
   const s = sim.state;
   while (s.spawns.length > 0 && s.spawns[0]!.tick <= s.tick) {
     const spawn = s.spawns.shift()!;
-    s.monsters.push(createMonster(sim, spawn.def, spawn.wave, spawn.rank, spawn.mods, 0));
+    s.monsters.push(createMonster(sim, spawn.def, spawn.wave, spawn.rank, spawn.mods, spawn.dist));
   }
 }
 
@@ -117,6 +120,7 @@ function tickStatuses(sim: Sim, m: Monster): boolean {
   }
   if (m.poisonTicks > 0) {
     m.poisonTicks--;
+    sim.actor = m.poisonBy;
     dealRaw(sim, m, m.poisonPerTick);
     if (m.poisonTicks === 0) m.poisonPerTick = 0;
   }
@@ -141,7 +145,7 @@ export function updateMonsters(sim: Sim): void {
     if (resurrect(sim, m)) continue;
 
     const speed = speedOf(sim, m);
-    const blocker = blockerAhead(sim, m, m.dist + speed);
+    const blocker = blockerAhead(sim, m, speed);
     if (blocker && m.blockedBy !== blocker.id) {
       m.blockedBy = blocker.id;
       m.blockedTicks = 0;
@@ -152,11 +156,11 @@ export function updateMonsters(sim: Sim): void {
       m.blockedBy = 0;
       m.blockedTicks = 0;
       blocker.shovedTicks = SHOVE_TICKS;
-      m.dist += speed;
+      walk(sim, m, speed);
     } else if (blocker) {
       // Stop at the blocker and fight it
       m.blockedTicks++;
-      m.dist = Math.max(m.dist, blocker.dist - rules.blockRangeUnits);
+      walk(sim, m, Math.max(0, ahead(sim.map, m.dist, blocker.dist) - rules.blockRangeUnits));
       if (m.attackCooldown === 0) {
         const hit = rollInt(s.rng, m.minDamage, m.maxDamage);
         blocker.hp -= hit - idiv(hit * Math.min(100, monsterFx(sim, m).damageDownPct), 100);
@@ -165,33 +169,18 @@ export function updateMonsters(sim: Sim): void {
     } else {
       m.blockedBy = 0;
       m.blockedTicks = 0;
-      m.dist += speed;
+      walk(sim, m, speed);
     }
     const p = positionAt(sim.map, m.dist);
     m.x = p.x;
     m.y = p.y;
   }
-
-  for (const m of s.monsters.filter((x) => x.dist >= sim.map.length)) {
-    if (sim.passLeaks) s.passed.push({ def: m.def, wave: m.wave, rank: m.rank, mods: [...m.mods], hp: m.hp, maxHp: m.maxHp });
-    else s.lives = Math.max(0, s.lives - leakCost(sim, m));
-    s.leaks++;
-    removeMonster(sim, m);
-  }
 }
 
-/**
- * A monster handed on from the previous zone enters at the start of the path, keeping its
- * wave, rank, mods and the damage it took. It counts toward its wave here as it would
- * have at home, so this zone's wave bonus waits for it too.
- */
-export function injectMonster(sim: Sim, p: PassedMonster): void {
-  const s = sim.state;
-  while (s.waves.length <= p.wave) s.waves.push({ remaining: 0, bounty: 0, early: false });
-  s.waves[p.wave]!.remaining++;
-  const m = createMonster(sim, p.def, p.wave, p.rank, [...p.mods], 0, p.maxHp);
-  m.hp = p.hp;
-  s.monsters.push(m);
+/** Moves a monster `step` units on around the ring. */
+function walk(sim: Sim, m: Monster, step: number): void {
+  m.dist = wrap(sim.map, m.dist + step);
+  m.walked += step;
 }
 
 export function decayCorpses(sim: Sim): void {
@@ -199,3 +188,4 @@ export function decayCorpses(sim: Sim): void {
   for (const c of s.corpses) c.ticksLeft--;
   s.corpses = s.corpses.filter((c) => c.ticksLeft > 0);
 }
+

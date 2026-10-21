@@ -17,7 +17,7 @@
 
 import { aliveWithin, damageAgainst, dealDamage, distSq, poison, withBonus } from '../combat.ts';
 import { UNITS_PER_TILE, d2FramesToTicks, idiv, isqrt } from '../fixed.ts';
-import { nearestPathDist, positionAt } from '../map.ts';
+import { ahead, nearestPathDist, positionAt, wrap } from '../map.ts';
 import { rollInt } from '../rng.ts';
 import type { Corpse, Element, Monster, Sim, Summon, Tower } from '../state.ts';
 import { findRow, int, str } from '../tables.ts';
@@ -54,7 +54,7 @@ const SPREAD = (UNITS_PER_TILE * 4) / 10;
 function rangedSpot(sim: Sim, tower: Tower, index: number): { dist: number; x: number; y: number } {
   const base = nearestPathDist(sim.map, tower);
   const step = Math.ceil(index / 2) * (index % 2 === 1 ? 1 : -1);
-  const dist = Math.max(0, Math.min(sim.map.length, base + step * SPREAD));
+  const dist = wrap(sim.map, base + step * SPREAD);
   const p = positionAt(sim.map, dist);
   const d = Math.max(1, isqrt(distSq(p, tower)));
   const off = Math.min(SIDE_OFFSET, d);
@@ -182,7 +182,7 @@ function shoot(sim: Sim, unit: Summon, target: Monster): void {
   const amount = rollInt(sim.state.rng, unit.minDamage, unit.maxDamage);
   if (unit.element === 'pois' && unit.effectTicks > 0) {
     // Like a skill's poison: resisted once, then spread
-    poison(target, damageAgainst(sim, target, amount, 'pois', ALL), unit.effectTicks);
+    poison(sim, target, damageAgainst(sim, target, amount, 'pois', ALL), unit.effectTicks);
     return;
   }
   const dealt = dealDamage(sim, target, amount, unit.element, ALL);
@@ -194,6 +194,7 @@ export function updateSummons(sim: Sim): void {
   const s = sim.state;
   const reach = sim.data.rules.blockRangeUnits + REACH;
   for (const unit of s.summons) {
+    sim.actor = s.towers.find((t) => t.id === unit.towerId)?.owner ?? 0;
     if (unit.shovedTicks > 0) unit.shovedTicks--;
     if (unit.kind === 'revive' && unit.ticksLeft > 0 && --unit.ticksLeft === 0) unit.hp = 0;
     if (unit.hp <= 0 || --unit.cooldown > 0) continue;
@@ -216,18 +217,23 @@ export function updateSummons(sim: Sim): void {
 }
 
 /**
- * The first living blocker ahead of a monster that it would run into walking to `next`.
- * Bosses are never blocked, and a monster is not held again by a blocker it broke through.
+ * The first living blocker ahead of a monster on the ring that it would run into walking
+ * `step` units on. Bosses are never blocked, and a monster is not held again by a blocker
+ * it broke through.
  */
-export function blockerAhead(sim: Sim, monster: Pick<Monster, 'dist' | 'rank' | 'brokeThrough'>, next: number): Summon | undefined {
+export function blockerAhead(sim: Sim, monster: Pick<Monster, 'dist' | 'rank' | 'brokeThrough'>, step: number): Summon | undefined {
   if (monster.rank === 'boss') return undefined;
   const block = sim.data.rules.blockRangeUnits;
-  const dist = monster.dist;
   let best: Summon | undefined;
+  let bestGap = 0;
   for (const unit of sim.state.summons) {
-    if (unit.kind === 'ranged' || unit.hp <= 0 || unit.dist <= dist - block || unit.dist - block > next) continue;
-    if (monster.brokeThrough.includes(unit.id)) continue;
-    if (!best || unit.dist < best.dist) best = unit;
+    if (unit.kind === 'ranged' || unit.hp <= 0 || monster.brokeThrough.includes(unit.id)) continue;
+    const gap = ahead(sim.map, monster.dist, unit.dist);
+    if (gap <= -block || gap - block > step) continue;
+    if (!best || gap < bestGap) {
+      best = unit;
+      bestGap = gap;
+    }
   }
   return best;
 }

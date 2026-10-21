@@ -23,7 +23,7 @@ const hell = () => testSim(fixtureGameData(30, { difficulty: 2 }));
 describe('cold', () => {
   it('Ice Bolt chills: the monster walks chillPct slower for the cold length, then recovers', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'ice-bolt');
+    placeTower(sim, 6, 5, 'ice-bolt');
     const m = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     freeze(m);
     const free = speedOf(sim, m);
@@ -37,7 +37,7 @@ describe('cold', () => {
 
   it('Glacial Spike freezes: a frozen monster stands still until it thaws', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'glacial-spike', { tier: 2 });
+    placeTower(sim, 6, 5, 'glacial-spike', { tier: 2 });
     const m = addMonster(sim, 'quillrat1', BESIDE - 500, { hp: 1_000_000 });
     for (let i = 0; i < 40 && m.freezeTicks === 0; i++) step(sim, []);
     expect(m.freezeTicks).toBeGreaterThan(0);
@@ -52,7 +52,7 @@ describe('cold', () => {
 
   it('bosses are chilled instead of frozen', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'glacial-spike', { tier: 2 });
+    placeTower(sim, 6, 5, 'glacial-spike', { tier: 2 });
     const boss = addMonster(sim, 'andariel', BESIDE, { rank: 'boss', hp: 1_000_000 });
     freeze(boss);
     for (let i = 0; i < 40 && boss.chillTicks === 0; i++) step(sim, []);
@@ -86,7 +86,7 @@ describe('immunities', () => {
 
   it('a tower whose element cannot hurt anything in range holds its fire', () => {
     const sim = hell();
-    placeTower(sim, 2, 4, 'ice-bolt');
+    placeTower(sim, 6, 5, 'ice-bolt');
     const zombie = addMonster(sim, 'zombie1@hell', BESIDE, { hp: 1_000_000 });
     freeze(zombie);
     ticks(sim, 40);
@@ -120,7 +120,7 @@ describe('Hell walls', () => {
     brute.curses = [{ skill: 'decrepify', lvl: 4, ticksLeft: 1000 }];
     expect(fifth(sim, brute, 'phys')).toBe(100 - Math.trunc(dec / 5));
     // Conviction and a curse add up, then the fifth applies to the total
-    const tower = placeTower(sim, 2, 4, 'conviction', { tier: 3 });
+    const tower = placeTower(sim, 6, 5, 'conviction', { tier: 3 });
     const conviction = (sim.data.skills['conviction'] as DebuffDef).levels[0]!.resistDown.fire!;
     fallen.x = tower.x;
     fallen.y = tower.y;
@@ -213,18 +213,34 @@ describe('Hell walls, round two', () => {
     expect(damageAgainst(h, pi, 1000, 'phys', ALL)).toBe(0);
   });
 
-  it('leaks of specials cost more: champion 2, unique 3, Blood Raven 5, Andariel the run', () => {
-    const lost = (def: string, rank: 'normal' | 'champion' | 'unique' | 'boss') => {
+  it('weighs the alive count by rank: regular 1, champion 2, unique 3, act boss 10', () => {
+    const weight = (def: string, rank: 'normal' | 'champion' | 'unique' | 'boss') => {
       const sim = testSim();
-      addMonster(sim, def, sim.map.length - 1, { rank });
+      addMonster(sim, def, 0, { rank });
       step(sim, []);
-      return { lost: sim.data.economy.lives - sim.state.lives, status: sim.state.status };
+      return sim.state.alive;
     };
-    expect(lost('zombie1', 'normal').lost).toBe(1);
-    expect(lost('zombie1', 'champion').lost).toBe(2);
-    expect(lost('zombie1', 'unique').lost).toBe(3);
-    expect(lost('bloodraven', 'boss').lost).toBe(5);
-    expect(lost('andariel', 'boss')).toEqual({ lost: testSim().data.economy.lives, status: 'lost' });
+    expect(weight('zombie1', 'normal')).toBe(1);
+    expect(weight('zombie1', 'champion')).toBe(2);
+    expect(weight('zombie1', 'unique')).toBe(3);
+    expect(weight('andariel', 'boss')).toBe(10);
+  });
+
+  it('nothing leaks: a monster laps the ring, and the run is lost when the alive weight reaches the limit', () => {
+    const sim = testSim();
+    const m = addMonster(sim, 'quillrat1', sim.map.length - 10);
+    step(sim, []);
+    expect(sim.state.monsters).toContain(m);
+    expect(m.dist).toBeLessThan(sim.map.length / 10);
+    expect(m.walked).toBeGreaterThan(0);
+    const limit = sim.data.rules.aliveLimit;
+    for (let i = 0; i < limit - 2; i++) addMonster(sim, 'zombie1', i * 500).stunTicks = 1_000_000;
+    step(sim, []);
+    expect(sim.state.alive).toBe(limit - 1);
+    expect(sim.state.status).toBe('playing');
+    addMonster(sim, 'zombie1', 777).stunTicks = 1_000_000;
+    step(sim, []);
+    expect(sim.state.status).toBe('lost');
   });
 });
 
@@ -232,7 +248,7 @@ describe('blocking has a limit', () => {
   /** A skeleton that cannot die standing on the path, with its tower gone so none respawn. */
   const held = (def: string, rank: 'normal' | 'boss' = 'normal') => {
     const sim = testSim();
-    const tower = placeTower(sim, 2, 4, 'raise-skeleton', { level: 5 });
+    const tower = placeTower(sim, 6, 5, 'raise-skeleton', { level: 5 });
     step(sim, []);
     const skeleton = sim.state.summons[0]!;
     skeleton.hp = skeleton.maxHp = 1_000_000;
@@ -314,10 +330,10 @@ describe('poison', () => {
     const sim = testSim();
     const m = addMonster(sim, 'quillrat1', BESIDE, { hp: 1_000_000 });
     freeze(m);
-    poison(m, 4000, 40);
+    poison(sim, m, 4000, 40);
     expect(m.poisonTicks).toBe(40);
     expect(m.poisonPerTick).toBe(100);
-    poison(m, 1000, 40);
+    poison(sim, m, 1000, 40);
     expect(m.poisonPerTick).toBe(100);
     ticks(sim, 40);
     expect(m.hp).toBe(1_000_000 - 4000);
@@ -326,7 +342,7 @@ describe('poison', () => {
 
   it('Poison Nova poisons everything its ring passes, once each', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'poison-nova', { tier: 3 });
+    placeTower(sim, 6, 5, 'poison-nova', { tier: 3 });
     const a = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     const b = addMonster(sim, 'quillrat1', BESIDE + 600, { hp: 1_000_000 });
     [a, b].forEach(freeze);
@@ -338,8 +354,8 @@ describe('poison', () => {
 describe('curses', () => {
   it('two curses on one monster: the strongest of each effect, never the sum', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'amplify-damage');
-    placeTower(sim, 1, 4, 'decrepify', { tier: 2 });
+    placeTower(sim, 6, 5, 'amplify-damage');
+    placeTower(sim, 5, 5, 'decrepify', { tier: 2 });
     const m = addMonster(sim, 'brute1', BESIDE, { hp: 1_000_000 });
     freeze(m);
     step(sim, []);
@@ -354,8 +370,8 @@ describe('curses', () => {
 
   it('a curse and an aura do add up', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'lower-resist', { tier: 3 });
-    placeTower(sim, 1, 4, 'conviction', { tier: 3 });
+    placeTower(sim, 6, 5, 'lower-resist', { tier: 3 });
+    placeTower(sim, 5, 5, 'conviction', { tier: 3 });
     const m = addMonster(sim, 'brute1', BESIDE, { hp: 1_000_000 });
     freeze(m);
     step(sim, []);
@@ -366,7 +382,7 @@ describe('curses', () => {
 
   it('wears off after its duration', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'amplify-damage');
+    placeTower(sim, 6, 5, 'amplify-damage');
     const m = addMonster(sim, 'brute1', BESIDE, { hp: 1_000_000 });
     freeze(m);
     step(sim, []);
@@ -381,7 +397,7 @@ describe('curses', () => {
   it('Decrepify halves what a cursed monster does to a blocker', () => {
     const lost = (curse: boolean) => {
       const sim = testSim();
-      const tower = placeTower(sim, 2, 4, 'raise-skeleton', { level: 5 });
+      const tower = placeTower(sim, 6, 5, 'raise-skeleton', { level: 5 });
       step(sim, []);
       const skeleton = sim.state.summons[0]!;
       skeleton.hp = skeleton.maxHp = 1_000_000;
@@ -402,7 +418,7 @@ describe('curses', () => {
 describe('Static Field and Enchant', () => {
   it('Static Field takes a percent of current HP, never below the difficulty floor', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'static-field');
+    placeTower(sim, 6, 5, 'static-field');
     const m = addMonster(sim, 'brute1', BESIDE, { hp: 1_000_000 });
     freeze(m);
     const pct = (sim.data.skills['static-field'] as DebuffDef).levels[0]!.hpPct;
@@ -410,7 +426,7 @@ describe('Static Field and Enchant', () => {
     expect(m.hp).toBe(1_000_000 - Math.trunc((1_000_000 * pct) / 100));
 
     const h = hell();
-    placeTower(h, 2, 4, 'static-field');
+    placeTower(h, 6, 5, 'static-field');
     const hm = addMonster(h, 'brute1@hell', BESIDE, { hp: 1_000_000 });
     freeze(hm);
     ticks(h, 2000);
@@ -419,8 +435,8 @@ describe('Static Field and Enchant', () => {
 
   it('Enchant adds fire to the hits of towers in its radius', () => {
     const sim = testSim();
-    const bolt = placeTower(sim, 2, 4, 'holy-bolt');
-    placeTower(sim, 2, 5, 'enchant', { tier: 2 });
+    const bolt = placeTower(sim, 6, 5, 'holy-bolt');
+    placeTower(sim, 6, 6, 'enchant', { tier: 2 });
     const buff = computeAuras(sim).towers[bolt.id]!;
     expect(buff.fireMax).toBeGreaterThan(0);
     const m = addMonster(sim, 'brute1', BESIDE, { hp: 1_000_000 });

@@ -41,7 +41,13 @@ export const MONSTER_MODS: readonly MonsterMod[] = [
   'cursed',
 ];
 
-export type Command =
+/**
+ * A player action. `player` says whose it is on a shared ring (team mode): the match sets
+ * it from the relay's slot, so a client can never act for someone else. Default 0.
+ */
+export type Command = CommandBody & { player?: number };
+
+export type CommandBody =
   /** `skill` makes the T1 pick in the same command; without it the tower is inert until pickSkill. */
   | { type: 'build'; x: number; y: number; cls: string; skill?: string }
   | { type: 'pickSkill'; towerId: number; skill: string }
@@ -70,10 +76,13 @@ export interface Monster {
   /** Attack damage against summons, 1/256 HP. */
   minDamage: number;
   maxDamage: number;
-  /** Distance walked along the path, in units. */
+  /** Where it is on the ring (wraps at the ring's length), and how far it has walked in all. */
   dist: number;
+  walked: number;
   x: number;
   y: number;
+  /** The player whose tower last hurt it: the kill gold goes to them. */
+  lastHit: number;
   /** Timed statuses from on-hit control skills. */
   slowPct: number;
   slowTicks: number;
@@ -84,6 +93,8 @@ export interface Monster {
   /** Poison left: this much off every tick for poisonTicks more ticks. */
   poisonTicks: number;
   poisonPerTick: number;
+  /** The player whose poison it is, for the kill. */
+  poisonBy: number;
   curses: Curse[];
   attackCooldown: number;
   /** Ticks until the next AI decision. */
@@ -106,6 +117,8 @@ export interface Curse {
 
 export interface Tower {
   id: number;
+  /** The player who built it; only they may change it. */
+  owner: number;
   cls: string;
   tileX: number;
   tileY: number;
@@ -204,23 +217,15 @@ export interface Spawn {
   wave: number;
   rank: Rank;
   mods: MonsterMod[];
-}
-
-/** A monster that walked off the end of a zone that passes leaks on (team mode). */
-export interface PassedMonster {
-  def: string;
-  wave: number;
-  rank: Rank;
-  mods: MonsterMod[];
-  hp: number;
-  maxHp: number;
+  /** Ring distance it appears at: a spawn point. */
+  dist: number;
 }
 
 export interface WaveProgress {
   /** Monsters queued or alive. */
   remaining: number;
-  /** Bounty earned from this wave's kills; the clear bonus is a percentage of it. */
-  bounty: number;
+  /** Bounty each player earned from this wave's kills; the clear bonus is a percentage of it. */
+  bounty: number[];
   early: boolean;
 }
 
@@ -229,13 +234,14 @@ export type Status = 'playing' | 'won' | 'lost';
 export interface SimState {
   tick: number;
   rng: Rng;
-  gold: number;
-  lives: number;
+  /** Gold by player: one entry in single player and FFA rings, one per player on a team ring. */
+  gold: number[];
+  /** Weight of everything alive on the ring (rules.aliveWeight); the run is lost at rules.aliveLimit. */
+  alive: number;
   /** Waves called so far; the current wave number for the HUD. */
   wave: number;
   status: Status;
   kills: number;
-  leaks: number;
   nextId: number;
   monsters: Monster[];
   towers: Tower[];
@@ -244,8 +250,6 @@ export interface SimState {
   corpses: Corpse[];
   spawns: Spawn[];
   waves: WaveProgress[];
-  /** Leaks this tick from a zone that passes them on; the match moves them to the next zone. */
-  passed: PassedMonster[];
 }
 
 /** An aura source this tick, kept for the renderer's radius rings. */
@@ -268,8 +272,11 @@ export interface AuraField {
 export interface Sim {
   readonly data: GameData;
   readonly map: GameMap;
-  /** Team mode, every zone but the last: leaks go to `state.passed` and cost no lives. */
-  readonly passLeaks: boolean;
+  /** Players on this ring, and the player who owns each arc (team mode splits the ring). */
+  readonly players: number;
+  readonly arcOwners: readonly number[];
   state: SimState;
   fx: AuraField;
+  /** Who is acting right now (a tower's owner), so a kill pays them. Not state: set before every action. */
+  actor: number;
 }

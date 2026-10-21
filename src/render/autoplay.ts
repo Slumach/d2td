@@ -27,35 +27,38 @@ interface Plan {
   evolve?: [number, number, number, number];
 }
 
-/** Build, level, tier and evolve on fixed tiles beside the path, then keep calling waves. */
+/**
+ * Build, level, tier and evolve on fixed tiles of arc 0, round its U-bend: (31, 4) to (31, 6)
+ * are the pocket inside it, (29, y) and (33, y) stand beside its legs. Then keep calling waves.
+ */
 const PLANS: Record<string, Plan> = {
   paladin: {
     steps: [
-      { x: 3, y: 4, cls: 'paladin', skill: 'holy-bolt', tiers: ['blessed-hammer'] },
-      { x: 3, y: 5, cls: 'paladin', skill: 'might', tiers: ['concentration'] },
-      { x: 5, y: 6, cls: 'paladin', skill: 'sacrifice', tiers: ['zeal', 'vengeance'] },
-      { x: 7, y: 8, cls: 'paladin', skill: 'holy-bolt', tiers: ['blessed-hammer', 'fist-of-the-heavens'] },
-      { x: 5, y: 9, cls: 'paladin', skill: 'sacrifice' },
+      { x: 31, y: 6, cls: 'paladin', skill: 'holy-bolt', tiers: ['blessed-hammer'] },
+      { x: 31, y: 5, cls: 'paladin', skill: 'might', tiers: ['concentration'] },
+      { x: 29, y: 4, cls: 'paladin', skill: 'sacrifice', tiers: ['zeal', 'vengeance'] },
+      { x: 33, y: 5, cls: 'paladin', skill: 'holy-bolt', tiers: ['blessed-hammer', 'fist-of-the-heavens'] },
+      { x: 33, y: 4, cls: 'paladin', skill: 'sacrifice' },
     ],
-    evolve: [3, 4, 3, 5],
+    evolve: [31, 6, 31, 5],
   },
   sorceress: {
     steps: [
-      { x: 3, y: 4, cls: 'sorceress', skill: 'fire-bolt', tiers: ['fire-ball', 'meteor'] },
-      { x: 3, y: 5, cls: 'sorceress', skill: 'ice-bolt', tiers: ['glacial-spike', 'frozen-orb'] },
-      { x: 5, y: 6, cls: 'sorceress', skill: 'charged-bolt', tiers: ['lightning', 'chain-lightning'] },
-      { x: 7, y: 8, cls: 'sorceress', skill: 'static-field', tiers: ['enchant', 'thunder-storm'] },
-      { x: 5, y: 9, cls: 'sorceress', skill: 'ice-bolt', tiers: ['glacial-spike', 'blizzard'] },
+      { x: 31, y: 6, cls: 'sorceress', skill: 'fire-bolt', tiers: ['fire-ball', 'meteor'] },
+      { x: 31, y: 5, cls: 'sorceress', skill: 'ice-bolt', tiers: ['glacial-spike', 'frozen-orb'] },
+      { x: 31, y: 4, cls: 'sorceress', skill: 'charged-bolt', tiers: ['lightning', 'chain-lightning'] },
+      { x: 29, y: 5, cls: 'sorceress', skill: 'static-field', tiers: ['enchant', 'thunder-storm'] },
+      { x: 33, y: 5, cls: 'sorceress', skill: 'ice-bolt', tiers: ['glacial-spike', 'blizzard'] },
     ],
   },
   necromancer: {
     steps: [
-      { x: 3, y: 4, cls: 'necromancer', skill: 'raise-skeleton', tiers: ['raise-skeletal-mage', 'revive'] },
-      { x: 3, y: 5, cls: 'necromancer', skill: 'amplify-damage', tiers: ['decrepify', 'lower-resist'] },
-      { x: 5, y: 6, cls: 'necromancer', skill: 'teeth', tiers: ['corpse-explosion'] },
-      { x: 7, y: 8, cls: 'necromancer', skill: 'teeth', tiers: ['bone-spear', 'bone-spirit'] },
-      { x: 5, y: 9, cls: 'necromancer', skill: 'teeth', tiers: ['bone-spear', 'poison-nova'] },
-      { x: 5, y: 3, cls: 'necromancer', skill: 'raise-skeleton' },
+      { x: 29, y: 4, cls: 'necromancer', skill: 'raise-skeleton', tiers: ['raise-skeletal-mage', 'revive'] },
+      { x: 31, y: 5, cls: 'necromancer', skill: 'amplify-damage', tiers: ['decrepify', 'lower-resist'] },
+      { x: 31, y: 6, cls: 'necromancer', skill: 'teeth', tiers: ['corpse-explosion'] },
+      { x: 33, y: 5, cls: 'necromancer', skill: 'teeth', tiers: ['bone-spear', 'bone-spirit'] },
+      { x: 29, y: 6, cls: 'necromancer', skill: 'teeth', tiers: ['bone-spear', 'poison-nova'] },
+      { x: 6, y: 4, cls: 'necromancer', skill: 'raise-skeleton' },
     ],
   },
 };
@@ -81,7 +84,7 @@ function planStep(driver: Driver, s: SimState, plan: Plan): boolean {
   for (const p of plan.steps) {
     const t = at(p.x, p.y);
     if (!t) {
-      if (s.gold < 150) return true;
+      if ((s.gold[0] ?? 0) < 150) return true;
       driver.issue({ type: 'build', x: p.x, y: p.y, cls: p.cls, skill: p.skill });
       return true;
     }

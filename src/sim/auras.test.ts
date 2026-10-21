@@ -15,9 +15,9 @@ function skill<T>(sim: ReturnType<typeof testSim>, id: string): T {
 describe('aura stacking', () => {
   it('counts the same aura from two towers once, strongest only', () => {
     const sim = testSim();
-    const target = placeTower(sim, 5, 5, 'holy-bolt');
-    placeTower(sim, 4, 5, 'might', { level: 1 });
-    placeTower(sim, 6, 5, 'might', { level: 4 });
+    const target = placeTower(sim, 9, 6, 'holy-bolt');
+    placeTower(sim, 8, 6, 'might', { level: 1 });
+    placeTower(sim, 10, 6, 'might', { level: 4 });
     const might = skill<BuffAuraDef>(sim, 'might');
     const fx = computeAuras(sim);
     expect(fx.towers[target.id]!.damagePct).toBe(might.levels[3]!.damagePct);
@@ -25,9 +25,9 @@ describe('aura stacking', () => {
 
   it('adds different auras together', () => {
     const sim = testSim();
-    const target = placeTower(sim, 5, 5, 'holy-bolt');
-    placeTower(sim, 4, 5, 'might', { level: 2 });
-    placeTower(sim, 6, 5, 'concentration', { tier: 2, level: 3 });
+    const target = placeTower(sim, 9, 6, 'holy-bolt');
+    placeTower(sim, 8, 6, 'might', { level: 2 });
+    placeTower(sim, 10, 6, 'concentration', { tier: 2, level: 3 });
     const fx = computeAuras(sim);
     const expected =
       skill<BuffAuraDef>(sim, 'might').levels[1]!.damagePct + skill<BuffAuraDef>(sim, 'concentration').levels[2]!.damagePct;
@@ -36,8 +36,8 @@ describe('aura stacking', () => {
 
   it('only reaches towers inside the radius', () => {
     const sim = testSim();
-    const aura = placeTower(sim, 4, 5, 'might', { level: 1 });
-    const far = placeTower(sim, 28, 15, 'holy-bolt');
+    const aura = placeTower(sim, 8, 6, 'might', { level: 1 });
+    const far = placeTower(sim, 32, 16, 'holy-bolt');
     const fx = computeAuras(sim);
     expect(fx.towers[far.id]).toBeUndefined();
     // An aura tower is inside its own radius
@@ -46,8 +46,8 @@ describe('aura stacking', () => {
 
   it('turns Fanaticism attack speed into a shorter attack interval', () => {
     const sim = testSim();
-    const zealot = placeTower(sim, 5, 4, 'sacrifice');
-    placeTower(sim, 5, 5, 'fanaticism', { tier: 3, level: 5 });
+    const zealot = placeTower(sim, 9, 5, 'sacrifice');
+    placeTower(sim, 9, 6, 'fanaticism', { tier: 3, level: 5 });
     sim.fx = computeAuras(sim);
     const buff = sim.fx.towers[zealot.id]!;
     const sacrifice = sim.data.skills['sacrifice']!;
@@ -60,8 +60,8 @@ describe('aura stacking', () => {
     const m = addMonster(sim, 'zombie1', 3000);
     freeze(m);
     const base = speedOf(sim, m);
-    placeTower(sim, 2, 4, 'holy-freeze', { tier: 2, level: 5 });
-    placeTower(sim, 3, 4, 'holy-freeze', { tier: 2, level: 2 });
+    placeTower(sim, 6, 5, 'holy-freeze', { tier: 2, level: 5 });
+    placeTower(sim, 7, 5, 'holy-freeze', { tier: 2, level: 2 });
     sim.fx = computeAuras(sim);
     const slow = skill<ControlDef>(sim, 'holy-freeze').levels[4]!.slowPct;
     expect(sim.fx.monsters[m.id]!.slowPct).toBe(slow);
@@ -72,7 +72,7 @@ describe('aura stacking', () => {
     const sim = testSim();
     const near = addMonster(sim, 'fallenshaman1', 3000);
     const far = addMonster(sim, 'fallenshaman1', 40_000);
-    placeTower(sim, 2, 4, 'conviction', { tier: 3, level: 1 });
+    placeTower(sim, 6, 5, 'conviction', { tier: 3, level: 1 });
     sim.fx = computeAuras(sim);
     const down = skill<DebuffDef>(sim, 'conviction').levels[0]!.resistDown.fire!;
     expect(effectiveResist(sim, near, 'fire')).toBe(Math.max(-100, 20 - down));
@@ -82,7 +82,7 @@ describe('aura stacking', () => {
 
   it('projects an evolved tower partner aura at half radius', () => {
     const sim = testSim();
-    const tower = placeTower(sim, 5, 5, 'blessed-hammer', { tier: 2 });
+    const tower = placeTower(sim, 9, 6, 'blessed-hammer', { tier: 2 });
     tower.evolved = 'hammerdin';
     tower.tier = 4;
     tower.partnerSkill = 'concentration';

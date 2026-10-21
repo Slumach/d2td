@@ -1,20 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import { UNITS_PER_TILE } from '../sim/fixed.ts';
-import { MAP_HEIGHT, MAP_WIDTH } from '../sim/map.ts';
-import { ISO_H, ISO_W, MAP_PX_HEIGHT, MAP_PX_WIDTH, ellipseOf, project, projectTile, screenVector, tileAtScreen } from './iso.ts';
-import { GAME_WIDTH, HUD_HEIGHT, MAP_AREA_HEIGHT } from './layout.ts';
+import { MAP_SIZE } from '../sim/map.ts';
+import { ISO_H, ISO_W, WORLD_HEIGHT, WORLD_WIDTH, ellipseOf, project, projectTile, screenVector, tileAtWorld } from './iso.ts';
 
 describe('isometric view', () => {
-  it('fits the whole diamond inside the map area', () => {
-    expect(MAP_PX_WIDTH).toBeLessThanOrEqual(GAME_WIDTH);
-    expect(MAP_PX_HEIGHT).toBeLessThanOrEqual(MAP_AREA_HEIGHT);
-    const corners = [projectTile(0, 0), projectTile(MAP_WIDTH, 0), projectTile(0, MAP_HEIGHT), projectTile(MAP_WIDTH, MAP_HEIGHT)];
+  it('fits the whole diamond inside the world, with room round it', () => {
+    const corners = [projectTile(0, 0), projectTile(MAP_SIZE, 0), projectTile(0, MAP_SIZE), projectTile(MAP_SIZE, MAP_SIZE)];
     for (const c of corners) {
-      expect(c.x).toBeGreaterThanOrEqual(0);
-      expect(c.x).toBeLessThanOrEqual(GAME_WIDTH);
-      expect(c.y).toBeGreaterThanOrEqual(HUD_HEIGHT);
-      expect(c.y).toBeLessThanOrEqual(HUD_HEIGHT + MAP_AREA_HEIGHT);
+      expect(c.x).toBeGreaterThan(0);
+      expect(c.x).toBeLessThan(WORLD_WIDTH);
+      expect(c.y).toBeGreaterThan(0);
+      expect(c.y).toBeLessThan(WORLD_HEIGHT);
     }
   });
 
@@ -25,14 +22,14 @@ describe('isometric view', () => {
   });
 
   it('finds the tile under every tile centre, and nothing off the map', () => {
-    for (let y = 0; y < MAP_HEIGHT; y++) {
-      for (let x = 0; x < MAP_WIDTH; x++) {
+    for (let y = 0; y < MAP_SIZE; y++) {
+      for (let x = 0; x < MAP_SIZE; x++) {
         const c = project(x * UNITS_PER_TILE + UNITS_PER_TILE / 2, y * UNITS_PER_TILE + UNITS_PER_TILE / 2);
-        expect(tileAtScreen(c.x, c.y)).toEqual({ x, y });
+        expect(tileAtWorld(c.x, c.y)).toEqual({ x, y });
       }
     }
     const outside = projectTile(-1, 5);
-    expect(tileAtScreen(outside.x, outside.y + 2)).toBeUndefined();
+    expect(tileAtWorld(outside.x, outside.y + 2)).toBeUndefined();
   });
 
   it('turns sim directions into the screen vectors D2 sprites face', () => {

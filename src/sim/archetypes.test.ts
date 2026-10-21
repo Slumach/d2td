@@ -29,7 +29,7 @@ const BESIDE = 3000;
 describe('archetypes', () => {
   it('projectile: Holy Bolt flies to its target and hits it', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'holy-bolt');
+    placeTower(sim, 6, 5, 'holy-bolt');
     const zombie = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     freeze(zombie);
     step(sim, []);
@@ -40,7 +40,7 @@ describe('archetypes', () => {
 
   it('pierce: Bone Spear passes through every monster in its line', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'bone-spear');
+    placeTower(sim, 6, 5, 'bone-spear');
     // Two monsters straight north-ish along the same line from the tower
     const a = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     const b = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
@@ -52,7 +52,7 @@ describe('archetypes', () => {
 
   it('chain: Chain Lightning jumps between monsters, one hit each', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'chain-lightning');
+    placeTower(sim, 6, 5, 'chain-lightning');
     const ms = [BESIDE, BESIDE + 800, BESIDE + 1600].map((d) => addMonster(sim, 'quillrat1', d, { hp: 1_000_000 }));
     ms.forEach(freeze);
     step(sim, []);
@@ -61,7 +61,7 @@ describe('archetypes', () => {
 
   it('splash orbit: Blessed Hammer spirals out and hits what it passes', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'blessed-hammer', { tier: 2 });
+    placeTower(sim, 6, 5, 'blessed-hammer', { tier: 2 });
     const m = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     freeze(m);
     ticks(sim, 80);
@@ -71,7 +71,7 @@ describe('archetypes', () => {
 
   it('splash strike: FoH hits its target and sprays bolts only at undead and demons', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'fist-of-the-heavens', { tier: 3 });
+    placeTower(sim, 6, 5, 'fist-of-the-heavens', { tier: 3 });
     const target = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     const undead = addMonster(sim, 'skeleton1', BESIDE + 1500, { hp: 1_000_000 });
     const rat = addMonster(sim, 'quillrat1', BESIDE - 1500, { hp: 1_000_000 });
@@ -86,7 +86,7 @@ describe('archetypes', () => {
 
   it('zone: Blizzard keeps hitting monsters inside it', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'blizzard');
+    placeTower(sim, 6, 5, 'blizzard');
     const m = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     freeze(m);
     step(sim, []);
@@ -99,7 +99,7 @@ describe('archetypes', () => {
 
   it('melee: Sacrifice only reaches monsters touching its tile', () => {
     const sim = testSim();
-    placeTower(sim, 2, 3, 'sacrifice');
+    placeTower(sim, 6, 4, 'sacrifice');
     const near = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     const far = addMonster(sim, 'zombie1', BESIDE + 4000, { hp: 1_000_000 });
     [near, far].forEach(freeze);
@@ -110,7 +110,7 @@ describe('archetypes', () => {
 
   it('melee: Zeal swings several times per attack, spreading over targets', () => {
     const sim = testSim();
-    placeTower(sim, 2, 3, 'zeal', { tier: 2, level: 3 });
+    placeTower(sim, 6, 4, 'zeal', { tier: 2, level: 3 });
     const a = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     const b = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     [a, b].forEach(freeze);
@@ -123,7 +123,7 @@ describe('archetypes', () => {
 
   it('melee: Vengeance adds fire, cold and lightning, so it still hurts physical immunes', () => {
     const sim = testSim();
-    placeTower(sim, 2, 3, 'vengeance', { tier: 3 });
+    placeTower(sim, 6, 4, 'vengeance', { tier: 3 });
     const m = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000, mods: ['stoneSkin'] });
     freeze(m);
     sim.data.rules.mods.stoneSkin.resist[0]!.add = { phys: 100 };
@@ -133,7 +133,7 @@ describe('archetypes', () => {
 
   it('control: Holy Freeze pulses cold damage on top of its slow', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'holy-freeze', { tier: 2, level: 5 });
+    placeTower(sim, 6, 5, 'holy-freeze', { tier: 2, level: 5 });
     const m = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     const free = speedOf(sim, m);
     step(sim, []);
@@ -143,7 +143,7 @@ describe('archetypes', () => {
 
   it('summon: skeletons stand on the path and block monsters until they die', () => {
     const sim = testSim();
-    const tower = placeTower(sim, 2, 4, 'raise-skeleton', { level: 5 });
+    const tower = placeTower(sim, 6, 5, 'raise-skeleton', { level: 5 });
     step(sim, []);
     expect(sim.state.summons).toHaveLength(1);
     const skeleton = sim.state.summons[0]!;
@@ -166,11 +166,11 @@ describe('archetypes', () => {
     const bystander = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     freeze(bystander);
     // A Holy Bolt tower makes the corpse
-    placeTower(sim, 2, 4, 'holy-bolt');
+    placeTower(sim, 6, 5, 'holy-bolt');
     ticks(sim, 15);
     expect(sim.state.corpses).toHaveLength(1);
     sim.state.towers = [];
-    placeTower(sim, 2, 5, 'corpse-explosion');
+    placeTower(sim, 6, 6, 'corpse-explosion');
     const before = bystander.hp;
     step(sim, []);
     expect(sim.state.corpses).toHaveLength(0);
@@ -183,7 +183,7 @@ describe('monsters', () => {
     const sim = testSim();
     const fallen = addMonster(sim, 'fallen1', BESIDE, { hp: 256 });
     freeze(fallen);
-    placeTower(sim, 2, 4, 'holy-bolt');
+    placeTower(sim, 6, 5, 'holy-bolt');
     ticks(sim, 15);
     expect(sim.state.corpses.map((c) => c.def)).toEqual(['fallen1']);
     sim.state.towers = [];

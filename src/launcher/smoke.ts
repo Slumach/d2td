@@ -16,7 +16,7 @@ export function playWaveOne(scene: GameScene, onDone: (r: Omit<SmokeResult, 'set
     scene.events.off('sim-tick', onTick);
     stopAutoplay();
     const s = scene.state!;
-    onDone({ wave: s.wave, kills: s.kills, lives: s.lives, waveCleared, error });
+    onDone({ wave: s.wave, kills: s.kills, alive: s.alive, waveCleared, error });
   };
   const onTick = (tick: number) => {
     const s = scene.state;

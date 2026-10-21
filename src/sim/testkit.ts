@@ -24,6 +24,7 @@ export function placeTower(sim: Sim, x: number, y: number, skill: string, opts: 
   const center = tileCenter({ x, y });
   const tower: Tower = {
     id: s.nextId++,
+    owner: 0,
     cls: cls?.id ?? 'paladin',
     tileX: x,
     tileY: y,
@@ -46,7 +47,7 @@ export function placeTower(sim: Sim, x: number, y: number, skill: string, opts: 
   return tower;
 }
 
-/** A monster at a distance along the path, counted in wave 0. */
+/** A monster at a ring distance, counted in wave 0. */
 export function addMonster(
   sim: Sim,
   def: string,
@@ -54,7 +55,7 @@ export function addMonster(
   opts: { rank?: Rank; mods?: MonsterMod[]; hp?: number } = {},
 ): Monster {
   const s = sim.state;
-  if (s.waves.length === 0) s.waves.push({ remaining: 0, bounty: 0, early: false });
+  if (s.waves.length === 0) s.waves.push({ remaining: 0, bounty: s.gold.map(() => 0), early: false });
   const m = createMonster(sim, def, 0, opts.rank ?? 'normal', opts.mods ?? [], dist, opts.hp);
   s.monsters.push(m);
   s.waves[0]!.remaining++;

@@ -116,7 +116,7 @@ export class SetupScene extends Phaser.Scene {
       if (setup.ok) await loadFeel();
     }
     if (!setup.ok) {
-      this.api.reportSmoke({ setup, wave: 0, kills: 0, lives: 0, waveCleared: false, error: setup.error });
+      this.api.reportSmoke({ setup, wave: 0, kills: 0, alive: 0, waveCleared: false, error: setup.error });
       return;
     }
     this.registry.set('speed', 4);

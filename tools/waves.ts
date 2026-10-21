@@ -28,10 +28,11 @@ for (const n of waves) {
   const def = data.waves[n - 1];
   if (!def) continue;
   const sim = createSim(data, 1);
-  sim.state.lives = 1_000_000;
+  // Nothing is killed here, so the alive count would end the run: lift its limit
+  (sim.data.rules as { aliveLimit: number }).aliveLimit = 1_000_000;
   // Jump straight to wave n with nothing on the map
   sim.state.wave = n - 1;
-  for (let i = 0; i < n - 1; i++) sim.state.waves.push({ remaining: 0, bounty: 0, early: false });
+  for (let i = 0; i < n - 1; i++) sim.state.waves.push({ remaining: 0, bounty: [0], early: false });
   step(sim, [{ type: 'callWave' }]);
   const spawnTicks = sim.state.spawns.map((s) => s.tick);
   const first = Math.min(...spawnTicks);

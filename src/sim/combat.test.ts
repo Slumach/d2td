@@ -61,12 +61,15 @@ describe('damage and resistance', () => {
 describe('targeting', () => {
   it('picks First, Last, Strongest, Weakest and Closest', () => {
     const sim = testSim();
-    // Tower beside the first path segment (row 3), which runs along x from the left edge
-    const tower = placeTower(sim, 2, 4, 'holy-bolt');
-    const a = addMonster(sim, 'zombie1', 1500, { hp: 5000 }); // x 1000, furthest back
-    const b = addMonster(sim, 'zombie1', 3000, { hp: 9000 }); // x 2500, right above the tower
-    const c = addMonster(sim, 'zombie1', 4500, { hp: 1000 }); // x 4000, furthest along
+    // Tower beside the ring's first straight (row 3); First and Last go by how far each has walked
+    const tower = placeTower(sim, 6, 5, 'holy-bolt');
+    const a = addMonster(sim, 'zombie1', 1500, { hp: 5000 }); // walked least
+    const b = addMonster(sim, 'zombie1', 3000, { hp: 9000 }); // right above the tower
+    const c = addMonster(sim, 'zombie1', 4500, { hp: 1000 }); // walked most: a lap and a bit
     [a, b, c].forEach(freeze);
+    a.walked = 1500;
+    b.walked = 3000;
+    c.walked = sim.map.length + 4500;
     const pick = (mode: Parameters<typeof findTarget>[4]) => findTarget(sim, tower, 5000, () => true, mode)?.id;
     expect(pick('first')).toBe(c.id);
     expect(pick('last')).toBe(a.id);
@@ -77,7 +80,7 @@ describe('targeting', () => {
 
   it('only considers monsters in range and breaks ties by lowest id', () => {
     const sim = testSim();
-    const tower = placeTower(sim, 2, 4, 'holy-bolt');
+    const tower = placeTower(sim, 6, 5, 'holy-bolt');
     const near1 = addMonster(sim, 'zombie1', 3000, { hp: 2000 });
     addMonster(sim, 'zombie1', 3000, { hp: 2000 });
     addMonster(sim, 'zombie1', 20_000, { hp: 9000 });

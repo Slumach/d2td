@@ -6,7 +6,7 @@
 import { randomInt } from 'node:crypto';
 import { createServer, type Server, type Socket } from 'node:net';
 
-import { MAX_PLAYERS, type MatchMode, type PlayerCommand } from '../../src/sim/match.ts';
+import { MAX_PLAYERS, MAX_TEAM_PLAYERS, type MatchMode, type PlayerCommand } from '../../src/sim/match.ts';
 import { PROTOCOL, TICK_MS, type ClientMessage, type HostMessage, type LobbyPlayer } from '../../src/net/protocol.ts';
 import { validCommand } from '../../src/net/validate.ts';
 import { readLines, sendLine } from './framing.ts';
@@ -124,6 +124,8 @@ export class Relay {
       this.difficulty = m.difficulty;
       this.sendLobby();
     } else if (m.t === 'start' && peer.host && !this.started) {
+      // A team shares one ring, an arc each
+      if (this.mode === 'team' && this.joined.length > MAX_TEAM_PLAYERS) return this.log(`relay: a team takes up to ${MAX_TEAM_PLAYERS} players`);
       this.start();
     } else if (m.t === 'cmd' && this.started) {
       const command = validCommand(m.command);
