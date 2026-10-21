@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import sprites from '../../src/data/render/sprites.json';
 import { iconJob } from './icons.ts';
 import { cursorJob, fontJob, soundJob } from './feel.ts';
+import { frontendJob } from './frontend.ts';
 import { mapJob } from './map.ts';
 import type { DataSource } from './source.ts';
 import { spriteJobs, type SpriteJob } from './sprites.ts';
@@ -20,8 +21,9 @@ export const CHECKSUM_FILE = 'checksums.json';
 /**
  * Bumped whenever the extraction makes new or different files, so an older extraction fails
  * verification and setup asks for a fresh one. 2: M5's map, cursor, font and sounds.
+ * 3: the switchback road and D2's frontend for the menus.
  */
-export const EXTRACT_VERSION = 2;
+export const EXTRACT_VERSION = 3;
 /** What verifyGame reports when the extraction is from an older version of the game. */
 export const OUTDATED = 'version';
 
@@ -53,7 +55,7 @@ function sha256(bytes: Uint8Array): string {
 /** Every job the game needs, and exactly which game files they read. */
 export function planGame(source: DataSource): GamePlan {
   const sprite = spriteJobs(source);
-  const jobs = [...tableJobs(source), ...sprite.jobs, ...sprites.iconClasses.map((c) => iconJob(source, c)), mapJob(source), cursorJob(source), fontJob(source), soundJob(source)];
+  const jobs = [...tableJobs(source), ...sprite.jobs, ...sprites.iconClasses.map((c) => iconJob(source, c)), mapJob(source), cursorJob(source), fontJob(source), soundJob(source), frontendJob(source)];
   const inputs = [...new Set([...sprite.sharedInputs, ...jobs.flatMap((j) => j.inputs)])].sort();
   const missing = [...new Set([...sprite.missing, ...inputs.filter((p) => !source.exists(p))])].sort();
   return { jobs, inputs, missing };

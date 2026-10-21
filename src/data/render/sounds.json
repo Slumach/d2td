@@ -5,5 +5,6 @@
   "travel": ["blessedhammer"],
   "hit": ["holybolt", "fistoftheheavensbolt", "blessedhammer"],
   "gold": "item_gold",
+  "ui": { "click": "cursor_button_click", "hover": "cursor_select", "music": "jukebox_music_group1" },
   "volumePct": { "music": 30, "ambience": 45, "sfx": 70 }
 }

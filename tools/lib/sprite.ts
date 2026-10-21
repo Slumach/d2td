@@ -4,6 +4,8 @@
 //   0x0C u32 height   0x14 u32 frame count   0x20 u32 pixel byte count   0x28 RGBA pixels
 // Frames sit side by side in equal slots of sheet width / frame count; the slot is a
 // little wider than the frame (132 for 130 px icons), and the frame starts at the slot's left.
+// Some frontend sheets instead pack frames with a 1 px gap and no trailing gap (521 px
+// buttons on a 2087 px sheet), so the slot is what is left over spread across the gaps.
 
 const MAGIC = 'SpA1';
 const HEADER_SIZE = 0x28;
@@ -40,7 +42,8 @@ export function decodeSprite(data: Uint8Array): SpriteSheet {
   if (pixelBytes !== sheetWidth * frameHeight * 4 || HEADER_SIZE + pixelBytes > data.length) {
     throw new Error(`.sprite pixel size ${pixelBytes} does not match ${sheetWidth}x${frameHeight} RGBA`);
   }
-  if (frameCount === 0 || sheetWidth % frameCount !== 0) {
+  const slotWidth = slotOf(sheetWidth, frameWidth, frameCount);
+  if (slotWidth === undefined) {
     throw new Error(`.sprite sheet width ${sheetWidth} does not split into ${frameCount} frames`);
   }
 
@@ -49,10 +52,21 @@ export function decodeSprite(data: Uint8Array): SpriteSheet {
     frameWidth,
     frameHeight,
     frameCount,
-    slotWidth: sheetWidth / frameCount,
+    slotWidth,
     sheetWidth,
     pixels: data.subarray(HEADER_SIZE, HEADER_SIZE + pixelBytes),
   };
+}
+
+/** The distance between frame starts, for either sheet layout, or undefined if neither fits. */
+function slotOf(sheetWidth: number, frameWidth: number, frameCount: number): number | undefined {
+  if (frameCount === 0) return undefined;
+  if (sheetWidth % frameCount === 0 && sheetWidth / frameCount >= frameWidth) return sheetWidth / frameCount;
+  if (frameCount > 1 && (sheetWidth - frameWidth) % (frameCount - 1) === 0) {
+    const slot = (sheetWidth - frameWidth) / (frameCount - 1);
+    if (slot >= frameWidth) return slot;
+  }
+  return undefined;
 }
 
 /** One frame as frameWidth x frameHeight RGBA. */

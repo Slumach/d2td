@@ -6,6 +6,7 @@ import Phaser from 'phaser';
 
 import { DESIGN } from '../data/design.ts';
 import type { MpEvent, LauncherApi } from '../launcher/api.ts';
+import { menuMusic } from '../launcher/frontend.ts';
 import { MpSession } from '../launcher/session.ts';
 import { Lockstep } from '../net/lockstep.ts';
 import type { LobbyPlayer } from '../net/protocol.ts';
@@ -178,6 +179,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.icons = this.cache.json.get(ICON_INDEX) as IconIndex | undefined;
     createAnimations(this);
+    menuMusic(this, false);
     this.sounds = new SoundBank(this);
     this.sounds.startLoops();
 

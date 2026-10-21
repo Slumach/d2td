@@ -14,6 +14,8 @@ export interface SoundManifest {
   travel: Record<string, string[]>;
   hit: Record<string, string[]>;
   death: Record<string, string[]>;
+  /** Menu sounds; absent in extractions from before the D2 menu. */
+  ui?: { click: string[]; hover: string[]; music: string | null };
   volumePct: { music: number; ambience: number; sfx: number };
 }
 
@@ -21,14 +23,17 @@ export interface SoundManifest {
 const REPEAT_MS = 90;
 
 export function preloadSounds(scene: Phaser.Scene): void {
-  if (scene.cache.json.exists(SOUND_MANIFEST)) return;
-  scene.load.json(SOUND_MANIFEST, 'sfx/sounds.json');
-  scene.load.once(`filecomplete-json-${SOUND_MANIFEST}`, (_k: string, _t: string, m: SoundManifest) => {
+  // The menus may have read the manifest already (for their own sounds); queue whatever is missing
+  const queue = (m: SoundManifest) => {
     const all = new Set<string>([...m.gold, ...[m.cast, m.travel, m.hit, m.death].flatMap((g) => Object.values(g).flat())]);
     if (m.music) all.add(m.music);
     if (m.ambience) all.add(m.ambience);
     for (const path of all) if (!scene.cache.audio.exists(path)) scene.load.audio(path, path);
-  });
+  };
+  const cached = scene.cache.json.get(SOUND_MANIFEST) as SoundManifest | undefined;
+  if (cached) return queue(cached);
+  scene.load.json(SOUND_MANIFEST, 'sfx/sounds.json');
+  scene.load.once(`filecomplete-json-${SOUND_MANIFEST}`, (_k: string, _t: string, m: SoundManifest) => queue(m));
 }
 
 export class SoundBank {

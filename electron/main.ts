@@ -306,6 +306,7 @@ void app.whenReady().then(async () => {
     settings = { ...settings, name: String(name).trim().slice(0, 20) || defaultName() };
     saveSettings(settings);
   });
+  ipcMain.on('quit', () => app.quit());
   ipcMain.handle('mp-host', () => hostMultiplayer(win));
   ipcMain.handle('mp-join', async (_e, code: string) => {
     const address = decodeJoinCode(String(code));

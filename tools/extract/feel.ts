@@ -49,6 +49,8 @@ export interface SoundManifest {
   travel: Record<string, string[]>;
   hit: Record<string, string[]>;
   death: Record<string, string[]>;
+  /** The menus: button click and hover, and the title music. */
+  ui: { click: string[]; hover: string[]; music: string | null };
   volumePct: { music: number; ambience: number; sfx: number };
 }
 
@@ -98,6 +100,7 @@ export function soundJob(source: DataSource): SpriteJob {
     travel: Object.fromEntries(soundsJson.travel.map((m) => [m, resolve(column(missiles.find((r) => r['Missile'] === m) ?? {}, 'TravelSound'))])),
     hit: Object.fromEntries(soundsJson.hit.map((m) => [m, resolve(column(missiles.find((r) => r['Missile'] === m) ?? {}, 'HitSound'))])),
     death: {},
+    ui: { click: resolve(soundsJson.ui.click), hover: resolve(soundsJson.ui.hover), music: resolve(soundsJson.ui.music, 'global/music/')[0] ?? null },
     volumePct: soundsJson.volumePct,
   };
   const ids = [...new Set([...Object.keys(monstersJson.roster), ...Object.values(monstersJson.bosses)])];

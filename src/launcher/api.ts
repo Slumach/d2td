@@ -70,6 +70,8 @@ export interface LauncherApi {
   setVolume(volume: number): Promise<void>;
   reportSmoke(result: SmokeResult): void;
   setName(name: string): Promise<void>;
+  /** Closes the app (the main menu's Exit). */
+  quit(): void;
   /** Opens a lobby on this PC and joins it; codes for friends on the local network come back at once. */
   mpHost(): Promise<{ ok: boolean; error?: string; codes: JoinCode[] }>;
   mpJoin(code: string): Promise<{ ok: boolean; error?: string }>;
