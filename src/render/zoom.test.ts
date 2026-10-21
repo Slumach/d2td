@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { integerZoom } from './zoom.ts';
 
 const W = 1440;
-const H = 1016;
+const H = 1000;
 
 describe('integerZoom', () => {
   it('is 1 at 1080p and 2 at 4K', () => {

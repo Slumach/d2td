@@ -6,19 +6,24 @@ import { createRequire } from 'node:module';
 import { dirname, join, normalize, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { BrowserWindow, app, dialog, ipcMain, net, protocol, screen } from 'electron';
+import { BrowserWindow, app, dialog, ipcMain, net, protocol, screen, shell } from 'electron';
 
 import type { LauncherState, SetupResult, SmokeResult } from '../src/launcher/api.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../src/render/layout.ts';
 import { extractGame, verifyGame } from '../tools/extract/game.ts';
 import { CascSource, type CascStorage } from '../tools/extract/source.ts';
 import { detectD2R, looksLikeD2R } from '../tools/lib/d2r.ts';
+import { describe, log, openLog } from './log.ts';
 
 // A clean profile for tests and the smoke run: D2TD_USER_DATA=<folder>
 if (process.env['D2TD_USER_DATA']) app.setPath('userData', process.env['D2TD_USER_DATA']);
 
 const smokeArg = process.argv.find((a) => a.startsWith('--smoke='));
 const smokeFile = smokeArg?.slice('--smoke='.length);
+
+const logFile = openLog(app.getPath('userData'));
+process.on('uncaughtException', (e) => log(`uncaught exception: ${describe(e)}`));
+process.on('unhandledRejection', (e) => log(`unhandled rejection: ${describe(e)}`));
 
 interface Settings {
   d2rPath: string | null;
@@ -93,23 +98,38 @@ async function launcherState(): Promise<LauncherState> {
     volume: settings.volume,
     version: app.getVersion(),
     smoke: smokeFile !== undefined,
+    logFile,
   };
 }
 
 async function runSetup(win: BrowserWindow): Promise<SetupResult> {
   const path = settings.d2rPath;
   if (!path || !looksLikeD2R(path)) return { ok: false, error: 'Choose your Diablo II: Resurrected folder first.', files: 0 };
+  log(`setup: reading ${path} into ${assetsDir()}`);
   let source: CascSource | undefined;
   try {
     source = new CascSource(openCasc(path), path);
     // Start clean so stale files from an older game build cannot survive
     rmSync(assetsDir(), { recursive: true, force: true });
-    const list = await extractGame(source, assetsDir(), (p) => win.webContents.send('setup-progress', p));
+    const list = await extractGame(source, assetsDir(), (p) => {
+      if (p.file) log(`setup: ${p.done + 1}/${p.total} ${p.file}`);
+      win.webContents.send('setup-progress', p);
+    });
     const verify = verifyGame(assetsDir());
-    if (!verify.ok) return { ok: false, error: `Checksum failed for ${verify.bad.join(', ')}`, files: 0 };
+    if (!verify.ok) {
+      log(`setup: checksum failed for ${verify.bad.join(', ')}`);
+      return { ok: false, error: 'Some files did not come out right. Try again; if it keeps failing, send the log.', files: 0 };
+    }
+    log(`setup: done, ${Object.keys(list.files).length} files`);
     return { ok: true, files: Object.keys(list.files).length };
   } catch (e) {
-    return { ok: false, error: (e as Error).message, files: 0 };
+    // The details are for the log; the screen gets something a player can act on
+    log(`setup failed: ${describe(e)}`);
+    return {
+      ok: false,
+      error: 'Setup could not read the game files in that folder. Check that Diablo II: Resurrected is installed there and has been started once, then try again.',
+      files: 0,
+    };
   } finally {
     source?.close();
   }
@@ -139,12 +159,19 @@ function createWindow(): BrowserWindow {
   });
   // Links never open inside the game window
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('console-message', (e) => {
+    if (e.level === 'error' || e.level === 'warning') log(`renderer ${e.level}: ${e.message} (${e.sourceId}:${e.lineNumber})`);
+  });
+  win.webContents.on('render-process-gone', (_e, details) => log(`renderer gone: ${details.reason} (exit ${details.exitCode})`));
   void win.loadURL('app://game/index.html');
   return win;
 }
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
   settings = loadSettings();
+  const display = screen.getPrimaryDisplay();
+  log(`D2 Tower Defense ${app.getVersion()}, Electron ${process.versions.electron}, Windows ${process.getSystemVersion()}`);
+  log(`display ${display.size.width}x${display.size.height} at ${display.scaleFactor}x; D2R folder ${settings.d2rPath ?? 'not set'}, registry says ${(await detectD2R()) ?? 'nothing'}`);
   serveApp();
   const win = createWindow();
 
@@ -167,11 +194,13 @@ void app.whenReady().then(() => {
     return { ok: true };
   });
   ipcMain.handle('run-setup', () => runSetup(win));
+  ipcMain.handle('open-log-folder', () => shell.openPath(dirname(logFile)));
   ipcMain.handle('set-volume', (_e, volume: number) => {
     settings = { ...settings, volume: Math.max(0, Math.min(100, Math.round(volume))) };
     saveSettings(settings);
   });
   ipcMain.on('smoke-result', async (_e, result: SmokeResult) => {
+    log(`smoke: ${JSON.stringify(result)}`);
     if (smokeFile) {
       mkdirSync(dirname(smokeFile), { recursive: true });
       writeFileSync(smokeFile, JSON.stringify(result, null, 2));

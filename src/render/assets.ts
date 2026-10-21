@@ -40,15 +40,20 @@ export const iconKey = (skillName: string) => `icon:${skillName}`;
 /**
  * Queues every atlas and the icon index; icons follow once the index arrives. Atlases are
  * multi-page (trimmed frames packed onto pages of at most 4096 px) and their page images
- * sit beside the JSON.
+ * sit beside the JSON. Textures persist across scene restarts, so a second game (Play
+ * after Quit to menu) queues only what is not loaded yet.
  */
 export function preloadAssets(scene: Phaser.Scene): void {
+  const atlas = (key: string, json: string, dir: string) => {
+    if (!scene.textures.exists(key)) scene.load.multiatlas(key, json, dir);
+  };
   for (const id of MONSTER_IDS) {
     const variants = BOSSES.has(id) ? ['normal'] : ['normal', 'champion', 'unique'];
-    for (const v of variants) scene.load.multiatlas(`mon:${id}:${v}`, `monsters/${id}/${v}.json`, `monsters/${id}/`);
+    for (const v of variants) atlas(`mon:${id}:${v}`, `monsters/${id}/${v}.json`, `monsters/${id}/`);
   }
-  for (const v of ['normal', 'evolved']) scene.load.multiatlas(`hero:${v}`, `hero/paladin/${v}.json`, 'hero/paladin/');
-  for (const id of MISSILE_IDS) scene.load.multiatlas(missileKey(id), `missiles/${id}.json`, 'missiles/');
+  for (const v of ['normal', 'evolved']) atlas(`hero:${v}`, `hero/paladin/${v}.json`, 'hero/paladin/');
+  for (const id of MISSILE_IDS) atlas(missileKey(id), `missiles/${id}.json`, 'missiles/');
+  if (scene.cache.json.exists(ICON_INDEX)) return;
   scene.load.json(ICON_INDEX, `${ICON_DIR}index.json`);
   scene.load.once(`filecomplete-json-${ICON_INDEX}`, (_k: string, _t: string, index: IconIndex) => {
     for (const [name, entry] of Object.entries(index.skills)) scene.load.image(iconKey(name), `${ICON_DIR}${entry.icon}`);
@@ -72,6 +77,7 @@ export function createAnimations(scene: Phaser.Scene): void {
     for (const [mode, info] of Object.entries(meta.modes)) {
       for (let d = 0; d < info.directions; d++) {
         const dir = meta.directions[d] ?? String(d);
+        if (scene.anims.exists(animKey(key, mode, dir))) continue;
         scene.anims.create({
           key: animKey(key, mode, dir),
           frames: Array.from({ length: info.frames }, (_, f) => ({ key, frame: `${mode}_${dir}_${String(f).padStart(2, '0')}` })),

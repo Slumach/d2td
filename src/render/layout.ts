@@ -7,4 +7,5 @@ export const HUD_HEIGHT = 64;
 export const MAP_HEIGHT = 17 * TILE;
 export const PANEL_TOP = HUD_HEIGHT + MAP_HEIGHT;
 export const GAME_WIDTH = 30 * TILE;
-export const GAME_HEIGHT = PANEL_TOP + 136;
+/** 1440 x 1000: with a title bar it fits above the taskbar on a 1080p screen. */
+export const GAME_HEIGHT = PANEL_TOP + 120;

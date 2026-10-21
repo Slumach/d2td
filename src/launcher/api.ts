@@ -15,6 +15,8 @@ export interface LauncherState {
   version: string;
   /** Set when launched with --smoke=<file>: run setup and wave 1 unattended. */
   smoke: boolean;
+  /** Where the launcher writes its log, to show when something fails. */
+  logFile: string;
 }
 
 export interface SetupProgress {
@@ -44,6 +46,8 @@ export interface LauncherApi {
   pickFolder(): Promise<{ path: string | null; error?: string }>;
   setD2rPath(path: string): Promise<{ ok: boolean; error?: string }>;
   runSetup(): Promise<SetupResult>;
+  /** Opens the folder holding the log in Explorer. */
+  openLogFolder(): Promise<void>;
   onSetupProgress(callback: (p: SetupProgress) => void): void;
   setVolume(volume: number): Promise<void>;
   reportSmoke(result: SmokeResult): void;

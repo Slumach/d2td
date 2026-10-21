@@ -6,6 +6,7 @@ import Phaser from 'phaser';
 import { FONT, button } from '../render/ui.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
 import type { LauncherApi, LauncherState } from './api.ts';
+import { shortPath } from './paths.ts';
 import { LAUNCHER_KEY } from './SetupScene.ts';
 
 const BUTTON_WIDTH = 360;
@@ -85,11 +86,12 @@ export class MenuScene extends Phaser.Scene {
 
     add(this.add.text(left, y, 'Diablo II: Resurrected folder', MUTED));
     y += 34;
-    add(this.add.text(left, y, this.state.d2rPath ?? 'Not set', TEXT));
+    add(this.add.text(left, y, this.state.d2rPath ? shortPath(this.state.d2rPath, 60) : 'Not set', TEXT));
     y += 50;
     this.parts.push(
       ...button(this, left, y, { label: 'Change folder or extract again...', onClick: () => this.scene.start('Setup', { force: true }), width: 420 }),
     );
+    this.parts.push(...button(this, left + 440, y, { label: 'Open log folder', onClick: () => void this.api.openLogFolder(), width: 260 }));
     y += 110;
 
     this.menuButton(y, 'Back', () => {

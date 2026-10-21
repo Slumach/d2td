@@ -9,6 +9,7 @@ const api: LauncherApi = {
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
   setD2rPath: (path: string) => ipcRenderer.invoke('set-d2r-path', path),
   runSetup: () => ipcRenderer.invoke('run-setup'),
+  openLogFolder: () => ipcRenderer.invoke('open-log-folder'),
   onSetupProgress: (callback: (p: SetupProgress) => void) => {
     ipcRenderer.on('setup-progress', (_e, p: SetupProgress) => callback(p));
   },

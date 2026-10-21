@@ -146,7 +146,7 @@ export class GameScene extends Phaser.Scene {
 
     const text = { fontFamily: FONT, fontSize: '24px', color: '#e8e0c0' };
     this.hud = this.add.text(16, 18, '', text).setDepth(3000);
-    this.info = this.add.text(16, PANEL_TOP + 10, '', { ...text, fontSize: '20px' }).setDepth(3000);
+    this.info = this.add.text(16, PANEL_TOP + 8, '', { ...text, fontSize: '20px' }).setDepth(3000);
     this.tooltip = createTooltip(this, 16, PANEL_TOP - 8);
     buttonRow(this, GAME_WIDTH - 180, 12, [{ label: 'Call Wave', onClick: () => this.issue({ type: 'callWave' }), colour: '#6a3020' }], 200);
     this.endOverlay = this.add
@@ -155,9 +155,15 @@ export class GameScene extends Phaser.Scene {
       .setDepth(6000)
       .setVisible(false)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.restart());
+      .on('pointerdown', () => this.restartRun());
 
     this.input.mouse?.disableContextMenu();
+    this.input.keyboard?.on('keydown-ESC', () => {
+      if (this.scene.isActive()) {
+        this.scene.pause();
+        this.scene.launch('Pause');
+      }
+    });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => (this.hover = this.tileAt(p)));
     this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       if (over.length === 0) this.onMapClick(p);
@@ -195,7 +201,14 @@ export class GameScene extends Phaser.Scene {
     return this.sim?.state;
   }
 
-  private restart(): void {
+  /** Pause menu: throw the run away and go back to the launcher's main menu. */
+  quitToMenu(): void {
+    this.restartRun();
+    this.scene.start('Menu');
+  }
+
+  /** A fresh run on the next seed: the end-of-run click and the pause menu's Restart. */
+  restartRun(): void {
     this.seed++;
     this.sim = createSim(this.sim.data, this.seed);
     this.log = [];
@@ -580,7 +593,7 @@ export class GameScene extends Phaser.Scene {
     this.tooltip.hide();
 
     const x = 16;
-    const y = PANEL_TOP + 48;
+    const y = PANEL_TOP + 38;
     const width = GAME_WIDTH - 32;
     const e = sim.data.economy;
     const specs: ButtonSpec[] = [];

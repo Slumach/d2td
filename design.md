@@ -187,7 +187,7 @@ A Hammerdin therefore costs both parents built, levelled and tiered, plus the ev
 
 ## Visuals and asset pipeline
 
-The look is D2R's legacy toggle done well: classic sprites at 1x with nearest-neighbour sampling, HD panels, fonts and skill icons around them. Tiles are 48 px, so the map is 1440 x 816 and the canvas with HUD and panel is 1440 x 1016, which fits 1080p at zoom 1. The canvas zooms as a whole by the largest whole number that fits the window and letterboxes the rest; no sprite is scaled on its own and nothing is ever scaled by a fraction. Tile size is render-only: the sim's tile stays 1000 units, so ranges and path lengths do not change.
+The look is D2R's legacy toggle done well: classic sprites at 1x with nearest-neighbour sampling, HD panels, fonts and skill icons around them. Tiles are 48 px, so the map is 1440 x 816 and the canvas with HUD and panel is 1440 x 1000, which fits 1080p at zoom 1 with a title bar above the taskbar. The canvas zooms as a whole by the largest whole number that fits the window and letterboxes the rest; no sprite is scaled on its own and nothing is ever scaled by a fraction. Tile size is render-only: the sim's tile stays 1000 units, so ranges and path lengths do not change.
 
 - Monsters, heroes and missiles: classic DCC/DC6 frames composited through COF layer files, coloured with the Act 1 palette (pal.dat) and the PL2 colour shifts for champions and uniques.
 - UI, skill icons, item art, fonts: D2R HD .sprite files, decoded to PNG.

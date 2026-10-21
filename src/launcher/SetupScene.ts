@@ -8,6 +8,7 @@ import { FONT, button } from '../render/ui.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
 import type { GameScene } from '../render/GameScene.ts';
 import type { LauncherApi, LauncherState, SetupProgress, SetupResult } from './api.ts';
+import { shortPath } from './paths.ts';
 import { playWaveOne } from './smoke.ts';
 
 /** The registry key for window.d2td. */
@@ -150,7 +151,7 @@ export class SetupScene extends Phaser.Scene {
     add(this.add.text(LEFT, y, 'Diablo II: Resurrected folder', MUTED));
     y += 32;
     const folder = this.folder;
-    add(this.add.text(LEFT, y, folder ?? 'Not found automatically. Choose the folder you installed the game to.', folder ? TEXT : { ...TEXT, color: '#e0b060' }));
+    add(this.add.text(LEFT, y, folder ? shortPath(folder, 70) : 'Not found automatically. Choose the folder you installed the game to.', folder ? TEXT : { ...TEXT, color: '#e0b060' }));
     y += 70;
 
     const enabled = !this.busy;
@@ -168,7 +169,12 @@ export class SetupScene extends Phaser.Scene {
       const label = p && p.file ? `Extracting ${p.done + 1} of ${p.total}: ${p.file}` : 'Opening the game storage...';
       add(this.add.text(LEFT, y + 30, label, MUTED));
     } else if (this.message) {
-      add(this.add.text(LEFT, y, this.message, { ...TEXT, color: this.failed ? '#ff8060' : '#e8e0c0' }));
+      const text = add(this.add.text(LEFT, y, this.message, { ...TEXT, color: this.failed ? '#ff8060' : '#e8e0c0', lineSpacing: 6 }));
+      if (this.failed) {
+        y += text.height + 20;
+        add(this.add.text(LEFT, y, `The log has the details: ${shortPath(this.state.logFile, 60)}`, MUTED));
+        parts.push(...button(this, LEFT, y + 40, { label: 'Open log folder', onClick: () => void this.api.openLogFolder(), width: 260 }));
+      }
     }
 
     add(this.add.text(LEFT, GAME_HEIGHT - 60, `Version ${this.state.version}. Non-commercial fan project, not affiliated with Blizzard.`, MUTED));

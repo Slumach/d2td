@@ -10,6 +10,7 @@ import { LAUNCHER_KEY, SetupScene } from '../launcher/SetupScene.ts';
 import type { DesignData } from '../sim/data.ts';
 import { startAutoplay } from './autoplay.ts';
 import { GameScene } from './GameScene.ts';
+import { PauseScene } from './PauseScene.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from './layout.ts';
 import { ZombieWalkScene } from './ZombieWalkScene.ts';
 import { integerZoom } from './zoom.ts';
@@ -58,7 +59,7 @@ export function startGame(opts: StartOptions = {}): Phaser.Game {
     // No Scale.FIT: the whole canvas zooms by a whole number and the page letterboxes it
     scale: { mode: Phaser.Scale.NONE, zoom: fitZoom(width, height) },
     // Only the first scene starts on its own; the launcher's scenes start the rest
-    scene: opts.m0 ? [ZombieWalkScene] : opts.launcher ? [SetupScene, MenuScene, GameScene] : [GameScene],
+    scene: opts.m0 ? [ZombieWalkScene] : opts.launcher ? [SetupScene, MenuScene, GameScene, PauseScene] : [GameScene, PauseScene],
     callbacks: {
       preBoot: (g) => {
         g.registry.set(DESIGN_KEY, design);

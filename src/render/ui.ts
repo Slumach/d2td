@@ -42,7 +42,9 @@ export function createTooltip(scene: Phaser.Scene, x: number, bottom: number): T
   };
 }
 
-const ICON_SIZE = 44;
+/** Two rows of buttons fit the 120 px panel under its info line. */
+const ICON_SIZE = 36;
+const ROW_GAP = 6;
 
 /** A button; disabled ones are dimmed and ignore clicks. Returns its parts for cleanup. */
 export function button(scene: Phaser.Scene, x: number, y: number, spec: ButtonSpec, tooltip?: Tooltip): Phaser.GameObjects.GameObject[] {
@@ -54,7 +56,7 @@ export function button(scene: Phaser.Scene, x: number, y: number, spec: ButtonSp
       fontSize: '20px',
       color: enabled ? '#f0e8d0' : '#807868',
       backgroundColor: enabled ? (spec.colour ?? '#4a3420') : '#2a2420',
-      padding: { x: 10, y: hasIcon ? 12 : 6 },
+      padding: { x: 10, y: 6 },
       fixedHeight: hasIcon ? ICON_SIZE : 0,
       fixedWidth: hasIcon ? 0 : (spec.width ?? 0),
       align: 'center',
@@ -116,7 +118,7 @@ export function buttonRow(
     if (cx > x && cx + w > x + maxWidth) {
       for (const p of parts) p.destroy();
       cx = x;
-      cy += ICON_SIZE + 8;
+      cy += ICON_SIZE + ROW_GAP;
       parts = button(scene, cx, cy, spec, tooltip);
     }
     cx += w + 10;
