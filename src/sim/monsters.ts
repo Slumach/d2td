@@ -1,7 +1,7 @@
 // Monster spawning, abilities, movement and leaks.
 
 import { blockerAhead } from './archetypes/summon.ts';
-import { distSq, monsterFx, removeMonster } from './combat.ts';
+import { dealRaw, distSq, monsterFx, removeMonster } from './combat.ts';
 import { idiv } from './fixed.ts';
 import { positionAt } from './map.ts';
 import { rollInt } from './rng.ts';
@@ -38,6 +38,11 @@ export function createMonster(sim: Sim, def: string, wave: number, rank: Rank, m
     slowPct: 0,
     slowTicks: 0,
     stunTicks: 0,
+    chillTicks: 0,
+    freezeTicks: 0,
+    poisonTicks: 0,
+    poisonPerTick: 0,
+    curses: [],
     attackCooldown: 0,
     abilityCooldown: d.aiDelayTicks,
     castTicks: 0,
@@ -91,8 +96,25 @@ function resurrect(sim: Sim, shaman: Monster): boolean {
 export function speedOf(sim: Sim, m: Monster): number {
   let speed = sim.data.monsters[m.def]!.speed;
   for (const mod of m.mods) speed += idiv(speed * sim.data.rules.mods[mod].speedPct, 100);
-  const slow = Math.min(90, Math.max(m.slowPct, monsterFx(sim, m).slowPct));
+  const chill = m.chillTicks > 0 ? sim.data.rules.chillPct : 0;
+  const slow = Math.min(90, Math.max(m.slowPct, chill, monsterFx(sim, m).slowPct));
   return idiv(speed * (100 - slow), 100);
+}
+
+/** Counts down timed statuses and curses, and lands this tick's poison. True if it died. */
+function tickStatuses(sim: Sim, m: Monster): boolean {
+  if (m.slowTicks > 0 && --m.slowTicks === 0) m.slowPct = 0;
+  if (m.chillTicks > 0) m.chillTicks--;
+  if (m.curses.length > 0) {
+    for (const c of m.curses) c.ticksLeft--;
+    m.curses = m.curses.filter((c) => c.ticksLeft > 0);
+  }
+  if (m.poisonTicks > 0) {
+    m.poisonTicks--;
+    dealRaw(sim, m, m.poisonPerTick);
+    if (m.poisonTicks === 0) m.poisonPerTick = 0;
+  }
+  return m.hp <= 0;
 }
 
 export function updateMonsters(sim: Sim): void {
@@ -101,9 +123,13 @@ export function updateMonsters(sim: Sim): void {
   for (const m of [...s.monsters]) {
     if (m.hp <= 0) continue;
     if (m.attackCooldown > 0) m.attackCooldown--;
-    if (m.slowTicks > 0 && --m.slowTicks === 0) m.slowPct = 0;
+    if (tickStatuses(sim, m)) continue;
     if (m.stunTicks > 0) {
       m.stunTicks--;
+      continue;
+    }
+    if (m.freezeTicks > 0) {
+      m.freezeTicks--;
       continue;
     }
     if (resurrect(sim, m)) continue;
@@ -114,7 +140,8 @@ export function updateMonsters(sim: Sim): void {
       // Stop at the blocker and fight it
       m.dist = Math.max(m.dist, blocker.dist - rules.blockRangeUnits);
       if (m.attackCooldown === 0) {
-        blocker.hp -= rollInt(s.rng, m.minDamage, m.maxDamage);
+        const hit = rollInt(s.rng, m.minDamage, m.maxDamage);
+        blocker.hp -= hit - idiv(hit * Math.min(100, monsterFx(sim, m).damageDownPct), 100);
         m.attackCooldown = rules.monsterAttackTicks;
       }
     } else {

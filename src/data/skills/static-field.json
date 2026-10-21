@@ -1,0 +1,10 @@
+{
+  "id": "static-field",
+  "skill": "Static Field",
+  "archetype": "debuff",
+  "damageType": "ltng",
+  "skillLevels": [1, 5, 10, 15, 20],
+  "rangeTenths": 0,
+  "rateTicks": 40,
+  "debuff": { "mode": "pulse", "radiusCalc": "aurarangecalc", "hpPctCalc": "calc1", "minDamageCalc": "calc2" }
+}

@@ -10,7 +10,7 @@ import { menuMusic, preloadFrontend } from '../launcher/frontend.ts';
 import { MpSession } from '../launcher/session.ts';
 import { Lockstep } from '../net/lockstep.ts';
 import type { LobbyPlayer } from '../net/protocol.ts';
-import { buildGameData, MAX_TOWER_LEVEL, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
+import { baseMonsterId, buildGameData, DIFFICULTY_NAMES, MAX_TOWER_LEVEL, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
 import { standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
 import { livesOf, playersIn, type MatchMode } from '../sim/match.ts';
@@ -80,9 +80,18 @@ type Selection = { kind: 'tile'; x: number; y: number } | { kind: 'tower'; id: n
 export interface OnlineStart {
   seed: number;
   mode: MatchMode;
+  difficulty: number;
   players: LobbyPlayer[];
   you: number;
 }
+
+/** A single-player run: the difficulty it starts at. */
+export interface SoloStart {
+  difficulty: number;
+}
+
+/** The registry key for the last chosen single-player difficulty, so Restart keeps it. */
+export const DIFFICULTY_KEY = 'difficulty';
 
 interface MonsterView {
   sprite: Phaser.GameObjects.Sprite;
@@ -165,15 +174,18 @@ export class GameScene extends Phaser.Scene {
     return this.driver!.match.zones[this.view]!;
   }
 
-  create(start?: OnlineStart): void {
+  create(start?: OnlineStart | SoloStart): void {
     this.driver = undefined;
     this.halted = '';
     this.clearViews();
     if (!TABLE_NAMES.every((name) => this.cache.json.exists(name))) return;
     const tables = Object.fromEntries(TABLE_NAMES.map((name) => [name, this.cache.json.get(name)])) as unknown as Tables;
     const design = (this.registry.get('design') as DesignData | undefined) ?? DESIGN;
-    this.gameData = buildGameData(tables, design);
-    if (start?.players) {
+    if (start) this.registry.set(DIFFICULTY_KEY, start.difficulty);
+    const difficulty = start?.difficulty ?? (this.registry.get(DIFFICULTY_KEY) as number | undefined) ?? 0;
+    // After the last wave the map loops at the next difficulty, up to Hell
+    this.gameData = buildGameData(tables, design, undefined, { difficulty, loop: true });
+    if (start && 'players' in start) {
       const session = MpSession.of(this.registry.get('launcher') as LauncherApi);
       const lockstep = new Lockstep({ data: this.gameData, seed: start.seed, mode: start.mode, players: start.players.length, me: start.you, send: (m) => session.send(m) });
       this.driver = new NetDriver(lockstep, start.players);
@@ -414,7 +426,7 @@ export class GameScene extends Phaser.Scene {
       const { x: px, y: py } = project(m.x, m.y);
       let view = this.monsters.get(m.id);
       if (!view) {
-        const texture = monsterKey(m.def, m.rank);
+        const texture = monsterKey(baseMonsterId(m.def), m.rank);
         if (!this.textures.exists(texture)) continue;
         view = { sprite: this.sprite(texture, px, py), texture, def: m.def, x: m.x, y: m.y, facing: 's', mode: '' };
         this.monsters.set(m.id, view);
@@ -450,7 +462,7 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       fresh.splice(fresh.indexOf(corpse), 1);
-      this.sounds.death(view.def);
+      this.sounds.death(baseMonsterId(view.def));
       this.sounds.gold();
       view.sprite.clearTint().setDepth(DEPTH.corpses);
       view.sprite.play(animKey(view.texture, 'DT', view.facing));
@@ -697,7 +709,7 @@ export class GameScene extends Phaser.Scene {
     const { state, data } = this.sim;
     if (this.driver?.online) return this.drawOnlineHud();
     this.hud.setText(`Gold ${state.gold}   Lives ${state.lives}   Wave ${state.wave}/${data.waves.length}   Kills ${state.kills}`);
-    this.d2?.update({ gold: state.gold, lives: state.lives, maxLives: data.economy.lives, wave: state.wave, waves: data.waves.length, nextWave: this.nextWaveTip(state.wave) });
+    this.d2?.update({ gold: state.gold, lives: state.lives, maxLives: data.economy.lives, wave: this.waveLabel(state.wave), nextWave: this.nextWaveTip(state.wave) });
     if (state.status !== 'playing' && !this.endOverlay.visible) {
       this.endOverlay
         .setText(`${state.status === 'won' ? 'Victory' : 'Defeat'}\nwave ${state.wave}, ${state.kills} kills\nclick to play again`)
@@ -713,7 +725,7 @@ export class GameScene extends Phaser.Scene {
     const waves = match.data.waves.length;
     const watching = this.view !== driver.me ? `   (watching ${this.nameOf(this.view)})` : '';
     this.hud.setText(`Gold ${s.gold}   Lives ${livesOf(match, this.view)}   Wave ${m.wavesCalled}/${waves}   Kills ${s.kills}${watching}`);
-    this.d2?.update({ gold: s.gold, lives: livesOf(match, this.view), maxLives: match.data.economy.lives, wave: m.wavesCalled, waves, nextWave: this.nextWaveTip(m.wavesCalled) });
+    this.d2?.update({ gold: s.gold, lives: livesOf(match, this.view), maxLives: match.data.economy.lives, wave: this.waveLabel(m.wavesCalled), nextWave: this.nextWaveTip(m.wavesCalled) });
 
     const parts: string[] = [];
     if (m.status === 'playing' && m.wavesCalled < waves) {
@@ -739,6 +751,15 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** "Nightmare 4/30": the difficulty of the last wave called and its number in it. */
+  private waveLabel(called: number): string {
+    const data = this.sim.data;
+    const last = data.waves[called - 1];
+    const difficulty = last?.difficulty ?? data.difficulty;
+    const perDifficulty = data.waves.filter((w) => w.difficulty === difficulty).length;
+    return `${DIFFICULTY_NAMES[difficulty]} ${last?.number ?? 0}/${perDifficulty}`;
+  }
+
   /** The next wave's monsters as a D2 tooltip: counts by type, then champions, uniques and bosses. */
   private nextWaveTip(index: number): { title: string; body: string } | undefined {
     const data = this.sim.data;
@@ -753,7 +774,7 @@ export class GameScene extends Phaser.Scene {
       else special.push(`${g.rank === 'boss' ? 'Boss' : g.rank === 'unique' ? 'Unique' : `${g.count} champion`}: ${nice(g.monster)}${g.mods.length ? ` (${g.mods.map(mod).join(', ')})` : ''}`);
     }
     const lines = [...[...normal].map(([id, n]) => `${n} ${nice(id)}`), ...special, '', `Kills so far: ${this.sim.state.kills}`];
-    return { title: `Next: wave ${index + 1}`, body: lines.join('\n') };
+    return { title: `Next: ${DIFFICULTY_NAMES[def.difficulty]} wave ${def.number}`, body: lines.join('\n') };
   }
 
   private skillName(id: string): string {

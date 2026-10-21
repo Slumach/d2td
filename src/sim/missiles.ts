@@ -1,5 +1,6 @@
 // Missile helpers shared by the archetypes: creation, homing, integer trig.
 
+import type { TowerBuff } from './archetypes/types.ts';
 import { distSq } from './combat.ts';
 import { idiv, isqrt } from './fixed.ts';
 import type { Missile, Monster, Sim, Tower } from './state.ts';
@@ -23,14 +24,16 @@ export function sin64(step: number): number {
   return cos64(step - TRIG_STEPS / 4);
 }
 
-export function spawnMissile(sim: Sim, tower: Tower, skill: string, lvl: number, damagePct: number, init: Partial<Missile>): Missile {
+export function spawnMissile(sim: Sim, tower: Tower, skill: string, lvl: number, buff: TowerBuff, init: Partial<Missile>): Missile {
   const s = sim.state;
   const missile: Missile = {
     id: s.nextId++,
     skill,
     towerId: tower.id,
     level: lvl,
-    damagePct,
+    damagePct: buff.damagePct,
+    fireMin: buff.fireMin,
+    fireMax: buff.fireMax,
     x: tower.x,
     y: tower.y,
     ox: tower.x,

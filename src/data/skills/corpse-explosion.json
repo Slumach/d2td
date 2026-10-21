@@ -3,7 +3,6 @@
   "skill": "Corpse Explosion",
   "archetype": "corpse",
   "damageType": "fire",
-  "skillLevels": [1, 5, 10, 15, 20],
   "rangeTenths": 40,
   "rateTicks": 30,
   "corpse": {

@@ -39,12 +39,34 @@ export function elementalAtLevel(row: TableRow, which: 'min' | 'max', level: num
   return value;
 }
 
-/** Elemental damage at a level in 1/256 HP: the table value shifted by HitShift. */
+/**
+ * D2's per-level length in frames (cold length, poison length): ELen at level 1, then
+ * ELevLen1 for levels 2 to 8, ELevLen2 for 9 to 16, ELevLen3 beyond. Both tables use
+ * the same column names.
+ */
+export function lengthAt(row: TableRow, level: number): number {
+  const brackets: [number, number][] = [
+    [2, 8],
+    [9, 16],
+    [17, 1000],
+  ];
+  let value = int(row, 'ELen');
+  brackets.forEach(([from, to], i) => {
+    value += Math.max(0, Math.min(level, to) - from + 1) * int(row, `ELevLen${i + 1}`);
+  });
+  return value;
+}
+
+/**
+ * Elemental damage at a level in 1/256 HP: the table value shifted by HitShift. Poison
+ * values are per frame in D2; this returns the whole dose over the poison length.
+ */
 export function damageAt(row: TableRow, level: number, table: 'skill' | 'missile'): DamageRange {
   const shift = 2 ** int(row, 'HitShift');
+  const frames = etype(row) === 'pois' ? Math.max(1, lengthAt(row, level)) : 1;
   return {
-    min: elementalAtLevel(row, 'min', level, table) * shift,
-    max: elementalAtLevel(row, 'max', level, table) * shift,
+    min: elementalAtLevel(row, 'min', level, table) * shift * frames,
+    max: elementalAtLevel(row, 'max', level, table) * shift * frames,
   };
 }
 
@@ -120,15 +142,22 @@ export function common(json: SkillJson, ctx: ResolveContext, needsRange: boolean
   if (needsRange && (json.rangeTenths === undefined || json.rateTicks === undefined)) {
     throw new Error(`${json.id}: rangeTenths and rateTicks are required for ${json.archetype}`);
   }
+  const row = ctx.skillRow;
+  const rateTicks = json.rateTicks ?? 0;
+  const frames = (level: number) => (level > 0 ? Math.max(1, d2FramesToTicks(level)) : 0);
   return {
     id: json.id,
-    name: str(ctx.skillRow, 'skill'),
+    name: str(row, 'skill'),
     archetype: json.archetype,
     damageType: json.damageType,
     skillLevels,
     rangeUnits: tenthsToUnits(json.rangeTenths ?? 0),
-    rateTicks: json.rateTicks ?? 0,
-    delayTicks: skillDelayTicks(ctx.skillRow),
+    rateTicks,
+    rates: skillLevels.map((l) => (json.rateCalc ? frames(calcAt(row, json.rateCalc, l)) : rateTicks)),
+    delayTicks: skillDelayTicks(row),
+    chillTicks: skillLevels.map((l) => (json.damageType === 'cold' ? frames(lengthAt(row, l)) : 0)),
+    freezeTicks: skillLevels.map((l) => (json.freezeCalc ? frames(calcAt(row, json.freezeCalc, l)) : 0)),
+    poisonTicks: skillLevels.map((l) => (etype(row) === 'pois' ? frames(Math.max(1, lengthAt(row, l))) : 0)),
   };
 }
 

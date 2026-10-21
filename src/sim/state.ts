@@ -53,12 +53,26 @@ export interface Monster {
   slowPct: number;
   slowTicks: number;
   stunTicks: number;
+  /** Cold: chilled monsters walk slower (rules.chillPct); frozen ones stand still. */
+  chillTicks: number;
+  freezeTicks: number;
+  /** Poison left: this much off every tick for poisonTicks more ticks. */
+  poisonTicks: number;
+  poisonPerTick: number;
+  curses: Curse[];
   attackCooldown: number;
   /** Ticks until the next AI decision. */
   abilityCooldown: number;
   /** A raiser mid-cast stands still; the corpse rises when this reaches 0. */
   castTicks: number;
   castCorpse: number;
+}
+
+/** A curse on a monster: the skill and tower level it was cast at, and how long it has left. */
+export interface Curse {
+  skill: string;
+  lvl: number;
+  ticksLeft: number;
 }
 
 export interface Tower {
@@ -84,6 +98,8 @@ export interface Tower {
   partnerLevel: number;
   /** Summon towers: ticks until the next summon may be raised. */
   summonCooldown: number;
+  /** Evolved towers cast their partner's skill too, on its own cooldown. */
+  partnerCooldown: number;
 }
 
 export interface Missile {
@@ -92,8 +108,10 @@ export interface Missile {
   towerId: number;
   /** Tower level index 0 to 4 the missile was fired at. */
   level: number;
-  /** Aura damage bonus snapshot at fire time. */
+  /** Aura bonuses snapshot at fire time: damage percent and Enchant's fire. */
   damagePct: number;
+  fireMin: number;
+  fireMax: number;
   x: number;
   y: number;
   /** Origin, for orbits and line missiles. */
@@ -116,6 +134,8 @@ export interface Missile {
 export interface Summon {
   id: number;
   towerId: number;
+  kind: 'melee' | 'ranged' | 'revive';
+  /** A monstats id: the skill's summon, or the revived corpse's monster. */
   def: string;
   dist: number;
   x: number;
@@ -124,12 +144,22 @@ export interface Summon {
   maxHp: number;
   minDamage: number;
   maxDamage: number;
+  /** Ranged summons: the element they shoot, how far, and the bolt's poison or cold length. */
+  element: Element;
+  rangeUnits: number;
+  effectTicks: number;
   cooldown: number;
+  /** Revived allies fall when this runs out; 0 lasts until killed. */
+  ticksLeft: number;
+  /** The monster it last attacked, for the renderer. */
+  targetId: number;
 }
 
 export interface Corpse {
   id: number;
   def: string;
+  /** Only normal monsters can be revived. */
+  rank: Rank;
   dist: number;
   x: number;
   y: number;

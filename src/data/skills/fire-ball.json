@@ -1,0 +1,9 @@
+{
+  "id": "fire-ball",
+  "skill": "Fire Ball",
+  "archetype": "splash",
+  "damageType": "fire",
+  "rangeTenths": 40,
+  "rateTicks": 25,
+  "splash": { "delivery": "missile", "radiusCalc": "calc1", "edgeDamagePct": 100 }
+}

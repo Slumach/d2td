@@ -1,0 +1,9 @@
+{
+  "id": "poison-nova",
+  "skill": "Poison Nova",
+  "archetype": "splash",
+  "damageType": "pois",
+  "rangeTenths": 30,
+  "rateTicks": 30,
+  "splash": { "delivery": "nova", "edgeDamagePct": 100 }
+}

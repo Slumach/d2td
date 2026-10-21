@@ -1,0 +1,10 @@
+{
+  "id": "amplify-damage",
+  "skill": "Amplify Damage",
+  "archetype": "debuff",
+  "damageType": "none",
+  "skillLevels": [1, 5, 10, 15, 20],
+  "rangeTenths": 40,
+  "rateTicks": 20,
+  "debuff": { "mode": "curse", "radiusCalc": "aurarangecalc", "durationCalc": "auralencalc" }
+}

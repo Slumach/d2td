@@ -5,6 +5,7 @@
 import Phaser from 'phaser';
 
 import { LOBBY_MODES, type LobbyPlayer } from '../net/protocol.ts';
+import { DIFFICULTY_NAMES } from '../sim/data.ts';
 import type { MatchMode } from '../sim/match.ts';
 import type { OnlineStart } from '../render/GameScene.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
@@ -39,6 +40,7 @@ export class LobbyScene extends Phaser.Scene {
   private message = '';
   private players: LobbyPlayer[] = [];
   private mode: MatchMode = 'team';
+  private difficulty = 0;
   private me = -1;
   private isHost = false;
   private codes: JoinCode[] = [];
@@ -51,7 +53,7 @@ export class LobbyScene extends Phaser.Scene {
   create(data: { role: 'host' | 'join' }): void {
     this.role = data.role;
     this.session = MpSession.of(this.registry.get(LAUNCHER_KEY) as LauncherApi);
-    Object.assign(this, { phase: data.role === 'host' ? 'connecting' : 'code', message: '', players: [], mode: 'team', me: -1, isHost: false, codes: [], upnp: 'trying', field: undefined });
+    Object.assign(this, { phase: data.role === 'host' ? 'connecting' : 'code', message: '', players: [], mode: 'team', difficulty: 0, me: -1, isHost: false, codes: [], upnp: 'trying', field: undefined });
     this.session.listen((e) => this.onEvent(e));
     if (this.role === 'host') {
       void this.session.host().then((r) => {
@@ -83,12 +85,13 @@ export class LobbyScene extends Phaser.Scene {
       } else if (m.t === 'lobby') {
         this.players = m.players;
         this.mode = m.mode;
+        this.difficulty = m.difficulty;
       } else if (m.t === 'reject') {
         this.message = m.reason;
       } else if (m.t === 'start') {
         // Hold the tick bundles that follow until the game scene is ready for them
         this.session.hold();
-        const start: OnlineStart = { seed: m.seed, mode: m.mode, players: m.players, you: m.you };
+        const start: OnlineStart = { seed: m.seed, mode: m.mode, difficulty: m.difficulty, players: m.players, you: m.you };
         this.scene.start('Game', start);
         return;
       }
@@ -189,6 +192,25 @@ export class LobbyScene extends Phaser.Scene {
     }
     const about = add(this.add.text(LEFT, y, MODE_TEXT[this.mode].about, MUTED));
     y += about.height + 30;
+
+    add(this.add.text(LEFT, y, 'Difficulty', MUTED));
+    y += 30;
+    if (this.isHost) {
+      let x = LEFT;
+      DIFFICULTY_NAMES.forEach((name, difficulty) => {
+        const chosen = difficulty === this.difficulty;
+        this.parts.push(
+          ...button(this, x, y, { label: name, onClick: () => this.session.send({ t: 'difficulty', difficulty }), colour: chosen ? '#6a3020' : '#3a2c1c', width: 220 }),
+        );
+        x += 240;
+      });
+      y += 50;
+    } else {
+      add(this.add.text(LEFT, y, DIFFICULTY_NAMES[this.difficulty]!, TEXT));
+      y += 34;
+    }
+    const loop = add(this.add.text(LEFT, y, 'After wave 30 the map loops at the next difficulty, up to Hell.', MUTED));
+    y += loop.height + 30;
 
     if (this.isHost) {
       this.parts.push(...button(this, LEFT, y, { label: 'Start', onClick: () => this.session.send({ t: 'start' }), colour: '#6a3020', width: 200 }));

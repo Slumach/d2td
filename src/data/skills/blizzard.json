@@ -3,8 +3,7 @@
   "skill": "Blizzard",
   "archetype": "zone",
   "damageType": "cold",
-  "skillLevels": [1, 5, 10, 15, 20],
   "rangeTenths": 45,
   "rateTicks": 30,
-  "zone": { "radiusTenths": 15, "tickTicks": 10 }
+  "zone": { "radiusCalc": "calc1", "tickTicks": 10 }
 }

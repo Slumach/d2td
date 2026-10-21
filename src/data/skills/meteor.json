@@ -1,0 +1,9 @@
+{
+  "id": "meteor",
+  "skill": "Meteor",
+  "archetype": "splash",
+  "damageType": "fire",
+  "rangeTenths": 50,
+  "rateTicks": 30,
+  "splash": { "delivery": "strike", "radiusCalc": "calc1", "edgeDamagePct": 100 }
+}

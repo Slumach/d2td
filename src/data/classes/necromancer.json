@@ -1,0 +1,12 @@
+{
+  "id": "necromancer",
+  "name": "Necromancer",
+  "lines": {
+    "summoning": { "name": "Summoning", "tiers": [["raise-skeleton"], ["raise-skeletal-mage"], ["revive"]] },
+    "bone": {
+      "name": "Bone",
+      "tiers": [["teeth"], ["bone-spear", "corpse-explosion"], ["bone-spirit", "poison-nova"]]
+    },
+    "curses": { "name": "Curses", "tiers": [["amplify-damage"], ["decrepify"], ["lower-resist"]] }
+  }
+}

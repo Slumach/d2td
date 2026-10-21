@@ -58,8 +58,8 @@ export interface HudNumbers {
   gold: number;
   lives: number;
   maxLives: number;
-  wave: number;
-  waves: number;
+  /** "Hell 12/30". */
+  wave: string;
   /** The next wave's tooltip, or undefined after the last. */
   nextWave?: { title: string; body: string };
 }
@@ -160,7 +160,7 @@ export class D2Hud {
   update(n: HudNumbers): void {
     this.goldText.setText(String(n.gold));
     this.livesText.setText(String(n.lives));
-    this.waveText.setText(`Wave ${n.wave}/${n.waves}`);
+    this.waveText.setText(n.wave);
     this.nextWave = n.nextWave;
     const frac = Math.max(0, Math.min(1, n.lives / Math.max(1, n.maxLives)));
     if (frac !== this.lastLivesFrac) {

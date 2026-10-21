@@ -9,12 +9,15 @@
 //     attack speed %       the neighbour's interval shortened by that attack speed
 //     resistance cut       x (100 + cut) / 100, as taken against a 0% resist target
 //     slow %               x 100 / (100 - slow), extra time under fire
+//     added fire           x (hit + fire) / hit, against the neighbour's average hit
+// Curses count like debuff auras.
 //
-// Per archetype for attack skills: projectile shots times count; a pierce or chain bolt
+// Per archetype for attack skills: one projectile shot (a volley has one per target); a pierce or chain bolt
 // hits the target once; a splash hits it once per cast (the sub-missile only if its
 // filter allows plain monsters); a zone hits every tickTicks while it lasts; melee is
 // weapon damage with the skill's percent and elemental adds, times swings; a control
-// aura pulses its damage. Summons and corpses do no direct damage and score 0.
+// aura pulses its damage. Summons, corpse skills and pulses (a percent of current HP)
+// have no standard-target number and score 0.
 
 import type { DamageRange, HitFilter, SkillDef } from './archetypes/types.ts';
 import { idiv } from './fixed.ts';
@@ -30,17 +33,16 @@ function avg(r: DamageRange): number {
   return idiv(r.min + r.max, 2);
 }
 
-function interval(skill: SkillDef, attackSpeedPct = 0): number {
-  return Math.max(1, idiv(skill.rateTicks * 100, 100 + attackSpeedPct), skill.delayTicks);
+function interval(skill: SkillDef, lvl: number, attackSpeedPct = 0): number {
+  return Math.max(1, idiv((skill.rates[lvl] ?? skill.rateTicks) * 100, 100 + attackSpeedPct), skill.delayTicks);
 }
 
 export function standardDps(skill: SkillDef, lvl: number): number {
-  const per = (damage: number) => idiv(damage * PER, interval(skill));
+  const per = (damage: number) => idiv(damage * PER, interval(skill, lvl));
   switch (skill.archetype) {
-    case 'projectile': {
-      const l = skill.levels[lvl]!;
-      return per(idiv(avg(l) * l.count * plainPct(skill.filter), 100));
-    }
+    case 'projectile':
+      // One shot per target: a volley lands one shot on the standard target
+      return per(idiv(avg(skill.levels[lvl]!) * plainPct(skill.filter), 100));
     case 'pierce':
       return per(idiv(avg(skill.levels[lvl]!) * plainPct(skill.filter), 100));
     case 'splash': {
@@ -66,9 +68,20 @@ export function standardDps(skill: SkillDef, lvl: number): number {
   }
 }
 
-/** True for skills whose worth is what they do to others: buff, debuff and control auras. */
+/** True for skills whose worth is what they do to others: buff, debuff and control auras, and curses. */
 export function isAura(skill: SkillDef): boolean {
-  return skill.archetype === 'buffAura' || skill.archetype === 'debuff' || (skill.archetype === 'control' && skill.mode === 'aura');
+  return (
+    skill.archetype === 'buffAura' ||
+    (skill.archetype === 'debuff' && skill.mode !== 'pulse') ||
+    (skill.archetype === 'control' && skill.mode === 'aura')
+  );
+}
+
+/** The reference neighbour's average hit at its top level, for added flat damage. */
+function averageHit(reference: SkillDef): number {
+  const top = reference.levels.length - 1;
+  const l = reference.levels[top] as Partial<DamageRange>;
+  return l.min !== undefined && l.max !== undefined ? Math.max(1, avg(l as DamageRange)) : 1;
 }
 
 /** The DPS multiplier (per mille) an aura gives the reference neighbour. */
@@ -77,13 +90,18 @@ export function auraMultiplier(skill: SkillDef, lvl: number, reference: SkillDef
   const times = (pct: number) => {
     m = idiv(m * (100 + pct), 100);
   };
+  const top = reference.levels.length - 1;
   if (skill.archetype === 'buffAura') {
     const l = skill.levels[lvl]!;
     times(l.damagePct);
-    m = idiv(m * interval(reference), interval(reference, l.attackSpeedPct));
+    m = idiv(m * interval(reference, top), interval(reference, top, l.attackSpeedPct));
+    const hit = averageHit(reference);
+    m = idiv(m * (hit + avg({ min: l.fireMin, max: l.fireMax })), hit);
   } else if (skill.archetype === 'debuff') {
-    const cuts = Object.values(skill.levels[lvl]!.resistDown).map((v) => v ?? 0);
+    const l = skill.levels[lvl]!;
+    const cuts = Object.values(l.resistDown).map((v) => v ?? 0);
     times(cuts.length > 0 ? Math.max(...cuts) : 0);
+    m = idiv(m * 100, 100 - Math.min(90, l.slowPct));
   } else if (skill.archetype === 'control') {
     const slow = Math.min(90, skill.levels[lvl]!.slowPct);
     m = idiv(m * 100, 100 - slow);
@@ -122,13 +140,20 @@ export function withTierBonus(skill: SkillDef, permille: number): SkillDef {
     case 'buffAura':
       return {
         ...skill,
-        levels: skill.levels.map((l) => ({ ...l, damagePct: scalePct(l.damagePct, permille), attackSpeedPct: scalePct(l.attackSpeedPct, permille) })),
+        levels: skill.levels.map((l) => ({
+          ...l,
+          damagePct: scalePct(l.damagePct, permille),
+          attackSpeedPct: scalePct(l.attackSpeedPct, permille),
+          fireMin: scalePct(l.fireMin, permille),
+          fireMax: scalePct(l.fireMax, permille),
+        })),
       };
     case 'debuff':
       return {
         ...skill,
         levels: skill.levels.map((l) => ({
           ...l,
+          slowPct: Math.min(90, scalePct(l.slowPct, permille)),
           resistDown: Object.fromEntries(Object.entries(l.resistDown).map(([e, v]) => [e, scalePct(v ?? 0, permille)])),
         })),
       };

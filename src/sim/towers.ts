@@ -101,6 +101,7 @@ export function build(sim: Sim, x: number, y: number, cls: string, skill?: strin
     partnerSkill: '',
     partnerLevel: 0,
     summonCooldown: 0,
+    partnerCooldown: 0,
   };
   s.towers.push(tower);
   if (skill) pickSkill(sim, tower, skill);
@@ -169,6 +170,7 @@ export function evolve(sim: Sim, a: Tower, b: Tower): void {
     partnerSkill: recipe.partner.skill,
     partnerLevel,
     summonCooldown: 0,
+    partnerCooldown: 0,
   });
 }
 

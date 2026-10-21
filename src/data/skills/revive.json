@@ -1,0 +1,16 @@
+{
+  "id": "revive",
+  "skill": "Revive",
+  "archetype": "summon",
+  "damageType": "phys",
+  "rangeTenths": 40,
+  "rateTicks": 20,
+  "summon": {
+    "kind": "revive",
+    "countCalc": "petmax",
+    "hpPctCalc": "calc1",
+    "damagePctCalc": "aurastatcalc1",
+    "durationTicks": 600,
+    "respawnTicks": 40
+  }
+}

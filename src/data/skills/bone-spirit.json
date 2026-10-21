@@ -1,0 +1,9 @@
+{
+  "id": "bone-spirit",
+  "skill": "Bone Spirit",
+  "archetype": "projectile",
+  "damageType": "mag",
+  "rangeTenths": 55,
+  "rateTicks": 25,
+  "projectile": { "count": 1 }
+}

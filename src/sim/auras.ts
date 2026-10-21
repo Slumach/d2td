@@ -1,14 +1,18 @@
 // The aura field for one tick. Every aura emitter (an aura tower's own skill, or an evolved
 // tower's built-in partner aura at half radius) contributes to towers and monsters in its
 // radius. The same aura from two towers counts once, strongest value per stat; different
-// auras add up.
+// auras add up. Curses ride on the monsters themselves and count as one more source:
+// across every curse a monster carries, the strongest value of each effect.
 
 import { archetypeOf } from './archetypes/index.ts';
 import type { AuraContribution, MonsterAuraFx, SkillDef, TowerBuff } from './archetypes/types.ts';
 import { within } from './combat.ts';
 import { EVOLVED_LEVEL_INDEX } from './data.ts';
 import { idiv } from './fixed.ts';
-import { ELEMENTS, type AuraEmitter, type AuraField, type Sim, type Tower } from './state.ts';
+import { ELEMENTS, type AuraEmitter, type AuraField, type Monster, type Sim, type Tower } from './state.ts';
+
+/** The key all of a monster's curses share in the field, so they never add up. */
+const CURSES = 'curses';
 
 /** The skill a tower attacks or pulses with, and its level index, or undefined if inert. */
 export function activeSkill(sim: Sim, tower: Tower): { skill: SkillDef; lvl: number } | undefined {
@@ -41,17 +45,38 @@ export function auraSources(sim: Sim, tower: Tower): Source[] {
   return out;
 }
 
+const noBuff = (): TowerBuff => ({ damagePct: 0, attackSpeedPct: 0, fireMin: 0, fireMax: 0 });
+const noFx = (): MonsterAuraFx => ({ slowPct: 0, resistDown: {}, damageDownPct: 0 });
+
 function strongestTower(into: TowerBuff, add: TowerBuff): void {
   into.damagePct = Math.max(into.damagePct, add.damagePct);
   into.attackSpeedPct = Math.max(into.attackSpeedPct, add.attackSpeedPct);
+  if (add.fireMax > into.fireMax) {
+    into.fireMin = add.fireMin;
+    into.fireMax = add.fireMax;
+  }
 }
 
 function strongestMonster(into: MonsterAuraFx, add: MonsterAuraFx): void {
   into.slowPct = Math.max(into.slowPct, add.slowPct);
+  into.damageDownPct = Math.max(into.damageDownPct, add.damageDownPct);
   for (const e of ELEMENTS) {
     const v = add.resistDown[e];
     if (v !== undefined) into.resistDown[e] = Math.max(into.resistDown[e] ?? 0, v);
   }
+}
+
+/** Every curse on a monster folded into one effect: strongest value per stat. */
+function curseFx(sim: Sim, m: Monster): MonsterAuraFx | undefined {
+  if (m.curses.length === 0) return undefined;
+  const fx = noFx();
+  for (const c of m.curses) {
+    const skill = sim.data.skills[c.skill];
+    if (skill?.archetype !== 'debuff') continue;
+    const l = skill.levels[c.lvl]!;
+    strongestMonster(fx, { slowPct: l.slowPct, resistDown: l.resistDown, damageDownPct: l.damageDownPct });
+  }
+  return fx;
 }
 
 export function computeAuras(sim: Sim): AuraField {
@@ -68,34 +93,41 @@ export function computeAuras(sim: Sim): AuraField {
         for (const t of s.towers) {
           if (!within(tower, t, aura.radiusUnits)) continue;
           const per = (towerBy[t.id] ??= {});
-          strongestTower((per[skill.id] ??= { damagePct: 0, attackSpeedPct: 0 }), aura.towers);
+          strongestTower((per[skill.id] ??= noBuff()), aura.towers);
         }
       }
       if (aura.monsters) {
         for (const m of s.monsters) {
           if (m.hp <= 0 || !within(tower, m, aura.radiusUnits)) continue;
           const per = (monsterBy[m.id] ??= {});
-          strongestMonster((per[skill.id] ??= { slowPct: 0, resistDown: {} }), aura.monsters);
+          strongestMonster((per[skill.id] ??= noFx()), aura.monsters);
         }
       }
     }
+  }
+  for (const m of s.monsters) {
+    const fx = m.hp > 0 ? curseFx(sim, m) : undefined;
+    if (fx) (monsterBy[m.id] ??= {})[CURSES] = fx;
   }
 
   // Different auras stack
   const towers: Record<number, TowerBuff> = {};
   for (const [id, per] of Object.entries(towerBy)) {
-    const sum: TowerBuff = { damagePct: 0, attackSpeedPct: 0 };
+    const sum = noBuff();
     for (const b of Object.values(per)) {
       sum.damagePct += b.damagePct;
       sum.attackSpeedPct += b.attackSpeedPct;
+      sum.fireMin += b.fireMin;
+      sum.fireMax += b.fireMax;
     }
     towers[Number(id)] = sum;
   }
   const monsters: Record<number, MonsterAuraFx> = {};
   for (const [id, per] of Object.entries(monsterBy)) {
-    const sum: MonsterAuraFx = { slowPct: 0, resistDown: {} };
+    const sum = noFx();
     for (const fx of Object.values(per)) {
       sum.slowPct += fx.slowPct;
+      sum.damageDownPct += fx.damageDownPct;
       for (const e of ELEMENTS) {
         const v = fx.resistDown[e];
         if (v !== undefined) sum.resistDown[e] = (sum.resistDown[e] ?? 0) + v;

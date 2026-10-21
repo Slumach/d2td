@@ -1,16 +1,19 @@
-// Projectile: a homing shot that hits its target. Holy Bolt, Fire Bolt, Ice Bolt; Teeth
-// fires `count` at once, one per target.
+// Projectile: a homing shot that hits its target. Holy Bolt, Fire Bolt, Ice Bolt, Bone
+// Spirit; Charged Bolt and Teeth fire several at once (a count or a count calc), one per
+// target. Shots with no target of their own fly past: a volley shreds a crowd, not a boss.
 
-import { canHurt, dealDamage, findTarget, withBonus } from '../combat.ts';
+import { canHurt, findTarget, strike, withBonus } from '../combat.ts';
 import { homeToward, spawnMissile, targetOf } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
-import type { Monster } from '../state.ts';
-import { common, damageAt, elementalType, fields, filterFrom, missileLifetime, missileOf, missileSpeed, perLevel } from './common.ts';
+import type { Element, Monster } from '../state.ts';
+import { calcAt, common, damageAt, elementalType, fields, filterFrom, missileLifetime, missileOf, missileSpeed, perLevel } from './common.ts';
 import type { ArchetypeModule, ProjectileDef } from './types.ts';
 
 interface ProjectileJson {
-  /** Shots per attack, each at a different target. Defaults to 1. */
+  /** Shots per attack. Defaults to 1. */
   count?: number;
+  /** skills.txt column with the shot count per level, instead of count. */
+  countCalc?: string;
 }
 
 export const projectile: ArchetypeModule<ProjectileDef> = {
@@ -26,26 +29,22 @@ export const projectile: ArchetypeModule<ProjectileDef> = {
       missileSpeed: missileSpeed(missile),
       missileLifetime: missileLifetime(missile),
       filter: filterFrom(missile, ctx.filterOverride),
-      levels: perLevel(json, (level) => ({ ...damageAt(ctx.skillRow, level, 'skill'), count: f.count ?? 1 })),
+      levels: perLevel(json, (level) => ({
+        ...damageAt(ctx.skillRow, level, 'skill'),
+        count: Math.max(1, f.countCalc ? calcAt(ctx.skillRow, f.countCalc, level) : (f.count ?? 1)),
+      })),
     };
   },
 
   act(sim, tower, skill, lvl, buff) {
-    const element = skill.damageType as Exclude<typeof skill.damageType, 'none'>;
+    const element = skill.damageType as Element;
+    const count = skill.levels[lvl]!.count;
     const chosen: Monster[] = [];
-    for (let i = 0; i < skill.levels[lvl]!.count; i++) {
-      const target = findTarget(
-        sim,
-        tower,
-        skill.rangeUnits,
-        (m) => !chosen.includes(m) && canHurt(sim, m, element, skill.filter),
-      );
+    for (let i = 0; i < count; i++) {
+      const target = findTarget(sim, tower, skill.rangeUnits, (m) => !chosen.includes(m) && canHurt(sim, m, element, skill.filter));
       if (!target) break;
       chosen.push(target);
-      spawnMissile(sim, tower, skill.id, lvl, buff.damagePct, {
-        targetId: target.id,
-        ticksLeft: skill.missileLifetime,
-      });
+      spawnMissile(sim, tower, skill.id, lvl, buff, { targetId: target.id, ticksLeft: skill.missileLifetime });
     }
     return chosen.length > 0;
   },
@@ -55,9 +54,8 @@ export const projectile: ArchetypeModule<ProjectileDef> = {
     if (!target || --missile.ticksLeft < 0) return false;
     if (!homeToward(missile, target, skill.missileSpeed)) return true;
     const range = skill.levels[missile.level]!;
-    const element = skill.damageType as Exclude<typeof skill.damageType, 'none'>;
     const amount = withBonus(rollInt(sim.state.rng, range.min, range.max), missile.damagePct);
-    dealDamage(sim, target, amount, element, skill.filter);
+    strike(sim, target, amount, skill.damageType as Element, skill.filter, skill, missile.level, missile);
     return false;
   },
 };

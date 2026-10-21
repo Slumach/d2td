@@ -4,7 +4,7 @@
 // Supported: integers, + - * / with unary minus, comparisons, ?:, parentheses,
 // min(a, b), max(a, b), parN, lvl, blvl, the linear and diminishing helpers
 // ln12/ln34/ln56/ln78 and dm12/dm34/dm56/dm78, and enms/exms (the skill's elemental
-// min/max at lvl). Synergies (skill('X'.blvl) and similar) and character stats (toht,
+// min/max at lvl, also spelled enma/exma). Synergies (skill('X'.blvl) and similar) and character stats (toht,
 // stat(...)) evaluate to 0: a tower has no other skills or character sheet.
 
 import { idiv } from './fixed.ts';
@@ -201,8 +201,9 @@ class Parser {
     }
     if (name === 'skill' || name === 'stat' || name === 'sklvl' || name === 'miss') return this.reference();
     if (name === 'lvl' || name === 'blvl') return ctx.lvl;
-    if (name === 'enms') return ctx.elementalMin ?? 0;
-    if (name === 'exms') return ctx.elementalMax ?? 0;
+    // enms/exms and enma/exma both read the skill's elemental damage (Enchant uses the latter)
+    if (name === 'enms' || name === 'enma') return ctx.elementalMin ?? 0;
+    if (name === 'exms' || name === 'exma') return ctx.elementalMax ?? 0;
     if (name === 'toht') return 0;
 
     const parMatch = /^par([1-8])$/.exec(name);

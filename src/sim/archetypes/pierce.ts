@@ -1,7 +1,7 @@
 // Pierce / chain: a line missile that passes through targets (Bone Spear), or a bolt that
 // jumps from target to target (Lightning, Chain Lightning) with a falloff per hop.
 
-import { canHurt, dealDamage, distSq, findTarget, withBonus } from '../combat.ts';
+import { canHurt, distSq, findTarget, strike, withBonus } from '../combat.ts';
 import { UNITS_PER_TILE, idiv } from '../fixed.ts';
 import { spawnMissile, velocityToward } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
@@ -73,7 +73,7 @@ export const pierce: ArchetypeModule<PierceDef> = {
     if (!target) return false;
 
     if (skill.mode === 'pierce') {
-      spawnMissile(sim, tower, skill.id, lvl, buff.damagePct, {
+      spawnMissile(sim, tower, skill.id, lvl, buff, {
         ...velocityToward(tower, target, skill.missileSpeed),
         ticksLeft: skill.missileLifetime,
         remaining: skill.pierceCount,
@@ -89,7 +89,7 @@ export const pierce: ArchetypeModule<PierceDef> = {
     for (let hop = 0; current && hop <= hops; hop++) {
       hit.push(current.id);
       const from: Monster = current;
-      dealDamage(sim, from, amount, element(skill), skill.filter);
+      strike(sim, from, amount, element(skill), skill.filter, skill, lvl, buff);
       amount = idiv(amount * (100 - skill.falloffPct), 100);
       current = undefined;
       let best = 0;
@@ -112,7 +112,7 @@ export const pierce: ArchetypeModule<PierceDef> = {
     for (const m of [...sim.state.monsters]) {
       if (m.hp <= 0 || missile.hits.includes(m.id) || distSq(missile, m) > HIT_RADIUS * HIT_RADIUS) continue;
       missile.hits.push(m.id);
-      dealDamage(sim, m, roll(sim, skill, missile.level, missile.damagePct), element(skill), skill.filter);
+      strike(sim, m, roll(sim, skill, missile.level, missile.damagePct), element(skill), skill.filter, skill, missile.level, missile);
       if (skill.pierceCount > 0 && --missile.remaining <= 0) return false;
     }
     return true;

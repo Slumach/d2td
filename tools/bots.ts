@@ -6,22 +6,36 @@
 //   TWOLINE   Holy plus Aura towers (Might; Concentration or Holy Freeze; Fanaticism or
 //             Conviction), no evolution
 //   PALADIN   Zealot, Holy and Aura towers; opens for a Hammerdin by wave 15
+//   SORC      the four Sorceress lines, evolving whatever pair it can
+//   NECRO     the three Necromancer lines, evolving whatever pair it can
+//   MIXED3    every class's lines, evolving whatever pair it can
 //
-// All four share one engine, so they differ only in what they may use. Each decision
-// takes the option with the most estimated power per gold among: a new tower on the best
-// free tile, a level, a tier (with its best branch). It then saves up for that option.
-// Power is a rough damage-per-tick estimate from the resolved skill data; auras are worth
+// All share one engine, so they differ only in what they may use. Each decision takes the
+// option with the most estimated power per gold among: a new tower on the best free tile,
+// a level, a tier (with its best branch), and for the bots that may, an evolution. It then
+// saves up for that option. Power is a rough damage-per-tick estimate from the resolved
+// skill data, judged against the coming monsters' resistances; auras and curses are worth
 // what they add to the towers they cover.
 
 import type { HitFilter, SkillDef } from '../src/sim/archetypes/types.ts';
 import { auraSources } from '../src/sim/auras.ts';
-import { MAX_TOWER_LEVEL, type GameData } from '../src/sim/data.ts';
+import { EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, type GameData } from '../src/sim/data.ts';
 import { tileCenter, isPathTile } from '../src/sim/map.ts';
 import { activeSkill, canBuild, createSim, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
-import type { Command, Sim, TimedCommand, Tower } from '../src/sim/state.ts';
+import type { Command, Element, Sim, TimedCommand, Tower } from '../src/sim/state.ts';
 
-export type Strategy = 'BOLT' | 'HOLY' | 'TWOLINE' | 'PALADIN';
+export type Strategy = 'BOLT' | 'HOLY' | 'TWOLINE' | 'PALADIN' | 'SORC' | 'NECRO' | 'MIXED3';
+/** The Normal balance targets' bots; the class bots play the Hell gate. */
 export const STRATEGIES: Strategy[] = ['BOLT', 'HOLY', 'TWOLINE', 'PALADIN'];
+export const HELL_STRATEGIES: Strategy[] = ['PALADIN', 'SORC', 'NECRO', 'MIXED3'];
+
+/** The class and line whose T1 options include a skill. */
+function lineOf(sim: Sim, skill: string): { cls: string; line: string } {
+  for (const c of Object.values(sim.data.classes)) {
+    for (const [line, l] of Object.entries(c.lines)) if (l.tiers[0]!.includes(skill)) return { cls: c.id, line };
+  }
+  throw new Error(`no class has ${skill} at T1`);
+}
 
 /** Bots act every this many ticks, roughly a human's pace. */
 export const DECISION_TICKS = 10;
@@ -87,50 +101,131 @@ const avg = (r: { min: number; max: number }) => (r.min + r.max) / 2;
 interface Buff {
   damagePct: number;
   attackSpeedPct: number;
+  fire: number;
 }
 
+/** Damage per tick by element. */
+type Parts = Partial<Record<Element, number>>;
+
+/** A volley or a blast counts for at most this many monsters in a typical crowd. */
+const CROWD = 3;
+
 /**
- * Damage per tick of a skill at a level against a typical crowd. Each hit counts for at
- * most `hpCap` (the coming wave's average HP): overkill on a 4 HP Fallen is wasted, so
- * more hits beat bigger ones once damage outgrows the monsters.
+ * Damage per tick of a skill at a level against a typical crowd, by element. Each hit
+ * counts for at most `hpCap` (the coming wave's average HP): overkill on a 4 HP Fallen is
+ * wasted, so more hits beat bigger ones once damage outgrows the monsters. Enchant's fire
+ * rides on every direct hit. Summons count for the damage they deal and the HP they put
+ * in the way; corpse skills and pulses for what they take off a crowd.
  */
-function attackPower(skill: SkillDef, lvl: number, ignoreDelay: boolean, buff: Buff, hpCap: number): number {
-  const rate = Math.max(1, (skill.rateTicks * 100) / (100 + buff.attackSpeedPct));
+function attackParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boolean, buff: Buff, hpCap: number): Parts {
+  const rate = Math.max(1, ((skill.rates[lvl] ?? skill.rateTicks) * 100) / (100 + buff.attackSpeedPct));
   const interval = Math.max(rate, ignoreDelay ? 0 : skill.delayTicks);
   const hit = (damage: number, filter?: HitFilter) =>
     Math.min(hpCap, (damage * (100 + buff.damagePct) * (filter ? hitFactor(filter) : 1)) / 100);
+  const el = skill.damageType === 'none' ? 'phys' : skill.damageType;
+  const out: Parts = {};
+  const add = (e: Element, v: number) => (out[e] = (out[e] ?? 0) + v);
+  /** `hits` direct hits per attack of `damage` in the skill's element, plus Enchant's fire on each. */
+  const direct = (damage: number, hits: number, filter?: HitFilter) => {
+    add(el, (hit(damage, filter) * hits) / interval);
+    if (buff.fire > 0) add('fire', (Math.min(hpCap, buff.fire) * hits) / interval);
+  };
+  const attackTicks = sim.data.rules.monsterAttackTicks;
   switch (skill.archetype) {
     case 'projectile': {
       const l = skill.levels[lvl]!;
-      return (hit(avg(l), skill.filter) * l.count) / interval;
+      direct(avg(l), Math.min(l.count, CROWD), skill.filter);
+      break;
     }
     case 'pierce': {
       const l = skill.levels[lvl]!;
-      return (hit(avg(l), skill.filter) * (skill.mode === 'chain' ? l.hops + 1 : 2)) / interval;
+      direct(avg(l), skill.mode === 'chain' ? l.hops + 1 : 2, skill.filter);
+      break;
     }
     case 'splash': {
       const l = skill.levels[lvl]!;
-      const targets = skill.delivery === 'orbit' ? 3 : 1 + skill.radiusUnits / 1000;
-      const sub = skill.subFilter && l.subRadiusUnits > 0 ? hit(avg(l.sub), skill.subFilter) * 2 : 0;
-      return (hit(avg(l), skill.filter) * targets + sub) / interval;
+      const targets = skill.delivery === 'orbit' ? 3 : skill.delivery === 'nova' ? CROWD : 1 + skill.radiusUnits / 1000;
+      direct(avg(l), targets, skill.filter);
+      if (skill.subFilter && l.subRadiusUnits > 0) add(skill.subElement, (hit(avg(l.sub), skill.subFilter) * 2) / interval);
+      break;
     }
     case 'zone': {
       const l = skill.levels[lvl]!;
-      return (hit(avg(l), skill.filter) * (skill.durationTicks / skill.tickTicks) * 2) / interval;
+      add(el, (hit(avg(l), skill.filter) * (skill.durationTicks / skill.tickTicks) * 2) / interval);
+      break;
     }
     case 'melee': {
+      // One swing is clamped whole, then split by element
       const l = skill.levels[lvl]!;
       const weapon = avg(skill.weapon);
-      const elemental = Object.values(l.elementalPct).reduce((n, pct) => n + (weapon * (pct ?? 0)) / 100, 0);
-      return (hit((weapon * (100 + l.damagePct)) / 100 + elemental) * l.swings) / interval;
+      const raw: Parts = { phys: (weapon * (100 + l.damagePct)) / 100 };
+      for (const [e, pct] of Object.entries(l.elementalPct) as [Element, number][]) raw[e] = (weapon * pct) / 100;
+      const whole = Object.values(raw).reduce((n, v) => n + (v ?? 0), 0);
+      const swing = hit(whole);
+      for (const [e, v] of Object.entries(raw) as [Element, number][]) add(e, (swing * (v / whole) * l.swings) / interval);
+      if (buff.fire > 0) add('fire', (Math.min(hpCap, buff.fire) * l.swings) / interval);
+      break;
     }
     case 'control': {
       const l = skill.levels[lvl]!;
-      return l.max === 0 ? 0 : (hit(avg(l), skill.filter) * (skill.mode === 'aura' ? 2 : 1)) / interval;
+      if (l.max > 0) add(el, (hit(avg(l), skill.filter) * (skill.mode === 'aura' ? 2 : 1)) / interval);
+      break;
+    }
+    case 'debuff': {
+      const l = skill.levels[lvl]!;
+      // A pulse takes hpPct of what is left: about half that over a monster's life, on a crowd
+      if (skill.mode === 'pulse') add(el, (((hpCap * l.hpPct) / 100 / 2) * CROWD) / interval);
+      break;
+    }
+    case 'summon': {
+      const l = skill.levels[lvl]!;
+      if (skill.kind === 'ranged') {
+        for (const b of l.bolts) add(b.element, (l.count * Math.min(hpCap, avg(b))) / attackTicks / l.bolts.length);
+      } else if (skill.kind === 'revive') {
+        // A revived corpse is about a wave monster's HP times hpPct, standing in the way
+        add('phys', (l.count * ((hpCap * l.hpPct) / 100 / 4)) / attackTicks);
+      } else {
+        add('phys', (l.count * (Math.min(hpCap, avg(l)) + Math.min(hpCap, l.hp) / 4)) / attackTicks);
+      }
+      break;
+    }
+    case 'corpse': {
+      const l = skill.levels[lvl]!;
+      // Half the casts find a corpse; the blast is a share of a wave monster's HP
+      const blast = (hpCap * (l.minPct + l.maxPct)) / 200;
+      const physical = (blast * l.physicalPct) / 100;
+      add('phys', (physical * CROWD) / 2 / interval);
+      add(el, ((blast - physical) * CROWD) / 2 / interval);
+      break;
     }
     default:
-      return 0;
+      break;
   }
+  return out;
+}
+
+/** The next few waves, as the monster mix the bot plays against. */
+const LOOKAHEAD_WAVES = 3;
+
+interface Foe {
+  /** HP share of this monster across the coming waves. */
+  weight: number;
+  resist: Record<Element, number>;
+}
+
+/** Normal monsters of the coming waves with their resistances, weighted by total HP. */
+function comingFoes(sim: Sim): Foe[] {
+  const byId = new Map<string, number>();
+  for (let w = sim.state.wave; w < Math.min(sim.data.waves.length, sim.state.wave + LOOKAHEAD_WAVES); w++) {
+    const wave = sim.data.waves[w]!;
+    for (const g of wave.groups) {
+      if (g.rank !== 'normal') continue;
+      const d = sim.data.monsters[g.monster]!;
+      byId.set(g.monster, (byId.get(g.monster) ?? 0) + avg({ min: d.minHp, max: d.maxHp }) * (wave.hpPermille / 1000) * g.count);
+    }
+  }
+  const total = [...byId.values()].reduce((n, v) => n + v, 0) || 1;
+  return [...byId].map(([id, hp]) => ({ weight: hp / total, resist: sim.data.monsters[id]!.resist }));
 }
 
 /** Average HP of the next wave's normal monsters, in 1/256 HP. */
@@ -153,12 +248,46 @@ interface Coverage {
   best: number;
 }
 
+/** A source of monster effects: an aura, or a curse cast around the tower's reach. */
+interface MonsterSource {
+  tower: Tower;
+  radiusUnits: number;
+  slowPct: number;
+  resistDown: Partial<Record<Element, number>>;
+}
+
+function monsterSources(sim: Sim, towers: Tower[]): MonsterSource[] {
+  const out: MonsterSource[] = [];
+  for (const t of towers) {
+    for (const { aura } of auraSources(sim, t)) {
+      if (aura.monsters) out.push({ tower: t, radiusUnits: aura.radiusUnits, slowPct: aura.monsters.slowPct, resistDown: aura.monsters.resistDown });
+    }
+    const active = activeSkill(sim, t);
+    const curse = (s: SkillDef | undefined, lvl: number) => {
+      if (s?.archetype !== 'debuff' || s.mode !== 'curse') return;
+      const l = s.levels[lvl]!;
+      out.push({ tower: t, radiusUnits: s.rangeUnits + l.radiusUnits, slowPct: l.slowPct, resistDown: l.resistDown });
+    };
+    if (active) curse(active.skill, active.lvl);
+    if (t.evolved && t.partnerSkill) curse(sim.data.skills[t.partnerSkill], t.partnerLevel);
+  }
+  return out;
+}
+
 /**
- * Total power of a set of towers, auras included. Attack towers count for the share of
- * path they cover; buff auras count for what they add to covered towers (same aura:
- * strongest only); monster auras for the time and resistance they take off.
+ * Total power of a set of towers, auras and curses included. Attack towers count for the
+ * share of path they cover.
+ *
+ * With `foes` (the class bots): against the coming monster mix, the time to kill is the
+ * sum of each monster's HP over the damage that can hurt it, so a monster nothing can hurt
+ * (an immunity no tower covers) drags the total to nothing and the bot is pushed to mix
+ * elements exactly when Hell asks for it. Resistance cuts and slows count for the attack
+ * they cover.
+ *
+ * Without (the Normal bots, whose targets were tuned on it): the classic estimate, the sum
+ * of attack plus what monster auras add to the attack they cover, resistances ignored.
  */
-function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number): number {
+function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number, foes: Foe[] | undefined): number {
   const buffs = new Map<number, Map<string, Buff>>();
   const sources = towers.flatMap((t) => auraSources(sim, t).map((src) => ({ ...src, tower: t })));
   for (const { tower, skill, aura } of sources) {
@@ -166,40 +295,98 @@ function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number): nu
     for (const t of towers) {
       if ((t.x - tower.x) ** 2 + (t.y - tower.y) ** 2 > aura.radiusUnits ** 2) continue;
       const per = buffs.get(t.id) ?? new Map<string, Buff>();
-      const prev = per.get(skill.id) ?? { damagePct: 0, attackSpeedPct: 0 };
+      const prev = per.get(skill.id) ?? { damagePct: 0, attackSpeedPct: 0, fire: 0 };
       per.set(skill.id, {
         damagePct: Math.max(prev.damagePct, aura.towers.damagePct),
         attackSpeedPct: Math.max(prev.attackSpeedPct, aura.towers.attackSpeedPct),
+        fire: Math.max(prev.fire, avg({ min: aura.towers.fireMin, max: aura.towers.fireMax })),
       });
       buffs.set(t.id, per);
     }
   }
 
-  const attack = new Map<number, number>();
+  const attack = new Map<number, Parts>();
+  // Corpse skills and Revive feed on kills made by everything else; kept apart to cap them
+  const feeders = new Map<number, Parts>();
   for (const t of towers) {
-    const active = activeSkill(sim, t);
-    if (!active) continue;
-    const buff: Buff = { damagePct: 0, attackSpeedPct: 0 };
+    const buff: Buff = { damagePct: 0, attackSpeedPct: 0, fire: 0 };
     for (const b of buffs.get(t.id)?.values() ?? []) {
       buff.damagePct += b.damagePct;
       buff.attackSpeedPct += b.attackSpeedPct;
+      buff.fire += b.fire;
     }
     const recipe = t.evolved ? sim.data.evolutions.find((e) => e.id === t.evolved) : undefined;
     const key = `${t.tileX},${t.tileY}`;
-    const share = (active.skill.archetype === 'melee' ? cov.melee.get(key) : cov.ranged.get(key)) ?? 0;
-    attack.set(t.id, (attackPower(active.skill, active.lvl, recipe?.ignoreSkillDelay ?? false, buff, hpCap) * share) / cov.best);
+    const parts: Parts = {};
+    const fed: Parts = {};
+    const addSkill = (skill: SkillDef, lvl: number) => {
+      const share = (skill.archetype === 'melee' ? cov.melee.get(key) : cov.ranged.get(key)) ?? 0;
+      const into = skill.archetype === 'corpse' || (skill.archetype === 'summon' && skill.kind === 'revive') ? fed : parts;
+      for (const [e, v] of Object.entries(attackParts(sim, skill, lvl, recipe?.ignoreSkillDelay ?? false, buff, hpCap)) as [Element, number][]) {
+        into[e] = (into[e] ?? 0) + (v * share) / cov.best;
+      }
+    };
+    const active = activeSkill(sim, t);
+    if (active) addSkill(active.skill, active.lvl);
+    if (t.evolved && t.partnerSkill) addSkill(sim.data.skills[t.partnerSkill]!, t.partnerLevel);
+    attack.set(t.id, parts);
+    if (Object.keys(fed).length > 0) feeders.set(t.id, fed);
+  }
+  const sum = (p: Parts) => Object.values(p).reduce((n, v) => n + (v ?? 0), 0);
+  // A kill is about hpCap of damage and leaves one corpse, worth at most a blast on a crowd:
+  // together the corpse eaters do no more than CROWD times what the rest of the towers kill
+  const fedTotal = [...feeders.values()].reduce((n, p) => n + sum(p), 0);
+  if (fedTotal > 0) {
+    const killing = [...attack.values()].reduce((n, p) => n + sum(p), 0);
+    const scale = Math.min(1, (killing * CROWD) / fedTotal);
+    for (const [id, fed] of feeders) {
+      const parts = attack.get(id)!;
+      for (const [e, v] of Object.entries(fed) as [Element, number][]) parts[e] = (parts[e] ?? 0) + v * scale;
+    }
+  }
+  const allAttack = [...attack.values()].reduce((n, p) => n + sum(p), 0);
+
+  if (!foes) {
+    let total = allAttack;
+    for (const { tower, aura } of sources) {
+      if (!aura.monsters) continue;
+      const covered = towers
+        .filter((t) => (t.x - tower.x) ** 2 + (t.y - tower.y) ** 2 <= aura.radiusUnits ** 2)
+        .reduce((n, t) => n + sum(attack.get(t.id) ?? {}), 0);
+      const resist = Object.values(aura.monsters.resistDown).reduce((n, v) => n + (v ?? 0), 0) / 3;
+      total += (covered * (aura.monsters.slowPct / 2 + resist / 2)) / 100;
+    }
+    return total;
+  }
+  if (allAttack === 0) return 0;
+
+  // Monster effects, each weighted by the share of attack it covers
+  const cut: Partial<Record<Element, number>> = {};
+  let slowBonus = 0;
+  for (const src of monsterSources(sim, towers)) {
+    const covered = towers
+      .filter((t) => (t.x - src.tower.x) ** 2 + (t.y - src.tower.y) ** 2 <= src.radiusUnits ** 2)
+      .reduce((n, t) => n + sum(attack.get(t.id) ?? {}), 0);
+    const share = covered / allAttack;
+    for (const [e, v] of Object.entries(src.resistDown) as [Element, number][]) cut[e] = Math.max(cut[e] ?? 0, v * share);
+    slowBonus += (src.slowPct / 2 / 100) * share;
   }
 
-  let total = [...attack.values()].reduce((n, v) => n + v, 0);
-  for (const { tower, aura } of sources) {
-    if (!aura.monsters) continue;
-    const covered = towers
-      .filter((t) => (t.x - tower.x) ** 2 + (t.y - tower.y) ** 2 <= aura.radiusUnits ** 2)
-      .reduce((n, t) => n + (attack.get(t.id) ?? 0), 0);
-    const resist = Object.values(aura.monsters.resistDown).reduce((n, v) => n + (v ?? 0), 0) / 3;
-    total += (covered * (aura.monsters.slowPct / 2 + resist / 2)) / 100;
+  const byElement: Parts = {};
+  for (const p of attack.values()) for (const [e, v] of Object.entries(p) as [Element, number][]) byElement[e] = (byElement[e] ?? 0) + v;
+  let time = 0;
+  for (const foe of foes) {
+    let power = 0;
+    for (const [e, v] of Object.entries(byElement) as [Element, number][]) {
+      const base = foe.resist[e];
+      const down = cut[e] ?? 0;
+      const resist = Math.max(-100, base >= 100 ? base - down / 5 : base - down);
+      if (resist < 100) power += (v * (100 - resist)) / 100;
+    }
+    time += foe.weight / Math.max(power, 1e-9);
   }
-  return total;
+  const total = foes.length === 0 ? allAttack : 1 / time;
+  return total * (1 + slowBonus);
 }
 
 // ---- options ----
@@ -213,11 +400,18 @@ interface Option {
   commands: Command[];
 }
 
-/** Gain from replacing (or adding) one tower. */
-function gainOf(sim: Sim, towers: Tower[], before: number, changed: Tower, cov: Coverage, hpCap: number): number {
-  const after = towers.filter((t) => t.id !== changed.id);
+interface Judge {
+  cov: Coverage;
+  hpCap: number;
+  foes: Foe[] | undefined;
+  before: number;
+}
+
+/** Gain from replacing (or adding) one tower, and removing others. */
+function gainOf(sim: Sim, towers: Tower[], judge: Judge, changed: Tower, removed: number[] = []): number {
+  const after = towers.filter((t) => t.id !== changed.id && !removed.includes(t.id));
   after.push(changed);
-  return totalPower(sim, after, cov, hpCap) - before;
+  return totalPower(sim, after, judge.cov, judge.hpCap, judge.foes) - judge.before;
 }
 
 interface BotConfig {
@@ -225,6 +419,12 @@ interface BotConfig {
   /** T1 skills the bot may build. */
   builds: string[];
   tiers: boolean;
+  /** Weigh evolving any adjacent pair that makes a recipe. */
+  evolve?: boolean;
+  /** Judge power against the coming monsters' resistances (see totalPower). */
+  elements?: boolean;
+  /** Stop building new towers here and only improve the ones there are. */
+  maxTowers?: number;
   opening?: (ctx: OpeningContext) => Goal[];
 }
 
@@ -235,28 +435,47 @@ const LOOKAHEAD_MIN_TOWERS = 3;
 function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov: Coverage): Option[] {
   const towers = sim.state.towers;
   const hpCap = nextWaveHp(sim);
-  const before = totalPower(sim, towers, cov, hpCap);
+  const foes = config.elements ? comingFoes(sim) : undefined;
+  const judge: Judge = { cov, hpCap, foes, before: totalPower(sim, towers, cov, hpCap, foes) };
   const out: Option[] = [];
   const e = sim.data.economy;
 
   // New towers: each allowed T1 skill on its best free tile. Auras go where they cover
   // the most towers, which the gain itself measures, so try the top few tiles.
-  for (const skill of config.builds) {
+  for (const skill of towers.length < (config.maxTowers ?? Infinity) ? config.builds : []) {
     const archetype = sim.data.skills[skill]!.archetype;
     const list = archetype === 'melee' ? melee : ranged;
     const candidates = list.filter((p) => canBuild(sim, p.x, p.y)).slice(0, archetype === 'buffAura' ? 16 : 1);
-    const line = Object.entries(sim.data.classes['paladin']!.lines).find(([, l]) => l.tiers[0]!.includes(skill))![0];
+    const { cls, line } = lineOf(sim, skill);
     for (const spot of candidates) {
       const c = tileCenter(spot);
       const fresh: Tower = {
-        id: -1, cls: 'paladin', tileX: spot.x, tileY: spot.y, x: c.x, y: c.y, line, tier: 1, level: 1,
-        picks: [skill], spent: 0, cooldown: 0, targeting: 'first', evolved: '', partnerSkill: '', partnerLevel: 0, summonCooldown: 0,
+        id: -1, cls, tileX: spot.x, tileY: spot.y, x: c.x, y: c.y, line, tier: 1, level: 1,
+        picks: [skill], spent: 0, cooldown: 0, targeting: 'first', evolved: '', partnerSkill: '', partnerLevel: 0, summonCooldown: 0, partnerCooldown: 0,
       };
       out.push({
         cost: e.buildCost,
-        gain: gainOf(sim, towers, before, fresh, cov, hpCap),
-        commands: [{ type: 'build', x: spot.x, y: spot.y, cls: 'paladin', skill }],
+        gain: gainOf(sim, towers, judge, fresh),
+        commands: [{ type: 'build', x: spot.x, y: spot.y, cls, skill }],
       });
+    }
+  }
+
+  // Evolutions: any adjacent pair that makes a recipe, judged as the merged tower
+  if (config.evolve) {
+    for (let i = 0; i < towers.length; i++) {
+      for (let j = i + 1; j < towers.length; j++) {
+        const match = evolutionFor(sim, towers[i]!, towers[j]!);
+        if (!match) continue;
+        const { recipe, attack, partner } = match;
+        const partnerLevel = partner.picks[partner.tier - 1] === recipe.partner.skill ? partner.level - 1 : EVOLVED_LEVEL_INDEX;
+        const merged: Tower = { ...attack, tier: MAX_TIER + 1, level: MAX_TOWER_LEVEL, evolved: recipe.id, partnerSkill: recipe.partner.skill, partnerLevel };
+        out.push({
+          cost: e.evolveCost,
+          gain: gainOf(sim, towers, judge, merged, [partner.id]),
+          commands: [{ type: 'evolve', towerA: attack.id, towerB: partner.id }],
+        });
+      }
     }
   }
 
@@ -264,7 +483,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
     if (t.evolved) continue;
     const level = upgradeCost(sim, t);
     if (level !== undefined) {
-      out.push({ cost: level, gain: gainOf(sim, towers, before, { ...t, level: t.level + 1 }, cov, hpCap), commands: [{ type: 'upgrade', towerId: t.id }] });
+      out.push({ cost: level, gain: gainOf(sim, towers, judge, { ...t, level: t.level + 1 }), commands: [{ type: 'upgrade', towerId: t.id }] });
     }
     // Toward the next tier: the remaining levels plus the tier, valued by what the next
     // tier's skill gives. Levels 3 to 5 can look worthless on their own (overkill), so
@@ -283,7 +502,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
         if (t.level === MAX_TOWER_LEVEL && opts.length > 1) commands.push({ type: 'pickBranch', towerId: t.id, skill });
         // Pay only for the next step now; the option is judged on the whole path
         const stepCost = t.level < MAX_TOWER_LEVEL ? level! : tierPrice;
-        const gain = (gainOf(sim, towers, before, next, cov, hpCap) * LOOKAHEAD_DISCOUNT_PCT) / 100;
+        const gain = (gainOf(sim, towers, judge, next) * LOOKAHEAD_DISCOUNT_PCT) / 100;
         out.push({ cost: remaining, stepCost, gain, commands });
       }
     }
@@ -364,7 +583,7 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
         }
         if (!canBuild(s, spot.x, spot.y) || s.state.gold < s.data.economy.buildCost) return [];
         tags[goal.tag] = s.state.nextId;
-        return [{ type: 'build', x: spot.x, y: spot.y, cls: 'paladin', skill: goal.skill }];
+        return [{ type: 'build', x: spot.x, y: spot.y, cls: lineOf(s, goal.skill).cls, skill: goal.skill }];
       }
       if (goal.kind === 'max') {
         const t = byTag(s, goal.tag);
@@ -417,7 +636,7 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
   };
 }
 
-const CONFIGS: Record<Strategy, BotConfig> = {
+const CONFIGS: Partial<Record<Strategy, BotConfig>> = {
   BOLT: { strategy: 'BOLT', builds: ['holy-bolt'], tiers: false },
   HOLY: { strategy: 'HOLY', builds: ['holy-bolt'], tiers: true },
   TWOLINE: { strategy: 'TWOLINE', builds: ['holy-bolt', 'might'], tiers: true },
@@ -438,8 +657,23 @@ const CONFIGS: Record<Strategy, BotConfig> = {
   },
 };
 
+const SORC_BUILDS = ['fire-bolt', 'ice-bolt', 'charged-bolt', 'static-field'];
+const NECRO_BUILDS = ['raise-skeleton', 'teeth', 'amplify-damage'];
+/** About as many towers as the PALADIN bot ends a Hell run with; past it the class bots only upgrade. */
+const CLASS_BOT_TOWERS = 64;
+CONFIGS.SORC = { strategy: 'SORC', builds: SORC_BUILDS, tiers: true, evolve: true, elements: true, maxTowers: CLASS_BOT_TOWERS };
+CONFIGS.NECRO = { strategy: 'NECRO', builds: NECRO_BUILDS, tiers: true, evolve: true, elements: true, maxTowers: CLASS_BOT_TOWERS };
+CONFIGS.MIXED3 = {
+  strategy: 'MIXED3',
+  builds: ['sacrifice', 'holy-bolt', 'might', ...SORC_BUILDS, ...NECRO_BUILDS],
+  tiers: true,
+  evolve: true,
+  elements: true,
+  maxTowers: CLASS_BOT_TOWERS,
+};
+
 export function createBot(strategy: Strategy, sim: Sim): Bot {
-  return engineBot(CONFIGS[strategy], sim);
+  return engineBot(CONFIGS[strategy]!, sim);
 }
 
 /** Debug view: a bot's options right now, best power per gold first. */
@@ -455,7 +689,7 @@ export function explainOptions(sim: Sim, strategy: Strategy): { gainPerGold: num
     melee: new Map(m0.map((p) => [`${p.x},${p.y}`, p.score])),
     best: r0[0]?.score ?? 1,
   };
-  return options(sim, CONFIGS[strategy], ranged, melee, cov)
+  return options(sim, CONFIGS[strategy]!, ranged, melee, cov)
     .map((o) => ({ gainPerGold: o.gain / o.cost, cost: o.cost, commands: o.commands }))
     .sort((a, b) => b.gainPerGold - a.gainPerGold);
 }

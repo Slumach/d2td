@@ -1,0 +1,10 @@
+{
+  "id": "ice-bolt",
+  "skill": "Ice Bolt",
+  "archetype": "projectile",
+  "damageType": "cold",
+  "skillLevels": [1, 5, 10, 15, 20],
+  "rangeTenths": 40,
+  "rateTicks": 20,
+  "projectile": { "count": 1 }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "thunder-storm",
+  "skill": "Thunder Storm",
+  "archetype": "splash",
+  "damageType": "ltng",
+  "rangeTenths": 40,
+  "rateTicks": 25,
+  "rateCalc": "perdelay",
+  "splash": { "delivery": "strike", "radiusTenths": 5, "edgeDamagePct": 100, "randomTarget": true }
+}

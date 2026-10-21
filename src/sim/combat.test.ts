@@ -36,7 +36,7 @@ describe('damage and resistance', () => {
   it('lets reductions break immunity only by a fifth, and never below -100', () => {
     const sim = testSim();
     const andariel = addMonster(sim, 'andariel', 0);
-    sim.fx = { towers: {}, emitters: [], monsters: { [andariel.id]: { slowPct: 0, resistDown: { pois: 50, fire: 100 } } } };
+    sim.fx = { towers: {}, emitters: [], monsters: { [andariel.id]: { slowPct: 0, resistDown: { pois: 50, fire: 100 }, damageDownPct: 0 } } };
     // Poison 100 is an immunity: 50 of reduction only takes 10 off
     expect(effectiveResist(sim, andariel, 'pois')).toBe(90);
     expect(damageAgainst(sim, andariel, 1000, 'pois', ALL)).toBe(100);

@@ -34,6 +34,8 @@ export type ClientMessage =
       token?: string;
     }
   | { t: 'mode'; mode: MatchMode }
+  /** 0 Normal, 1 Nightmare, 2 Hell: where the match starts; later difficulties follow. */
+  | { t: 'difficulty'; difficulty: number }
   | { t: 'start' }
   | { t: 'cmd'; command: Command }
   | { t: 'hash'; tick: number; hash: number };
@@ -42,8 +44,8 @@ export type ClientMessage =
 export type HostMessage =
   | { t: 'welcome'; you: number; host: boolean }
   | { t: 'reject'; reason: string }
-  | { t: 'lobby'; players: LobbyPlayer[]; mode: MatchMode }
-  | { t: 'start'; seed: number; mode: MatchMode; players: LobbyPlayer[]; you: number }
+  | { t: 'lobby'; players: LobbyPlayer[]; mode: MatchMode; difficulty: number }
+  | { t: 'start'; seed: number; mode: MatchMode; difficulty: number; players: LobbyPlayer[]; you: number }
   | { t: 'tick'; tick: number; cmds: PlayerCommand[] }
   | { t: 'left'; slot: number; name: string }
   | { t: 'desync'; tick: number };

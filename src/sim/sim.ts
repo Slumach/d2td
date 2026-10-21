@@ -132,18 +132,32 @@ function callWave(sim: Sim): void {
   s.wave++;
 }
 
-const NO_BUFF: TowerBuff = { damagePct: 0, attackSpeedPct: 0 };
+const NO_BUFF: TowerBuff = { damagePct: 0, attackSpeedPct: 0, fireMin: 0, fireMax: 0 };
 
 /** Ticks between actions: the rate sped up by attack speed, but never under the skill's own delay. */
-export function attackInterval(sim: Sim, tower: Tower, skill: SkillDef, buff: TowerBuff): number {
+export function attackInterval(sim: Sim, tower: Tower, skill: SkillDef, lvl: number, buff: TowerBuff): number {
   const recipe = tower.evolved ? sim.data.evolutions.find((e) => e.id === tower.evolved) : undefined;
-  const rate = Math.max(1, idiv(skill.rateTicks * 100, 100 + buff.attackSpeedPct));
+  const rate = Math.max(1, idiv((skill.rates[lvl] ?? skill.rateTicks) * 100, 100 + buff.attackSpeedPct));
   return Math.max(rate, recipe?.ignoreSkillDelay ? 0 : skill.delayTicks);
 }
 
+/**
+ * Towers act. An evolved tower also casts its partner's skill on its own cooldown when
+ * that skill does something by itself (a curse, Frozen Orb, Thunder Storm); a partner
+ * aura instead projects from the tower at half radius (see auras.ts).
+ */
 function updateTowers(sim: Sim): void {
   for (const tower of sim.state.towers) {
     if (tower.summonCooldown > 0) tower.summonCooldown--;
+    const buff = sim.fx.towers[tower.id] ?? NO_BUFF;
+    if (tower.evolved && tower.partnerSkill) {
+      const partner = sim.data.skills[tower.partnerSkill]!;
+      const act = archetypeOf(partner).act;
+      if (tower.partnerCooldown > 0) tower.partnerCooldown--;
+      else if (act && act(sim, tower, partner, tower.partnerLevel, buff)) {
+        tower.partnerCooldown = attackInterval(sim, tower, partner, tower.partnerLevel, buff) - 1;
+      }
+    }
     if (tower.cooldown > 0) {
       tower.cooldown--;
       continue;
@@ -151,9 +165,8 @@ function updateTowers(sim: Sim): void {
     const active = activeSkill(sim, tower);
     const act = active && archetypeOf(active.skill).act;
     if (!active || !act) continue;
-    const buff = sim.fx.towers[tower.id] ?? NO_BUFF;
     if (act(sim, tower, active.skill, active.lvl, buff)) {
-      tower.cooldown = attackInterval(sim, tower, active.skill, buff) - 1;
+      tower.cooldown = attackInterval(sim, tower, active.skill, active.lvl, buff) - 1;
     }
   }
 }

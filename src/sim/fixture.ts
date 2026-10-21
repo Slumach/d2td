@@ -4,7 +4,7 @@
 // Real numbers come from assets-extracted/data.
 
 import { DESIGN } from '../data/design.ts';
-import { buildGameData, type DesignData, type GameData, type TableRow, type Tables } from './data.ts';
+import { buildGameData, type BuildOptions, type DesignData, type GameData, type TableRow, type Tables } from './data.ts';
 
 function damageCols(prefix: 'skill' | 'missile', min: number, max: number, step: number): TableRow {
   const row: TableRow = { EMin: min, EMax: max, HitShift: 8 };
@@ -34,10 +34,11 @@ const monster = (Id: string, MonType: string, extra: TableRow): TableRow => ({
 
 export const FIXTURE_TABLES: Tables = {
   monstats: [
-    monster('fallen1', 'fallen', { Velocity: 5, demon: 1 }),
+    // Hell columns on a few rows give the difficulty tests immunities to find
+    monster('fallen1', 'fallen', { Velocity: 5, demon: 1, 'ResFi(H)': 100 }),
     monster('fallenshaman1', 'fallen', { Level: 2, demon: 1, ResFi: 20, aidel: 15, aip1: 50, aip4: 24 }),
-    monster('zombie1', 'zombie', { Velocity: 2, lUndead: 1, ResPo: 50 }),
-    monster('skeleton1', 'skeleton', { Level: 2, lUndead: 1 }),
+    monster('zombie1', 'zombie', { Velocity: 2, lUndead: 1, ResPo: 50, 'ResCo(H)': 120 }),
+    monster('skeleton1', 'skeleton', { Level: 2, lUndead: 1, 'ResLi(H)': 100 }),
     monster('quillrat1', 'quillrat', { Velocity: 4 }),
     monster('corruptrogue1', 'corruptrogue', { Level: 2, Velocity: 4, demon: 1, ResMa: 20 }),
     monster('fallen4', 'fallen', { Level: 5, Velocity: 6, demon: 1 }),
@@ -45,6 +46,7 @@ export const FIXTURE_TABLES: Tables = {
     monster('bloodraven', 'corruptrogue', { Level: 6, minHP: 400, maxHP: 400, demon: 1, boss: 1, ResMa: 50, ResFi: 50 }),
     monster('andariel', 'demon', { Level: 8, minHP: 900, maxHP: 900, demon: 1, boss: 1, ResPo: 100, ResFi: -50 }),
     monster('necroskeleton', 'skeleton', { minHP: 20, maxHP: 20, A1MinD: 2, A1MaxD: 4, lUndead: 1 }),
+    monster('necromage', 'skeleton', { minHP: 40, maxHP: 40, A1MinD: 1, A1MaxD: 2, lUndead: 1 }),
   ],
   monlvl: Array.from({ length: 41 }, (_, Level) => ({ Level, HP: 5 + Level * 4, DM: 2 + Level })),
   monumod: [
@@ -105,7 +107,82 @@ export const FIXTURE_TABLES: Tables = {
       ...params(20, 0, 15, 5, 5),
       ...damageCols('skill', 10, 30, 5),
     }),
-    skill('Blizzard', { srvmissilea: 'blizzardcenter', EType: 'cold', localdelay: 45, ...damageCols('skill', 30, 40, 5) }),
+    skill('Blizzard', {
+      srvmissilea: 'blizzardcenter',
+      EType: 'cold',
+      localdelay: 45,
+      calc1: 'par1',
+      ELen: 25,
+      ...params(12),
+      ...damageCols('skill', 30, 40, 5),
+    }),
+    skill('Fire Bolt', { srvmissile: 'firebolt', EType: 'fire', ...damageCols('skill', 8, 12, 2) }),
+    skill('Fire Ball', { srvmissile: 'fireball', EType: 'fire', calc1: 'par1', ...params(8), ...damageCols('skill', 16, 24, 3) }),
+    skill('Meteor', { srvmissilea: 'meteorcenter', EType: 'fire', calc1: 'ln12', localdelay: 20, ...params(8, 1), ...damageCols('skill', 60, 80, 8) }),
+    skill('Ice Bolt', { srvmissile: 'icebolt', EType: 'cold', ELen: 50, ELevLen1: 5, ELevLen2: 5, ELevLen3: 5, ...damageCols('skill', 6, 10, 2) }),
+    skill('Glacial Spike', {
+      srvmissile: 'glacialspike',
+      EType: 'cold',
+      aurarangecalc: 'ln12',
+      auralencalc: 'ln34',
+      ...params(6, 0, 25, 2),
+      ...damageCols('skill', 14, 20, 3),
+    }),
+    skill('Frozen Orb', { srvmissile: 'frozenorb', EType: 'cold', ELen: 50, localdelay: 20, ...damageCols('skill', 20, 30, 4) }),
+    skill('Charged Bolt', { srvmissilea: 'chargedbolt', EType: 'ltng', calc1: 'min(24,ln12)', ...params(3, 1), ...damageCols('skill', 4, 8, 1) }),
+    skill('Lightning', { srvmissile: 'lightningbolt', EType: 'ltng', ...damageCols('skill', 1, 40, 6) }),
+    skill('Static Field', { aurarangecalc: 'ln12', calc1: 'par4', calc2: 'par3', EType: 'ltng', ...params(17, 2, 0, 25) }),
+    skill('Enchant', {
+      aurastat1: 'firemindam',
+      aurastatcalc1: 'enma',
+      aurastat2: 'firemaxdam',
+      aurastatcalc2: 'exma',
+      EType: 'fire',
+      ...damageCols('skill', 4, 6, 1),
+    }),
+    skill('Thunder Storm', {
+      srvmissilea: 'thunderstorm1',
+      EType: 'ltng',
+      perdelay: '(100-dm56) * par4/100 + par3',
+      ...params(0, 0, 25, 100, 0, 100),
+      ...damageCols('skill', 1, 60, 10),
+    }),
+    skill('Raise Skeletal Mage', { summon: 'necromage', petmax: '(lvl < 4) ?lvl:(2+lvl/3)', sumsk1calc: 'max(lvl/2,1)' }),
+    skill('Revive', { petmax: 'lvl', calc1: 'par1', ...params(200) }),
+    skill('Teeth', { srvmissilea: 'teeth', EType: 'mag', calc1: 'min(ln12,24)', ...params(2, 1), ...damageCols('skill', 4, 8, 1) }),
+    skill('Bone Spirit', { srvmissilea: 'bonespirit', EType: 'mag', ...damageCols('skill', 40, 60, 8) }),
+    skill('Poison Nova', { srvmissilea: 'poisonnova', EType: 'pois', ELen: 40, ...damageCols('skill', 2, 4, 1) }),
+    skill('Amplify Damage', {
+      aurarangecalc: 'ln12',
+      auralencalc: 'ln34',
+      aurastat1: 'damageresist',
+      aurastatcalc1: '-par5',
+      ...params(16, 2, 100, 10, 100),
+    }),
+    skill('Decrepify', {
+      aurarangecalc: 'ln12',
+      auralencalc: 'ln34',
+      aurastat1: 'velocitypercent',
+      aurastatcalc1: 'par5',
+      aurastat2: 'damagepercent',
+      aurastatcalc2: 'par5',
+      aurastat3: 'damageresist',
+      aurastatcalc3: 'par5',
+      ...params(16, 0, 100, 10, -50),
+    }),
+    skill('Lower Resist', {
+      aurarangecalc: 'ln12',
+      auralencalc: 'ln34',
+      aurastat1: 'fireresist',
+      aurastatcalc1: '-dm56',
+      aurastat2: 'lightresist',
+      aurastatcalc2: '-dm56',
+      aurastat3: 'coldresist',
+      aurastatcalc3: '-dm56',
+      aurastat4: 'poisonresist',
+      aurastatcalc4: '-dm56',
+      ...params(16, 2, 200, 10, 25, 70),
+    }),
     skill('Raise Skeleton', {
       summon: 'necroskeleton',
       petmax: '(lvl < 4) ?lvl:(2+lvl/3)',
@@ -131,6 +208,22 @@ export const FIXTURE_TABLES: Tables = {
     { Missile: 'bonespear', Vel: 20, Range: 40 },
     { Missile: 'chainlightning', Vel: 30, Range: 20 },
     { Missile: 'blizzardcenter', Range: 100 },
+    { Missile: 'firebolt', Vel: 20, Range: 50 },
+    { Missile: 'fireball', Vel: 20, Range: 50 },
+    { Missile: 'meteorcenter', Range: 30 },
+    { Missile: 'icebolt', Vel: 15, Range: 50 },
+    { Missile: 'glacialspike', Vel: 16, Range: 50 },
+    { Missile: 'frozenorb', Vel: 12, Range: 60 },
+    { Missile: 'chargedbolt', Vel: 12, Range: 60 },
+    { Missile: 'lightningbolt', Vel: 30, Range: 25 },
+    { Missile: 'thunderstorm1', Range: 9 },
+    { Missile: 'teeth', Vel: 16, Range: 50 },
+    { Missile: 'bonespirit', Vel: 12, Range: 128 },
+    { Missile: 'poisonnova', Vel: 12, Range: 30 },
+    { Missile: 'necromage1', Vel: 14, Range: 30, EType: 'pois', EMin: 12, EMax: 12, ELen: 40, ...damageCols('missile', 12, 12, 2) },
+    { Missile: 'necromage2', Vel: 14, Range: 30, EType: 'cold', ELen: 25, ...damageCols('missile', 2, 4, 1) },
+    { Missile: 'necromage3', Vel: 14, Range: 30, EType: 'fire', ...damageCols('missile', 2, 6, 1) },
+    { Missile: 'necromage4', Vel: 14, Range: 30, EType: 'ltng', ...damageCols('missile', 1, 7, 2) },
   ],
 };
 
@@ -152,6 +245,6 @@ export function fixtureDesign(design: DesignData = DESIGN): DesignData {
  */
 export const FIXTURE_BUILD = { checkTierBonus: false };
 
-export function fixtureGameData(waveCount?: number): GameData {
-  return buildGameData(FIXTURE_TABLES, fixtureDesign(), waveCount, FIXTURE_BUILD);
+export function fixtureGameData(waveCount?: number, opts: BuildOptions = {}): GameData {
+  return buildGameData(FIXTURE_TABLES, fixtureDesign(), waveCount, { ...FIXTURE_BUILD, ...opts });
 }

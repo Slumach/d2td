@@ -40,6 +40,7 @@ export function placeTower(sim: Sim, x: number, y: number, skill: string, opts: 
     partnerSkill: '',
     partnerLevel: 0,
     summonCooldown: 0,
+    partnerCooldown: 0,
   };
   s.towers.push(tower);
   return tower;

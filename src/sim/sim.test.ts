@@ -151,14 +151,19 @@ describe('data', () => {
   it('builds tier ladders: every tier-up reaches the floor, five rising steps to the cap', () => {
     for (const data of [fixtureGameData(), ...(hasTables() ? [buildGameData(loadTables(), DESIGN)] : [])]) {
       const { dpsPct, caps } = DESIGN.balance.tierLadder;
-      expect(data.ladders.length).toBe(8);
+      const laddered = DESIGN.classes.flatMap((c) => Object.values(c.lines).flatMap((l) => l.tiers.slice(1).flat()));
+      expect(data.ladders.length).toBe(laddered.length);
       for (const ladder of data.ladders) {
         const cap = caps[String(ladder.tier)]!;
         expect(ladder.levels).toHaveLength(5);
         expect(ladder.levels[4]).toBe(cap);
         for (let i = 1; i < 5; i++) expect(ladder.levels[i]!).toBeGreaterThanOrEqual(ladder.levels[i - 1]!);
         expect(data.skills[ladder.skill]!.skillLevels).toEqual(ladder.levels);
-        // A strict upgrade, with or without a tier bonus
+        // A strict upgrade, with or without a tier bonus; unmeasured skills climb the whole range
+        if (!ladder.measured) {
+          expect(ladder.levels[0]).toBe(1);
+          continue;
+        }
         expect(ladder.start * 100).toBeGreaterThanOrEqual(ladder.previous * dpsPct);
         if (ladder.reached) expect(ladder.tierBonus).toBe(1000);
         else {
@@ -280,3 +285,37 @@ describe.skipIf(!hasTables())('real tables', () => {
 });
 
 if (hasTables()) replaySuite('replay (real tables)', () => buildGameData(loadTables(), RICH, 30), ['PALADIN']);
+
+describe('difficulty', () => {
+  it('Nightmare and Hell monsters are their own entries, read from the (N) and (H) columns', () => {
+    const data = fixtureGameData(30, { difficulty: 2 });
+    const zombie = data.monsters['zombie1@hell']!;
+    expect(zombie).toMatchObject({ base: 'zombie1', difficulty: 2 });
+    expect(zombie.resist.cold).toBe(120);
+    // Bounty follows Normal's level
+    expect(zombie.level).toBe(fixtureGameData().monsters['zombie1']!.level);
+    expect(data.waves[0]!.difficulty).toBe(2);
+    for (const g of data.waves[0]!.groups) expect(g.monster.endsWith('@hell')).toBe(true);
+  });
+
+  it('after the last wave the map loops at the next difficulty, through Hell', () => {
+    const data = fixtureGameData(30, { loop: true });
+    expect(data.waves).toHaveLength(90);
+    expect(data.waves.map((w) => w.difficulty)).toEqual([...Array(30).fill(0), ...Array(30).fill(1), ...Array(30).fill(2)]);
+    expect(data.waves[30]!.number).toBe(1);
+    expect(fixtureGameData(30, { difficulty: 1, loop: true }).waves).toHaveLength(60);
+  });
+
+  it.skipIf(!hasTables())("scales each difficulty's wave monsters to Normal's average HP", () => {
+    const data = buildGameData(loadTables(), DESIGN, 30, { loop: true });
+    const avg = (d: number) => {
+      const pooled = new Set(Object.values(DESIGN.monsters.pools).flatMap((pool) => pool.map((p) => p.id)));
+      const defs = Object.values(data.monsters).filter((m) => m.difficulty === d && pooled.has(m.base));
+      return defs.reduce((n, m) => n + m.minHp + m.maxHp, 0) / defs.length;
+    };
+    // Within rounding: no monster drops below 1 HP
+    for (const d of [1, 2]) expect(Math.abs(avg(d) / avg(0) - 1)).toBeLessThan(0.1);
+    // The columns still say who is tough: a Hell zombie outlasts a Hell fallen
+    expect(data.monsters['zombie1@hell']!.maxHp).toBeGreaterThan(data.monsters['fallen1@hell']!.maxHp);
+  });
+});

@@ -19,5 +19,40 @@
     "attack": { "skill": "fist-of-the-heavens", "minTier": 3 },
     "partner": { "skill": "conviction", "minTier": 3 },
     "ignoreSkillDelay": true
+  },
+  "meteorb": {
+    "name": "Meteorb",
+    "attack": { "skill": "meteor", "minTier": 3 },
+    "partner": { "skill": "frozen-orb", "minTier": 3 }
+  },
+  "blizzballer": {
+    "name": "Blizzballer",
+    "attack": { "skill": "blizzard", "minTier": 3 },
+    "partner": { "skill": "fire-ball", "minTier": 2 }
+  },
+  "lightsorc": {
+    "name": "Light Sorc",
+    "attack": { "skill": "chain-lightning", "minTier": 3 },
+    "partner": { "skill": "thunder-storm", "minTier": 3 }
+  },
+  "summoner": {
+    "name": "Summoner",
+    "attack": { "skill": "revive", "minTier": 3 },
+    "partner": { "skill": "amplify-damage", "minTier": 1 }
+  },
+  "bonemancer": {
+    "name": "Bonemancer",
+    "attack": { "skill": "bone-spirit", "minTier": 3 },
+    "partner": { "skill": "decrepify", "minTier": 2 }
+  },
+  "novamancer": {
+    "name": "Novamancer",
+    "attack": { "skill": "poison-nova", "minTier": 3 },
+    "partner": { "skill": "lower-resist", "minTier": 3 }
+  },
+  "explosionmancer": {
+    "name": "Explosionmancer",
+    "attack": { "skill": "corpse-explosion", "minTier": 2 },
+    "partner": { "skill": "amplify-damage", "minTier": 1 }
   }
 }

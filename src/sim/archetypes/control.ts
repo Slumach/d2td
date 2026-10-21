@@ -3,7 +3,7 @@
 //          every perdelay frames (Holy Freeze). The slow is skills.txt velocitypercent.
 //   onHit  a homing shot that slows its target for a duration (Glacial Spike, Clay Golem).
 
-import { aliveWithin, canHurt, dealDamage, findTarget, withBonus } from '../combat.ts';
+import { aliveWithin, canHurt, dealDamage, findTarget, strike, withBonus } from '../combat.ts';
 import { d2FramesToTicks } from '../fixed.ts';
 import { homeToward, spawnMissile, targetOf } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
@@ -47,6 +47,7 @@ export const control: ArchetypeModule<ControlDef> = {
         archetype: 'control',
         mode: 'aura',
         rateTicks: pulseTicks,
+        rates: Array<number>(json.skillLevels?.length ?? 5).fill(pulseTicks),
         pulseTicks,
         durationTicks: 0,
         missileSpeed: 0,
@@ -76,7 +77,7 @@ export const control: ArchetypeModule<ControlDef> = {
   aura(skill, lvl) {
     if (skill.mode !== 'aura') return { radiusUnits: 0 };
     const { radiusUnits, slowPct } = skill.levels[lvl]!;
-    return { radiusUnits, monsters: { slowPct, resistDown: {} } };
+    return { radiusUnits, monsters: { slowPct, resistDown: {}, damageDownPct: 0 } };
   },
 
   act(sim, tower, skill, lvl, buff) {
@@ -92,7 +93,7 @@ export const control: ArchetypeModule<ControlDef> = {
     }
     const target = findTarget(sim, tower, skill.rangeUnits, (m) => canHurt(sim, m, element, skill.filter));
     if (!target) return false;
-    spawnMissile(sim, tower, skill.id, lvl, buff.damagePct, { targetId: target.id, ticksLeft: skill.missileLifetime });
+    spawnMissile(sim, tower, skill.id, lvl, buff, { targetId: target.id, ticksLeft: skill.missileLifetime });
     return true;
   },
 
@@ -101,7 +102,7 @@ export const control: ArchetypeModule<ControlDef> = {
     if (!target || --missile.ticksLeft < 0) return false;
     if (!homeToward(missile, target, skill.missileSpeed)) return true;
     const range = skill.levels[missile.level]!;
-    dealDamage(sim, target, withBonus(rollInt(sim.state.rng, range.min, range.max), missile.damagePct), skill.damageType as Element, skill.filter);
+    strike(sim, target, withBonus(rollInt(sim.state.rng, range.min, range.max), missile.damagePct), skill.damageType as Element, skill.filter, skill, missile.level, missile);
     if (target.hp > 0) {
       target.slowPct = Math.max(target.slowPct, range.slowPct);
       target.slowTicks = Math.max(target.slowTicks, skill.durationTicks);

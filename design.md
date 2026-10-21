@@ -76,9 +76,9 @@ A tower shows its line and tier the way D2 shows gear. The line is the weapon: Z
 | Smiter (later) | Smite + Fanaticism | Needs Holy Shield to exist; bonus damage and stun against bosses. |
 | Auradin (T5, later) | Holy Fire + Holy Shock + Conviction | Three towers; needs the aura line to branch first. |
 
-## Sorceress and Necromancer (draft)
+## Sorceress and Necromancer
 
-Both follow the Paladin pattern: two damage lines and one support line, with evolutions that cross lines. Names and picks are placeholders until the Paladin plays well.
+Both follow the Paladin pattern, with evolutions that cross lines (built in M6). The Sorceress has four lines, three of them elements; the Necromancer has three. Every number comes through the same tier ladders as the Paladin's (src/data/classes, src/data/skills).
 
 | Sorceress line | T1 | T2 | T3 | Role on the map |
 | --- | --- | --- | --- | --- |
@@ -107,7 +107,18 @@ Both follow the Paladin pattern: two damage lines and one support line, with evo
 | Novamancer | Poison Nova (T3) + Lower Resist (T3) |
 | Explosionmancer | Corpse Explosion (T2) + Amplify Damage (T1+) |
 
-Corpses are the Necromancer's twist: a killed monster leaves a corpse for 10 seconds that Corpse Explosion, Revive and the Fallen Shaman all compete for.
+Corpses are the Necromancer's twist: a killed monster leaves a corpse for 10 seconds that Corpse Explosion, Revive and the Fallen Shaman all compete for. Whoever acts first in a tick takes it (monsters act before towers, towers in build order); a Shaman that loses its corpse mid-cast raises nothing.
+
+How they play (M6):
+
+- Cold chills: a cold hit slows its target by balance.json chillPct for the skill's cold length (ELen). Glacial Spike also freezes for its auralencalc: a frozen monster stands still. Bosses are chilled instead of frozen (house rule).
+- Poison lands over the skill's poison length instead of at once; a weaker dose never replaces a stronger one, as in D2.
+- Summons come in three kinds. Skeletons stand on the path tile nearest their tower and block it; monsters stop and fight them; a dead one respawns after a delay. Skeletal Mages stand on the tower's side of the path and shoot one of their skill's four missiles (fire, cold, lightning, poison, picked when raised); they never block. Revive raises the toughest fresh corpse in range (normal monsters only) at twice its max HP, blocking where it rose, for 30 seconds (house rule; D2's lasts three minutes). Summons keep Normal's stats on every difficulty, and so does the damage monsters deal to them.
+- Curses (Amplify Damage, Decrepify, Lower Resist) are cast on the tower's target and ride on every monster in the radius for their duration. Curses do not add up: a monster under several takes the strongest value of each effect. A curse and an aura do add (Lower Resist with Conviction). Decrepify also halves what a monster does to blockers.
+- Static Field takes a quarter of current HP off everything in radius, as lightning; it cannot take a monster below 0, 33 or 50% of max HP on Normal, Nightmare and Hell (balance.json staticFloorPct; D2 hardcodes the floors).
+- Enchant has no radius in D2 (it targets one ally), so it is an aura of 2.5 tiles that adds its fire to every missile, bolt, swing and blast of the towers in it, not to ground zones or aura pulses (house rule).
+- Thunder Storm strikes a random monster in range at its perdelay rate. Charged Bolt and Teeth fire one shot per target; shots with no target of their own fly past, so a volley shreds a crowd and not a boss.
+- Evolved towers also cast their partner's skill on its own cooldown when it does something by itself (a curse, Frozen Orb, Fire Ball, Thunder Storm); partner auras still project at half radius.
 
 ## Skill archetypes
 
@@ -126,7 +137,7 @@ Every skill in the game is one row of data on one of ten archetypes. Adding a sk
 | Summon | Spawns units that block the path and fight | Raise Skeleton, Skeletal Mage, Revive | unit count, HP, damage, respawn time |
 | Corpse | Consumes corpses left by kills | Corpse Explosion, Revive, Fallen Shaman | corpse lifetime, radius, % of corpse max HP |
 
-Damage types follow D2: physical, magic, fire, cold, lightning, poison. Each monster's resistances per difficulty come straight from monstats.txt, and 100%+ is an immunity.
+Damage types follow D2: physical, magic, fire, cold, lightning, poison. Each monster's resistances per difficulty come straight from monstats.txt, and 100%+ is an immunity. Summons, corpse skills and Static Field have no standard-target damage, so the tier ladder cannot rank them: they climb the whole range from skill level 1 to the tier's cap.
 
 ## Enemies, waves and difficulty
 
@@ -149,6 +160,7 @@ The Act 1 roster covers every TD archetype without inventing anything. HP, speed
 - Pacing (Oct 2026): a wave is a stream, not a clump. Tanks come one at a time, about 1.25 s apart; swarms come in packs of 3 to 4, as Fallen move in D2, with about 4 s between packs; champions, uniques and bosses follow after a pause. With no towers a normal wave lasts 50 to 70 s from first spawn to last exit: the count grows past its base only while the wave is shorter than that, up to a cap, and difficulty grows through HP instead. Waves with Zombies (0.6 tiles a second in monstats) and boss waves run longer, about two and a half minutes. Spacing, packs, counts and the target length are in src/data/balance.json; npm run waves reports the timing.
 - Monster mods are D2's: Extra Fast, Extra Strong, Stone Skin (physical resist), Magic Resistant, Fire, Cold and Lightning Enchanted (immunity plus a death burst that stuns nearby summons), Cursed (towers in radius lose 25% damage), Teleportation (skips one path segment).
 - Normal, Nightmare and Hell use the three HP and resistance columns of monstats.txt. Hell immunities are the point: no single line clears Hell, so the player has to mix elements and magic.
+- How difficulty is built (M6): a Nightmare or Hell monster is its own entry (`fallen1@hell`) with that difficulty's resistances, immunities and HP columns. The wave curve compounds HP per wave, so raw Hell columns on top of it would be impossible; instead each difficulty's wave monsters are scaled to a percent of Normal's average HP (balance.json difficultyHpPct). The columns decide who is tough against whom, the curve and the percent how tough. Bounty follows each monster's Normal level, so gold keeps to the curve. The lobby and single player pick where a run starts; after its 30 waves the map loops at the next difficulty, up to Hell, and the curve starts again. Act 1's Hell columns hold fire, cold and lightning immunities (Fallen, Zombies and Rogues, Skeletons) but nothing against magic or poison.
 - Enemies never attack towers in v0.1. They only fight summons blocking the path.
 
 * Hell is not the ceiling. Endgame tiers (next section) scale past it.
@@ -240,7 +252,7 @@ Each milestone has one gate. Nothing moves to the next until the gate is met, be
 4. M3 Launcher and extractor. Electron shell with a setup screen that finds the D2R install, extracts what the game needs with a bundled CASC reader, and a main menu (Play, Host, Join, Settings). Windows installer from electron-builder, zero Blizzard assets inside. Gate: a friend with D2R installs it from the exe and reaches the first wave without help.
 5. M4 Multiplayer. Host-and-play relay inside the app, join codes, UPnP, lobby, FFA and team mode with chained zones, desync detection. Gate: four friends finish a team game with no desync.
 6. M5 Blood Moor art and HD UI. Rendered map, panels, fonts, skill icons, sound. Gate: a stranger can play it without being told how.
-7. M6 Sorceress and Necromancer. Summons that block, corpses, curses, elements, immunities. Gate: Hell waves cannot be cleared with one line.
+7. M6 Sorceress and Necromancer. Summons that block, corpses, curses, elements, immunities. Gate: Hell waves cannot be cleared with one line. The harness (npm run balance -- --hell) checks it as: no single-class bot (PALADIN, SORC, NECRO) clears Hell, and MIXED3, built from all three, does.
 8. M7 Endgame. Post-Hell tiers, loot, runes, runewords, stash, Barbarian gold-find line. Gate: a Hell+5 run needs gear to clear.
 
 ## Open questions
@@ -251,8 +263,10 @@ Answer these in the doc or in chat; each one changes code in M2 or M3.
 
 - [ ] Smite: the stun alternative at Zealot T1, or saved for the Smiter evolution?
 - [ ] Aura line: picks at T2 and T3 (Concentration or Holy Freeze, Fanaticism or Conviction), or one fixed skill per tier?
-- [ ] Summons block the path Kingdom Rush style, or stand beside it and shoot?
-- [ ] Corpses as a shared system (Corpse Explosion, Revive, Fallen Shaman, Find Item), or Necromancer-only?
+- [x] Summons block the path Kingdom Rush style, or stand beside it and shoot? Both (M6): skeletons and revives block, mages stand beside it and shoot.
+- [x] Corpses as a shared system (Corpse Explosion, Revive, Fallen Shaman, Find Item), or Necromancer-only? Shared (M6).
+- [ ] After wave 30 the curve starts again at the next difficulty, so a full board meets an easy wave 1 of Nightmare. Start the loop further up the curve?
+- [ ] Act 1's Hell has no magic or poison immunes in the tables. Bring in Act 2 to 5 monsters for Hell, add immunity mods to Hell's champions, or leave the wall to HP (see the M6 gate)?
 - [ ] Skill levels per tier: 5, or 20 straight from skills.txt (Joel's 20+ upgrades)? The harness fixed total spend per tier (see src/data/balance.json); more levels means a gentler multiplier over the same total, not more gold.
 - [ ] Random mode as a lobby toggle: random T1 skill for +25% gold?
 - [ ] Items and runes persist across runs (D2 stash), or reset every run?

@@ -1,0 +1,7 @@
+{
+  "id": "enchant",
+  "skill": "Enchant",
+  "archetype": "buffAura",
+  "damageType": "none",
+  "buffAura": { "radiusTenths": 25 }
+}

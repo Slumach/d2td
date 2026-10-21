@@ -1,0 +1,16 @@
+{
+  "id": "raise-skeletal-mage",
+  "skill": "Raise Skeletal Mage",
+  "archetype": "summon",
+  "damageType": "phys",
+  "rangeTenths": 30,
+  "rateTicks": 20,
+  "summon": {
+    "kind": "ranged",
+    "countCalc": "petmax",
+    "respawnTicks": 100,
+    "bolts": ["necromage1", "necromage2", "necromage3", "necromage4"],
+    "boltLevelCalc": "sumsk1calc",
+    "shotRangeTenths": 35
+  }
+}

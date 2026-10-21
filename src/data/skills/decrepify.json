@@ -1,0 +1,9 @@
+{
+  "id": "decrepify",
+  "skill": "Decrepify",
+  "archetype": "debuff",
+  "damageType": "none",
+  "rangeTenths": 40,
+  "rateTicks": 20,
+  "debuff": { "mode": "curse", "radiusCalc": "aurarangecalc", "durationCalc": "auralencalc" }
+}

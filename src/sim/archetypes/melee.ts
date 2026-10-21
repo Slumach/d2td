@@ -59,6 +59,7 @@ export const melee: ArchetypeModule<MeleeDef> = {
         if (e === 'phys') continue;
         dealDamage(sim, target, withBonus(idiv(weaponRoll * elementalPct[e]!, 100), buff.damagePct), e, ALL);
       }
+      if (buff.fireMax > 0) dealDamage(sim, target, rollInt(sim.state.rng, buff.fireMin, buff.fireMax), 'fire', ALL);
       if (skill.stunTicks > 0 && target.hp > 0) target.stunTicks = Math.max(target.stunTicks, skill.stunTicks);
     }
     return swung;

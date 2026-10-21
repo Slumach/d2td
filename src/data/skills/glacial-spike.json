@@ -1,0 +1,10 @@
+{
+  "id": "glacial-spike",
+  "skill": "Glacial Spike",
+  "archetype": "splash",
+  "damageType": "cold",
+  "freezeCalc": "auralencalc",
+  "rangeTenths": 40,
+  "rateTicks": 25,
+  "splash": { "delivery": "missile", "radiusCalc": "aurarangecalc", "edgeDamagePct": 100 }
+}

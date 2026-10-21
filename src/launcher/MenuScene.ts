@@ -5,7 +5,9 @@
 
 import Phaser from 'phaser';
 
+import type { SoloStart } from '../render/GameScene.ts';
 import { FONT, button } from '../render/ui.ts';
+import { DIFFICULTY_NAMES } from '../sim/data.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
 import type { LauncherApi, LauncherState } from './api.ts';
 import { frontendKey, frontendManifest, menuMusic, preloadFrontend, smoothHd, stoneButton, stonePanel } from './frontend.ts';
@@ -26,6 +28,7 @@ export class MenuScene extends Phaser.Scene {
   private state!: LauncherState;
   private parts: Phaser.GameObjects.GameObject[] = [];
   private settingsOpen = false;
+  private choosingDifficulty = false;
   private nameField: TextField | undefined;
 
   constructor() {
@@ -41,6 +44,7 @@ export class MenuScene extends Phaser.Scene {
     // Whatever path led here, no lobby or game connection outlives the main menu
     void this.api.mpLeave();
     this.settingsOpen = false;
+    this.choosingDifficulty = false;
     const m = frontendManifest(this);
     if (m) {
       smoothHd(this, m);
@@ -99,8 +103,15 @@ export class MenuScene extends Phaser.Scene {
     add(this.add.text(16, GAME_HEIGHT - 28, `v${this.state.version}   non-commercial fan project, not affiliated with Blizzard`, { ...MUTED, fontSize: '14px' }).setDepth(3100));
 
     if (this.settingsOpen) return this.drawSettings(d2);
+    if (this.choosingDifficulty) return this.drawDifficulty(d2);
     const items: [string, () => void][] = [
-      ['Single Player', () => this.startGame()],
+      [
+        'Single Player',
+        () => {
+          this.choosingDifficulty = true;
+          this.draw();
+        },
+      ],
       ['Host Game', () => this.scene.start('Lobby', { role: 'host' })],
       ['Join Game', () => this.scene.start('Lobby', { role: 'join' })],
       [
@@ -119,9 +130,34 @@ export class MenuScene extends Phaser.Scene {
     });
   }
 
-  private startGame(): void {
+  private startGame(difficulty: number): void {
     menuMusic(this, false);
-    this.scene.start('Game');
+    this.scene.start('Game', { difficulty } satisfies SoloStart);
+  }
+
+  /** Single player: where the run starts. After its 30 waves the map loops at the next one. */
+  private drawDifficulty(d2: boolean): void {
+    const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
+    const top = 430;
+    const panel = d2 ? stonePanel(this, CX, top + 190, 520, 460) : undefined;
+    if (panel) this.parts.push(panel);
+    add(this.add.text(CX, top + 10, 'Difficulty', { ...TEXT, fontSize: '30px', color: '#e8b45a' }).setOrigin(0.5).setDepth(3101));
+    add(this.add.text(CX, top + 52, 'After wave 30 the map loops at the next one.', { ...MUTED, fontSize: '16px' }).setOrigin(0.5).setDepth(3101));
+    const items: [string, () => void][] = [
+      ...DIFFICULTY_NAMES.map((name, i): [string, () => void] => [name, () => this.startGame(i)]),
+      [
+        'Back',
+        () => {
+          this.choosingDifficulty = false;
+          this.draw();
+        },
+      ],
+    ];
+    items.forEach(([label, onClick], i) => {
+      const y = top + 120 + i * 80;
+      if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { size: 'med', width: 320 }));
+      else this.parts.push(...button(this, CX - 160, y - 18, { label, onClick, width: 320 }));
+    });
   }
 
   private drawSettings(d2: boolean): void {

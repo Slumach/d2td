@@ -50,6 +50,10 @@ export interface SkillJson {
    * Computed from data at load time; stored here so it is visible, and checked to match.
    */
   tierBonus?: number;
+  /** skills.txt column whose calc gives the attack interval in frames per level (Thunder Storm's perdelay). */
+  rateCalc?: string;
+  /** skills.txt column whose calc gives a freeze length in frames (Glacial Spike's auralencalc). */
+  freezeCalc?: string;
   [archetypeFields: string]: unknown;
 }
 
@@ -61,8 +65,18 @@ export interface SkillCommon {
   skillLevels: number[];
   rangeUnits: number;
   rateTicks: number;
+  /** Ticks between attacks at each tower level: rateTicks, or the rateCalc's frames. */
+  rates: number[];
   /** skills.txt delay or localdelay as ticks: a cooldown that attack speed cannot beat. */
   delayTicks: number;
+  /**
+   * What a hit carries besides its damage, per tower level, all in ticks (0 for none):
+   * cold skills chill for their ELen, freezeCalc skills freeze, and poison spreads its
+   * damage over its ELen instead of landing at once.
+   */
+  chillTicks: number[];
+  freezeTicks: number[];
+  poisonTicks: number[];
 }
 
 /** Damage range at one tower level, in 1/256 HP. */
@@ -93,7 +107,10 @@ export interface PierceDef extends SkillCommon {
 
 export interface SplashDef extends SkillCommon {
   archetype: 'splash';
-  delivery: 'missile' | 'strike' | 'orbit';
+  /** nova: a ring from the tower out to its range, hitting everything once (Poison Nova). */
+  delivery: 'missile' | 'strike' | 'orbit' | 'nova';
+  /** Strikes a random monster in range instead of the tower's target (Thunder Storm). */
+  randomTarget: boolean;
   radiusUnits: number;
   /** Damage percent at the edge of the radius; linear falloff from the centre. */
   edgeDamagePct: number;
@@ -142,6 +159,9 @@ export interface ControlDef extends SkillCommon {
 export interface TowerBuff {
   damagePct: number;
   attackSpeedPct: number;
+  /** Fire added to every hit, 1/256 HP (Enchant). */
+  fireMin: number;
+  fireMax: number;
 }
 
 export interface BuffAuraDef extends SkillCommon {
@@ -149,17 +169,58 @@ export interface BuffAuraDef extends SkillCommon {
   levels: (TowerBuff & { radiusUnits: number })[];
 }
 
+/**
+ *   aura   weakens every monster in radius of the tower (Conviction)
+ *   curse  cast on a spot in range: monsters within the radius carry it for its duration
+ *          (Amplify Damage, Decrepify, Lower Resist)
+ *   pulse  takes a percent of current HP off everything in radius (Static Field)
+ */
 export interface DebuffDef extends SkillCommon {
   archetype: 'debuff';
-  mode: 'aura';
-  levels: { radiusUnits: number; resistDown: Partial<Record<Element, number>> }[];
+  mode: 'aura' | 'curse' | 'pulse';
+  levels: {
+    radiusUnits: number;
+    resistDown: Partial<Record<Element, number>>;
+    slowPct: number;
+    /** Less damage dealt by the monster, to summons. */
+    damageDownPct: number;
+    durationTicks: number;
+    /** Pulse: percent of current HP, and the least it takes (1/256 HP). */
+    hpPct: number;
+    minDamage: number;
+  }[];
 }
 
+/** A curse riding on a monster. */
+export interface CurseFx {
+  slowPct: number;
+  damageDownPct: number;
+  resistDown: Partial<Record<Element, number>>;
+}
+
+/**
+ *   melee   blocks the path tile nearest its tower and fights what it stops (Raise Skeleton)
+ *   ranged  stands on the tower's side of the path and shoots; never blocks (Skeletal Mage)
+ *   revive  raises a corpse in range as an ally that blocks where it rose, for durationTicks
+ */
 export interface SummonDef extends SkillCommon {
   archetype: 'summon';
+  kind: 'melee' | 'ranged' | 'revive';
+  /** The skills.txt summon monster; empty for revive, which raises the corpse's own monster. */
   monster: string;
   respawnTicks: number;
-  levels: (DamageRange & { count: number; hp: number })[];
+  durationTicks: number;
+  /** Ranged: how far a summon shoots. */
+  shotRangeUnits: number;
+  levels: (DamageRange & {
+    count: number;
+    hp: number;
+    /** Revive: percent of the corpse's max HP, and its damage bonus. */
+    hpPct: number;
+    damagePct: number;
+    /** Ranged: one bolt per element; each summon picks one when raised. */
+    bolts: (DamageRange & { element: Element; lengthTicks: number })[];
+  })[];
 }
 
 export interface CorpseDef extends SkillCommon {
@@ -195,6 +256,8 @@ export interface ResolveContext {
 export interface MonsterAuraFx {
   slowPct: number;
   resistDown: Partial<Record<Element, number>>;
+  /** Less damage dealt to summons (Decrepify). */
+  damageDownPct: number;
 }
 
 /** One emitter's contribution, before "same aura: strongest only". */

@@ -8,9 +8,27 @@ import { auraMultiplier, isAura, standardDps, withTierBonus } from './dps.ts';
 import { VELOCITY_TO_UNITS_PER_TICK, UNITS_PER_TILE, d2FramesToTicks, idiv } from './fixed.ts';
 import { ELEMENTS, MONSTER_MODS, type Element, type MonsterMod, type Rank } from './state.ts';
 import { createMap } from './map.ts';
-import { findRow, int, monumodConstant, str, type Tables } from './tables.ts';
+import { findRow, int, monumodConstant, str, type TableRow, type Tables } from './tables.ts';
 
 export type { TableRow, Tables } from './tables.ts';
+
+/**
+ * D2's three difficulties. A monster's Nightmare and Hell stats are their own entries,
+ * keyed `${id}@nightmare` and `${id}@hell`, so the sim reads them like any other monster.
+ */
+export const DIFFICULTIES = ['normal', 'nightmare', 'hell'] as const;
+export type DifficultyName = (typeof DIFFICULTIES)[number];
+export const DIFFICULTY_NAMES = ['Normal', 'Nightmare', 'Hell'] as const;
+
+export function variantId(id: string, difficulty: number): string {
+  return difficulty === 0 ? id : `${id}@${DIFFICULTIES[difficulty]}`;
+}
+
+/** The monstats id behind a difficulty variant: what sprites, names and sounds key on. */
+export function baseMonsterId(def: string): string {
+  const at = def.indexOf('@');
+  return at < 0 ? def : def.slice(0, at);
+}
 
 export const MAX_TOWER_LEVEL = 5;
 export const MAX_TIER = 3;
@@ -93,6 +111,13 @@ export interface BalanceJson {
    */
   multiplayer: { firstWaveTicks: number; waveGapTicks: number };
   auraRangePerTile: number;
+  /** D2 hardcodes how much a chilled monster slows: a design value. */
+  chillPct: number;
+  /**
+   * Per difficulty: Static Field cannot take a monster below this percent of its max HP
+   * (D2 hardcodes the floors).
+   */
+  staticFloorPct: number[];
   corpseLifetimeTicks: number;
   monsterAttackTicks: number;
   blockRangeTenths: number;
@@ -119,6 +144,11 @@ export interface BalanceJson {
     uniques: Record<string, MonsterMod[]>;
     bosses: Record<string, MonsterMod[]>;
   };
+  /**
+   * Per difficulty, percent of Normal's average HP its wave monsters are scaled to (see
+   * buildGameData): Nightmare and Hell monsters are tougher than Normal ones, by this much.
+   */
+  difficultyHpPct: number[];
   /** Boss HP as a multiple of its wave's average monster HP, by monster id. */
   bossHpMultiplier: Record<string, number>;
   /**
@@ -147,12 +177,23 @@ export interface DesignData {
 // ---- resolved game data ----
 
 export interface MonsterDef {
+  /** The difficulty variant's id; `base` is the monstats id. */
   id: string;
+  base: string;
+  difficulty: number;
   name: string;
   monType: string;
-  /** monstats Level (normal). Sets base HP and damage through monlvl, and the bounty. */
+  /**
+   * monstats Level (normal): sets the bounty, in every difficulty, so gold follows the
+   * wave curve rather than jumping with Nightmare's levels.
+   */
   level: number;
-  /** HP range at that level, in 1/256 HP: monstats minHP/maxHP percent of monlvl HP. */
+  /**
+   * HP range in 1/256 HP: monstats minHP/maxHP percent of monlvl HP at the difficulty's
+   * level and columns, scaled so the difficulty's roster averages Normal's (see
+   * buildGameData): the wave curve sets how tough a wave is, the columns how tough each
+   * monster is against the others.
+   */
   minHp: number;
   maxHp: number;
   /** Attack damage (A1MinD/A1MaxD percent of monlvl DM), 1/256 HP. */
@@ -196,6 +237,9 @@ export interface WaveGroup {
 
 export interface WaveDef {
   kind: 'swarm' | 'tank';
+  /** 0 Normal, 1 Nightmare, 2 Hell; and the wave's number within its difficulty, from 1. */
+  difficulty: number;
+  number: number;
   /** HP multiplier for this wave, per mille (1000 = x1). */
   hpPermille: number;
   /** Bounty multiplier for this wave, per mille. */
@@ -226,6 +270,8 @@ export interface Economy {
 }
 
 export interface Rules {
+  chillPct: number;
+  staticFloorPct: number[];
   corpseLifetimeTicks: number;
   monsterAttackTicks: number;
   blockRangeUnits: number;
@@ -237,6 +283,8 @@ export interface Rules {
 }
 
 export interface GameData {
+  /** The difficulty the run starts at; later difficulties follow its 30 waves. */
+  difficulty: number;
   skills: Record<string, SkillDef>;
   classes: Record<string, ClassDef>;
   evolutions: EvolutionDef[];
@@ -256,29 +304,49 @@ const RESIST_COLUMNS: Record<Element, string> = {
   pois: 'ResPo',
 };
 
-export function monsterDef(tables: Tables, design: MonstersJson, id: string, auraRangePerTile: number): MonsterDef {
+/** monstats and monlvl column suffixes per difficulty. */
+const SUFFIX = ['', '(N)', '(H)'];
+/** monstats spells Normal's HP columns in lower case and the others capitalised. */
+const HP_COLUMNS = [
+  ['minHP', 'maxHP'],
+  ['MinHP(N)', 'MaxHP(N)'],
+  ['MinHP(H)', 'MaxHP(H)'],
+];
+
+export function monsterDef(tables: Tables, design: MonstersJson, id: string, auraRangePerTile: number, difficulty = 0): MonsterDef {
   const row = findRow(tables.monstats, 'Id', id);
+  const sfx = SUFFIX[difficulty]!;
+  // A difficulty column the row leaves out falls back to Normal's (resistances excepted:
+  // an empty resistance is 0, as in the game)
+  const col = (name: string, normal = name) => (row[`${name}${sfx}`] !== undefined ? `${name}${sfx}` : normal);
   const level = int(row, 'Level');
+  const hpLevel = int(row, col('Level'));
   // D2: monstats HP and damage are percentages of the monlvl values for the monster's level
-  const lvl = findRow(tables.monlvl, 'Level', level);
-  const pctOf = (column: string, of: string) => Math.max(1, idiv(int(row, column) * int(lvl, of), 100)) * 256;
+  const hpRow = findRow(tables.monlvl, 'Level', hpLevel);
+  const dmRow = findRow(tables.monlvl, 'Level', level);
+  const pct = (r: TableRow, column: string, of: string) => Math.max(1, idiv(int(row, column) * int(r, of), 100)) * 256;
+  const [minCol, maxCol] = HP_COLUMNS[difficulty]!;
+  const hpOf = (column: string, normal: string) => pct(hpRow, row[column] !== undefined ? column : normal, hpRow[`HP${sfx}`] !== undefined ? `HP${sfx}` : 'HP');
   const resist = {} as Record<Element, number>;
-  for (const element of ELEMENTS) resist[element] = int(row, RESIST_COLUMNS[element]);
+  for (const element of ELEMENTS) resist[element] = int(row, `${RESIST_COLUMNS[element]}${sfx}`);
   const resurrect = design.roster[id]?.resurrect;
   return {
-    id,
+    id: variantId(id, difficulty),
+    base: id,
+    difficulty,
     name: str(row, 'NameStr') || id,
     monType: str(row, 'MonType'),
     level,
-    minHp: pctOf('minHP', 'HP'),
-    maxHp: pctOf('maxHP', 'HP'),
-    minDamage: pctOf('A1MinD', 'DM'),
-    maxDamage: pctOf('A1MaxD', 'DM'),
+    minHp: hpOf(minCol!, 'minHP'),
+    maxHp: hpOf(maxCol!, 'maxHP'),
+    // Monsters only ever hit summons, and summons keep Normal's stats: so does their damage
+    minDamage: pct(dmRow, 'A1MinD', 'DM'),
+    maxDamage: pct(dmRow, 'A1MaxD', 'DM'),
     speed: int(row, 'Velocity') * VELOCITY_TO_UNITS_PER_TICK,
     resist,
     undead: int(row, 'lUndead') === 1 || int(row, 'hUndead') === 1,
     demon: int(row, 'demon') === 1,
-    aiDelayTicks: Math.max(1, d2FramesToTicks(int(row, 'aidel'))),
+    aiDelayTicks: Math.max(1, d2FramesToTicks(int(row, col('aidel')))),
     resurrect: resurrect && {
       monType: resurrect.monType,
       chancePct: int(row, resurrect.chanceColumn),
@@ -307,6 +375,7 @@ export function generateWaves(
   monsters: MonstersJson,
   count: number,
   defs: Record<string, MonsterDef>,
+  difficulty = 0,
 ): WaveDef[] {
   const hp = compound(balance.hpPctPerWave, count);
   const bounty = compound(balance.bountyPctPerWave, count);
@@ -316,7 +385,7 @@ export function generateWaves(
   for (let n = 1; n <= count; n++) {
     const kind = n % 2 === 1 ? 'swarm' : 'tank';
     const spec = w[kind];
-    const pool = monsters.pools[kind].filter((p) => p.minWave <= n).map((p) => p.id);
+    const pool = monsters.pools[kind].filter((p) => p.minWave <= n).map((p) => variantId(p.id, difficulty));
     const types = Math.min(pool.length, w.minTypes + (Math.floor(n / 2) % (w.maxTypes - w.minTypes + 1)));
     const picked = Array.from({ length: types }, (_, i) => pool[(Math.floor(n / 2) + i) % pool.length]!);
     // A stream that takes turns through the picked types: one monster at a time for tanks,
@@ -358,8 +427,9 @@ export function generateWaves(
       groups.push({ monster: lead, count: w.championPackSize, spacingTicks: spec.spacingTicks, delayTicks: pause, rank: 'champion', mods: championMods });
     }
 
-    const boss = monsters.bosses[key];
-    if (boss) {
+    const bossId = monsters.bosses[key];
+    const boss = bossId && variantId(bossId, difficulty);
+    if (boss && bossId) {
       // The wall scales with the curve: a multiple of this wave's average monster HP
       let total = 0;
       let monstersInWave = 0;
@@ -368,8 +438,8 @@ export function generateWaves(
         total += idiv((d.minHp + d.maxHp) * hp[n - 1]!, 2000) * c;
         monstersInWave += c;
       }
-      const multiplier = balance.bossHpMultiplier[boss];
-      if (multiplier === undefined) throw new Error(`balance.json bossHpMultiplier has no ${boss}`);
+      const multiplier = balance.bossHpMultiplier[bossId];
+      if (multiplier === undefined) throw new Error(`balance.json bossHpMultiplier has no ${bossId}`);
       groups.push({
         monster: boss,
         count: 1,
@@ -381,7 +451,7 @@ export function generateWaves(
       });
     }
 
-    waves.push({ kind, hpPermille: hp[n - 1]!, bountyPermille: bounty[n - 1]!, groups });
+    waves.push({ kind, difficulty, number: n, hpPermille: hp[n - 1]!, bountyPermille: bounty[n - 1]!, groups });
   }
   return waves;
 }
@@ -415,6 +485,8 @@ export function rulesFrom(tables: Tables, balance: BalanceJson): Rules {
     mods[mod] = { speedPct: m.speedPct ?? 0, damagePct: m.damagePct ?? 0, resist: m.resist ?? {} };
   }
   return {
+    chillPct: balance.chillPct,
+    staticFloorPct: balance.staticFloorPct,
     corpseLifetimeTicks: balance.corpseLifetimeTicks,
     monsterAttackTicks: balance.monsterAttackTicks,
     blockRangeUnits: idiv(balance.blockRangeTenths * UNITS_PER_TILE, 10),
@@ -462,6 +534,8 @@ export interface Ladder {
   start: number;
   /** False when no level up to the cap reached the floor and a tierBonus was needed. */
   reached: boolean;
+  /** False for skills with no standard-target number (summons, corpses, pulses): they climb 1 to the cap. */
+  measured: boolean;
   /** Per mille; 1000 unless the skill needed a bonus to reach the floor. */
   tierBonus: number;
 }
@@ -469,6 +543,10 @@ export interface Ladder {
 export interface BuildOptions {
   /** Check skill JSON tierBonus values against the computed ones (default true). */
   checkTierBonus?: boolean;
+  /** The difficulty the run starts at (default Normal). */
+  difficulty?: number;
+  /** After the last wave the map loops at the next difficulty, up to Hell (default off). */
+  loop?: boolean;
 }
 
 /**
@@ -511,14 +589,17 @@ function buildLadders(
           const previous = Math.max(...before.map((s) => value(s, top)));
           const floor = Math.ceil((previous * dpsPct) / 100);
 
+          // Summons, corpse skills and pulses have no standard-target number; they climb
+          // the whole range, as does anything replacing a tier that had none
+          const measurable = value(resolveAt(Array(MAX_TOWER_LEVEL).fill(cap)), 0) > 0;
           let start = 0;
-          for (let level = 1; level <= cap && previous > 0; level++) {
+          for (let level = 1; level <= cap && previous > 0 && measurable; level++) {
             if (value(resolveAt(Array(MAX_TOWER_LEVEL).fill(level)), 0) >= floor) {
               start = level;
               break;
             }
           }
-          if (previous === 0) start = 1;
+          if (previous === 0 || !measurable) start = 1;
           const reached = start > 0;
           // Five equal steps to the cap; an unreachable floor climbs cap-4 to cap instead
           const levels = reached
@@ -548,7 +629,7 @@ function buildLadders(
             );
           }
           skills[id] = withTierBonus(base, tierBonus);
-          ladders.push({ cls: c.id, line: lineId, tier, skill: id, metric, levels, previous, start: value(skills[id]!, 0), reached, tierBonus });
+          ladders.push({ cls: c.id, line: lineId, tier, skill: id, metric, levels, previous, start: value(skills[id]!, 0), reached, measured: measurable, tierBonus });
         }
       }
     }
@@ -592,11 +673,28 @@ export function buildGameData(
     ...Object.values(m.pools).flatMap((pool) => pool.map((p) => p.id)),
     ...Object.values(m.bosses),
   ]);
+  const start = options.difficulty ?? 0;
+  const last = options.loop ? DIFFICULTIES.length - 1 : start;
   const monsters: Record<string, MonsterDef> = {};
-  for (const id of monsterIds) monsters[id] = monsterDef(tables, m, id, design.balance.auraRangePerTile);
-  const waves = generateWaves(design.balance, m, waveCount, monsters);
+  const waves: WaveDef[] = [];
+  const normal = [...monsterIds].map((id) => monsterDef(tables, m, id, design.balance.auraRangePerTile));
+  // Averaged over the wave pools: a boss's HP is a multiple of its wave's average anyway
+  const pooled = new Set(Object.values(m.pools).flatMap((pool) => pool.map((p) => p.id)));
+  const average = (defs: MonsterDef[]) => defs.filter((d) => pooled.has(d.base)).reduce((n, d) => n + d.minHp + d.maxHp, 0);
+  for (let d = start; d <= last; d++) {
+    const defs = d === 0 ? normal : [...monsterIds].map((id) => monsterDef(tables, m, id, design.balance.auraRangePerTile, d));
+    // The difficulty's wave monsters scaled to its percent of Normal's average HP: its
+    // columns set who is tough against whom, the wave curve and this percent how tough
+    const pct = design.balance.difficultyHpPct[d] ?? 100;
+    const scale = idiv(average(normal) * 10 * pct, Math.max(1, average(defs)));
+    for (const def of defs) {
+      monsters[def.id] = d === 0 && pct === 100 ? def : { ...def, minHp: Math.max(256, idiv(def.minHp * scale, 1000)), maxHp: Math.max(256, idiv(def.maxHp * scale, 1000)) };
+    }
+    waves.push(...generateWaves(design.balance, m, waveCount, monsters, d));
+  }
 
   return {
+    difficulty: start,
     skills,
     classes,
     evolutions,

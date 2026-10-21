@@ -43,6 +43,7 @@ export class Relay {
   private readonly opts: RelayOptions;
   private peers: Peer[] = [];
   private mode: MatchMode = 'team';
+  private difficulty = 0;
   private started = false;
   private tick = 0;
   private queue: PlayerCommand[] = [];
@@ -88,7 +89,7 @@ export class Relay {
   }
 
   private sendLobby(): void {
-    this.broadcast({ t: 'lobby', players: this.lobbyPlayers(), mode: this.mode });
+    this.broadcast({ t: 'lobby', players: this.lobbyPlayers(), mode: this.mode, difficulty: this.difficulty });
   }
 
   private reject(socket: Socket, reason: string): void {
@@ -118,6 +119,9 @@ export class Relay {
     }
     if (m.t === 'mode' && peer.host && !this.started && (m.mode === 'team' || m.mode === 'ffa')) {
       this.mode = m.mode;
+      this.sendLobby();
+    } else if (m.t === 'difficulty' && peer.host && !this.started && [0, 1, 2].includes(m.difficulty)) {
+      this.difficulty = m.difficulty;
       this.sendLobby();
     } else if (m.t === 'start' && peer.host && !this.started) {
       this.start();
@@ -153,8 +157,10 @@ export class Relay {
     this.started = true;
     const players = this.lobbyPlayers();
     const seed = (this.opts.seed ?? (() => randomInt(1, 0x7fffffff)))();
-    this.log(`relay: start ${this.mode} with ${players.map((p) => p.name).join(', ')}, seed ${seed}`);
-    for (const p of this.joined) sendLine(p.socket, { t: 'start', seed, mode: this.mode, players, you: p.slot } satisfies HostMessage);
+    this.log(`relay: start ${this.mode} at difficulty ${this.difficulty} with ${players.map((p) => p.name).join(', ')}, seed ${seed}`);
+    for (const p of this.joined) {
+      sendLine(p.socket, { t: 'start', seed, mode: this.mode, difficulty: this.difficulty, players, you: p.slot } satisfies HostMessage);
+    }
     const tickMs = this.opts.tickMs ?? TICK_MS;
     const t0 = performance.now();
     const pump = () => {

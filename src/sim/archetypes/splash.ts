@@ -2,10 +2,13 @@
 //   missile  a shot that explodes where it lands (Fire Ball)
 //   strike   a delayed hit on the target's spot (Meteor, Fist of the Heavens)
 //   orbit    hammers spiralling out from the tower, hitting what they pass (Blessed Hammer)
+//   nova     a ring from the tower out to its range, hitting everything in it once (Poison Nova)
+// Strikes can pick a random monster in range instead of the tower's target (Thunder Storm).
+// The radius is a design value in tenths of a tile, or a skills.txt calc (Fire Ball, Meteor).
 // An optional sub-missile hits everything its own filter allows within a radius of the
 // impact, like the holy bolts Fist of the Heavens sprays at undead and demons.
 
-import { aliveWithin, canHurt, dealDamage, distSq, findTarget, withBonus } from '../combat.ts';
+import { aliveWithin, canHurt, dealDamage, distSq, findTarget, strike, within, withBonus } from '../combat.ts';
 import { idiv, isqrt } from '../fixed.ts';
 import { TRIG_SCALE, TRIG_STEPS, cos64, homeToward, sin64, spawnMissile, targetOf } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
@@ -28,8 +31,11 @@ import {
 import type { ArchetypeModule, SplashDef } from './types.ts';
 
 interface SplashJson {
-  delivery: 'missile' | 'strike' | 'orbit';
-  radiusTenths: number;
+  delivery: 'missile' | 'strike' | 'orbit' | 'nova';
+  radiusTenths?: number;
+  /** skills.txt column with the radius in D2 units, instead of radiusTenths. */
+  radiusCalc?: string;
+  randomTarget?: boolean;
   edgeDamagePct?: number;
   orbitTurns?: number;
   subMissile?: { missile: string; radiusCalc: string };
@@ -48,7 +54,7 @@ function explode(sim: Sim, skill: SplashDef, missile: Missile, center: { x: numb
     const d = isqrt(distSq(center, m));
     const pct = skill.radiusUnits === 0 ? 100 : 100 - idiv((100 - skill.edgeDamagePct) * d, skill.radiusUnits);
     const amount = withBonus(rollInt(sim.state.rng, range.min, range.max), missile.damagePct);
-    dealDamage(sim, m, idiv(amount * pct, 100), element(skill), skill.filter);
+    strike(sim, m, idiv(amount * pct, 100), element(skill), skill.filter, skill, missile.level, missile);
     hit.push(m);
   }
   if (skill.subFilter && range.subRadiusUnits > 0) {
@@ -69,11 +75,15 @@ export const splash: ArchetypeModule<SplashDef> = {
     const missile = missileOf(ctx.tables, ctx.skillRow);
     const sub = f.subMissile ? missileOf(ctx.tables, ctx.skillRow, f.subMissile.missile) : undefined;
     elementalType(json, ctx.skillRow);
+    const radius = f.radiusCalc
+      ? auraUnits(calcAt(ctx.skillRow, f.radiusCalc, json.skillLevels?.[0] ?? 1), ctx.auraRangePerTile)
+      : tenthsToUnits(f.radiusTenths ?? 0);
     return {
       ...common(json, ctx, true),
       archetype: 'splash',
       delivery: f.delivery,
-      radiusUnits: tenthsToUnits(f.radiusTenths),
+      randomTarget: f.randomTarget === true,
+      radiusUnits: f.delivery === 'nova' ? tenthsToUnits(json.rangeTenths ?? 0) : radius,
       edgeDamagePct: f.edgeDamagePct ?? 100,
       missileSpeed: missileSpeed(missile),
       missileLifetime: missileLifetime(missile),
@@ -93,13 +103,28 @@ export const splash: ArchetypeModule<SplashDef> = {
 
   act(sim, tower, skill, lvl, buff) {
     const hurtable = (m: Monster) => canHurt(sim, m, element(skill), skill.filter);
-    const target = findTarget(sim, tower, skill.rangeUnits + skill.radiusUnits, hurtable);
+    if (skill.delivery === 'nova') {
+      if (!sim.state.monsters.some((m) => m.hp > 0 && within(tower, m, skill.radiusUnits) && hurtable(m))) return false;
+      // The ring expands at missile speed; it lives until it reaches the edge
+      const speed = Math.max(1, skill.missileSpeed);
+      const ticks = Math.max(1, idiv(skill.radiusUnits + speed - 1, speed));
+      spawnMissile(sim, tower, skill.id, lvl, buff, { ticksLeft: ticks });
+      return true;
+    }
+    const reach = skill.rangeUnits + skill.radiusUnits;
+    let target: Monster | undefined;
+    if (skill.randomTarget) {
+      const pool = sim.state.monsters.filter((m) => m.hp > 0 && within(tower, m, reach) && hurtable(m));
+      target = pool.length > 0 ? pool[rollInt(sim.state.rng, 0, pool.length - 1)] : undefined;
+    } else {
+      target = findTarget(sim, tower, reach, hurtable);
+    }
     if (!target) return false;
     const base = { targetId: target.id, ticksLeft: skill.missileLifetime };
     if (skill.delivery === 'strike') {
-      spawnMissile(sim, tower, skill.id, lvl, buff.damagePct, { ...base, x: target.x, y: target.y, ticksLeft: skill.impactTicks });
+      spawnMissile(sim, tower, skill.id, lvl, buff, { ...base, x: target.x, y: target.y, ticksLeft: skill.impactTicks });
     } else {
-      spawnMissile(sim, tower, skill.id, lvl, buff.damagePct, base);
+      spawnMissile(sim, tower, skill.id, lvl, buff, base);
     }
     return true;
   },
@@ -124,6 +149,19 @@ export const splash: ArchetypeModule<SplashDef> = {
       if (--missile.ticksLeft > 0) return true;
       explode(sim, skill, missile, missile);
       return false;
+    }
+
+    if (skill.delivery === 'nova') {
+      // The ring's radius grows each tick; it hits each monster it passes once
+      const radius = Math.min(skill.radiusUnits, skill.missileSpeed * missile.age);
+      for (const m of aliveWithin(sim, missile, radius)) {
+        if (missile.hits.includes(m.id)) continue;
+        missile.hits.push(m.id);
+        const range = skill.levels[missile.level]!;
+        const amount = withBonus(rollInt(sim.state.rng, range.min, range.max), missile.damagePct);
+        strike(sim, m, amount, element(skill), skill.filter, skill, missile.level, missile);
+      }
+      return --missile.ticksLeft > 0;
     }
 
     // Orbit: spiral out to the tower's range over the hammer's lifetime

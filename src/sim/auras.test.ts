@@ -52,7 +52,7 @@ describe('aura stacking', () => {
     const buff = sim.fx.towers[zealot.id]!;
     const sacrifice = sim.data.skills['sacrifice']!;
     expect(buff.attackSpeedPct).toBeGreaterThan(0);
-    expect(attackInterval(sim, zealot, sacrifice, buff)).toBeLessThan(sacrifice.rateTicks);
+    expect(attackInterval(sim, zealot, sacrifice, 0, buff)).toBeLessThan(sacrifice.rateTicks);
   });
 
   it('Holy Freeze slows monsters in its radius; two of them do not stack', () => {
@@ -93,5 +93,12 @@ describe('aura stacking', () => {
     expect(sources[0]!.aura.radiusUnits).toBe(Math.trunc(full / 2));
     // The evolved tower buffs itself with the built-in aura
     expect(computeAuras(sim).towers[tower.id]!.damagePct).toBeGreaterThan(0);
+  });
+});
+
+describe('pulse rate', () => {
+  it('Holy Freeze pulses on its perdelay at every level, not every tick', () => {
+    const skill = testSim().data.skills['holy-freeze']!;
+    expect(skill.rates.every((r) => r === skill.rateTicks && r > 1)).toBe(true);
   });
 });

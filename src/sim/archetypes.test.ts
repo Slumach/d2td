@@ -221,7 +221,7 @@ describe('monsters', () => {
   it('Fallen Shaman ignores corpses of other monster types', () => {
     const sim = testSim();
     sim.data.monsters['fallenshaman1']!.resurrect!.chancePct = 100;
-    sim.state.corpses.push({ id: 999, def: 'zombie1', dist: BESIDE, x: 2500, y: 3500, maxHp: 256, ticksLeft: 100 });
+    sim.state.corpses.push({ id: 999, def: 'zombie1', rank: 'normal', dist: BESIDE, x: 2500, y: 3500, maxHp: 256, ticksLeft: 100 });
     const shaman = addMonster(sim, 'fallenshaman1', BESIDE);
     shaman.abilityCooldown = 1;
     step(sim, []);
@@ -231,7 +231,7 @@ describe('monsters', () => {
 
   it('corpses last corpseLifetimeTicks', () => {
     const sim = testSim();
-    sim.state.corpses.push({ id: 999, def: 'zombie1', dist: 0, x: 0, y: 0, maxHp: 256, ticksLeft: sim.data.rules.corpseLifetimeTicks });
+    sim.state.corpses.push({ id: 999, def: 'zombie1', rank: 'normal', dist: 0, x: 0, y: 0, maxHp: 256, ticksLeft: sim.data.rules.corpseLifetimeTicks });
     ticks(sim, sim.data.rules.corpseLifetimeTicks - 1);
     expect(sim.state.corpses).toHaveLength(1);
     step(sim, []);

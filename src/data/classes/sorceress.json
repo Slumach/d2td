@@ -1,0 +1,10 @@
+{
+  "id": "sorceress",
+  "name": "Sorceress",
+  "lines": {
+    "fire": { "name": "Fire", "tiers": [["fire-bolt"], ["fire-ball"], ["meteor"]] },
+    "cold": { "name": "Cold", "tiers": [["ice-bolt"], ["glacial-spike"], ["blizzard", "frozen-orb"]] },
+    "lightning": { "name": "Lightning", "tiers": [["charged-bolt"], ["lightning"], ["chain-lightning"]] },
+    "support": { "name": "Support", "tiers": [["static-field"], ["enchant"], ["thunder-storm"]] }
+  }
+}

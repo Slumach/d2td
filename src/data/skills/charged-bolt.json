@@ -1,0 +1,10 @@
+{
+  "id": "charged-bolt",
+  "skill": "Charged Bolt",
+  "archetype": "projectile",
+  "damageType": "ltng",
+  "skillLevels": [1, 5, 10, 15, 20],
+  "rangeTenths": 35,
+  "rateTicks": 20,
+  "projectile": { "countCalc": "calc1" }
+}

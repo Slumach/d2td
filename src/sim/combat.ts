@@ -1,7 +1,8 @@
 // Targeting, resistance and damage. Every hit in the sim goes through dealDamage.
 
-import type { HitFilter, MonsterAuraFx } from './archetypes/types.ts';
+import type { HitFilter, MonsterAuraFx, SkillCommon, TowerBuff } from './archetypes/types.ts';
 import { idiv } from './fixed.ts';
+import { rollInt } from './rng.ts';
 import type { Element, Monster, Sim, Targeting, Tower } from './state.ts';
 
 export interface Point {
@@ -19,7 +20,7 @@ export function within(a: Point, b: Point, radius: number): boolean {
   return distSq(a, b) <= radius * radius;
 }
 
-const NO_FX: MonsterAuraFx = { slowPct: 0, resistDown: {} };
+const NO_FX: MonsterAuraFx = { slowPct: 0, resistDown: {}, damageDownPct: 0 };
 
 export function monsterFx(sim: Sim, monster: Monster): MonsterAuraFx {
   return sim.fx.monsters[monster.id] ?? NO_FX;
@@ -85,6 +86,57 @@ export function dealDamage(
   return dealt;
 }
 
+/** Enchant's fire, as a tower's buff or a missile's snapshot of it. */
+export type FireAdd = Pick<TowerBuff, 'fireMin' | 'fireMax'>;
+
+/**
+ * One hit of a skill: the damage, then what the skill carries. Poison spreads over the
+ * skill's poison length instead of landing at once (a stronger dose replaces a weaker
+ * one, as in D2). A hit that hurts chills for the skill's cold length and freezes for its
+ * freeze length; bosses are chilled instead of frozen (house rule). Enchant's fire, when
+ * the tower stands in it, lands with the hit. Returns the damage dealt now.
+ */
+export function strike(
+  sim: Sim,
+  monster: Monster,
+  amount: number,
+  element: Element,
+  filter: HitFilter,
+  skill: SkillCommon,
+  lvl: number,
+  fire?: FireAdd,
+): number {
+  if (monster.hp <= 0) return 0;
+  let dealt = 0;
+  const poisonTicks = element === 'pois' ? (skill.poisonTicks[lvl] ?? 0) : 0;
+  if (poisonTicks > 0) {
+    poison(monster, damageAgainst(sim, monster, amount, element, filter), poisonTicks);
+  } else {
+    dealt = dealDamage(sim, monster, amount, element, filter);
+  }
+  if (fire && fire.fireMax > 0) dealDamage(sim, monster, rollInt(sim.state.rng, fire.fireMin, fire.fireMax), 'fire', filter);
+  if (monster.hp <= 0 || (dealt === 0 && poisonTicks === 0)) return dealt;
+  const freeze = skill.freezeTicks[lvl] ?? 0;
+  const chill = Math.max(skill.chillTicks[lvl] ?? 0, monster.rank === 'boss' ? freeze : 0);
+  if (freeze > 0 && monster.rank !== 'boss') monster.freezeTicks = Math.max(monster.freezeTicks, freeze);
+  if (chill > 0) monster.chillTicks = Math.max(monster.chillTicks, chill);
+  return dealt;
+}
+
+/** Poison over `ticks`; replaces what is left only if the new dose is bigger. */
+export function poison(monster: Monster, total: number, ticks: number): void {
+  if (total <= 0 || total <= monster.poisonPerTick * monster.poisonTicks) return;
+  monster.poisonPerTick = idiv(total + ticks - 1, ticks);
+  monster.poisonTicks = ticks;
+}
+
+/** Damage that already went through resistance (poison ticks, Static Field). */
+export function dealRaw(sim: Sim, monster: Monster, amount: number): void {
+  if (monster.hp <= 0 || amount <= 0) return;
+  monster.hp -= amount;
+  if (monster.hp <= 0) killMonster(sim, monster);
+}
+
 /** Applies the tower's aura damage bonus to a rolled amount. */
 export function withBonus(amount: number, damagePct: number): number {
   return amount + idiv(amount * damagePct, 100);
@@ -107,6 +159,7 @@ export function killMonster(sim: Sim, monster: Monster): void {
   s.corpses.push({
     id: s.nextId++,
     def: monster.def,
+    rank: monster.rank,
     dist: monster.dist,
     x: monster.x,
     y: monster.y,
