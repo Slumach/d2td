@@ -28,7 +28,6 @@ import sprites from '../../src/data/render/sprites.json';
 /** D2 file direction order for 8-direction animations, by direction index. */
 export const DIRECTION_NAMES_8 = ['sw', 'nw', 'ne', 'se', 's', 'w', 'n', 'e'];
 const PADDING = 1;
-const ARMOR_VARIANTS = ['lit', 'med', 'hvy'];
 
 export interface OutputFile {
   path: string;
@@ -336,7 +335,23 @@ function monsterJobs(shared: Shared): SpriteJob[] {
   return jobs;
 }
 
-function heroJob(shared: Shared): SpriteJob {
+interface HeroLine {
+  weapon?: string;
+  shield?: string;
+}
+
+interface HeroTier {
+  /** The armour layer variant every body part shows: lit, med or hvy. */
+  body: string;
+  helm?: string;
+}
+
+/**
+ * A Paladin tower's look is its line and tier: the line picks the weapon and shield (none
+ * for the aura line), the tier the armour weight and helm. One job per line, building an
+ * atlas per tier plus the evolved recolour in top-tier gear.
+ */
+function heroJobs(shared: Shared): SpriteJob[] {
   const { source } = shared;
   const armor = readTable(source, 'armor.txt');
   const weapons = readTable(source, 'weapons.txt');
@@ -346,43 +361,55 @@ function heroJob(shared: Shared): SpriteJob {
     if (!r) throw new Error(`No item named ${name}`);
     return r;
   };
-  const body = named(armor, h.armor);
-  const weapon = named(weapons, h.weapon);
-  // armor.txt says which layer variant (0 lit, 1 med, 2 hvy) each body part shows
-  const part = (col: string) => ARMOR_VARIANTS[Number(body[col] || 0)] ?? 'lit';
-  const equipment: Record<string, string> = {
-    HD: String(named(armor, h.helm)['code']),
-    TR: part('Torso'),
-    LG: part('Legs'),
-    RA: part('rArm'),
-    LA: part('lArm'),
-    S1: part('lSPad'),
-    S2: part('rSPad'),
-    RH: String(weapon['code']),
-    SH: String(named(armor, h.shield)['code']),
-  };
+  // An item draws with its alternategfx layer when it has one (a Scepter draws as a mace)
+  const gfx = (row: TxtRow) => String(column(row, 'alternategfx') || row['code']).toLowerCase();
   const token = h.token.toLowerCase();
-  const weaponClass = String(weapon['wclass']).toLowerCase();
-  const specs = h.modes.map((mode) => ({ folder: `chars/${token}`, token, mode, weaponClass, variant: (c: string) => equipment[c] ?? 'lit' }));
-  const inputs: string[] = [];
-  for (const spec of specs) {
-    const found = compositeInputs(source, spec);
-    if (!found) inputs.push(`global/chars/${token}/cof/${token}${spec.mode}${weaponClass}.cof`);
-    else inputs.push(found.cofPath, ...Object.values(found.layers));
-  }
-  return {
-    label: 'hero paladin',
-    inputs,
-    run: () => {
-      const out: OutputFile[] = [];
-      for (const [variant, shift] of [['normal', undefined], ['evolved', sprites.colorShifts.evolved]] as const) {
-        const palette = remapped(shared.palette, shift ? [pl2Shift(shared.pl2, shift)] : []);
-        const modes = specs.map((s) => compositeMode(shared, s, palette));
-        out.push(...atlasFrom(`hero/paladin/${variant}`, modes, DIRECTION_NAMES_8, { hero: 'paladin', variant, equipment }));
-      }
-      return out;
-    },
-  };
+  const tiers = h.tiers as HeroTier[];
+  return Object.entries(h.lines as Record<string, HeroLine>).map(([line, gear]) => {
+    const weapon = gear.weapon ? named(weapons, gear.weapon) : undefined;
+    // Unarmed is D2's hand-to-hand class; nil leaves the weapon and shield layers empty
+    const weaponClass = weapon ? String(weapon['wclass']).toLowerCase() : 'hth';
+    const equipmentFor = (tier: HeroTier): Record<string, string> => ({
+      HD: tier.helm ? gfx(named(armor, tier.helm)) : 'lit',
+      TR: tier.body,
+      LG: tier.body,
+      RA: tier.body,
+      LA: tier.body,
+      S1: tier.body,
+      S2: tier.body,
+      RH: weapon ? gfx(weapon) : 'nil',
+      LH: weapon ? 'lit' : 'nil',
+      SH: gear.shield ? gfx(named(armor, gear.shield)) : 'nil',
+    });
+    const looks = tiers.map((tier, i) => {
+      const equipment = equipmentFor(tier);
+      const specs = h.modes.map((mode) => ({ folder: `chars/${token}`, token, mode, weaponClass, variant: (c: string) => equipment[c] ?? 'lit' }));
+      return { name: `t${i + 1}`, equipment, specs };
+    });
+    const inputs: string[] = [];
+    for (const spec of looks.flatMap((l) => l.specs)) {
+      const found = compositeInputs(source, spec);
+      if (!found) inputs.push(`global/chars/${token}/cof/${token}${spec.mode}${weaponClass}.cof`);
+      else inputs.push(found.cofPath, ...Object.values(found.layers));
+    }
+    return {
+      label: `hero paladin ${line}`,
+      inputs: [...new Set(inputs)],
+      run: () => {
+        const out: OutputFile[] = [];
+        const plain = remapped(shared.palette, []);
+        for (const look of looks) {
+          const modes = look.specs.map((s) => compositeMode(shared, s, plain));
+          out.push(...atlasFrom(`hero/paladin/${line}-${look.name}`, modes, DIRECTION_NAMES_8, { hero: 'paladin', line, tier: look.name, equipment: look.equipment }));
+        }
+        const top = looks.at(-1)!;
+        const evolved = remapped(shared.palette, [pl2Shift(shared.pl2, sprites.colorShifts.evolved)]);
+        const modes = top.specs.map((s) => compositeMode(shared, s, evolved));
+        out.push(...atlasFrom(`hero/paladin/${line}-evolved`, modes, DIRECTION_NAMES_8, { hero: 'paladin', line, tier: 'evolved', equipment: top.equipment }));
+        return out;
+      },
+    };
+  });
 }
 
 /** A single-layer DCC as mode "missile" frames, with its own origin. */
@@ -456,7 +483,7 @@ export function spriteJobs(source: DataSource): { jobs: SpriteJob[]; sharedInput
       monstats2: readTable(source, 'monstats2.txt'),
     });
   const s = shared();
-  const jobs = [...monsterJobs(s), heroJob(s), ...missileJobs(s)];
+  const jobs = [...monsterJobs(s), ...heroJobs(s), ...missileJobs(s)];
   const missing = [...new Set(jobs.flatMap((j) => j.inputs))].filter((p) => !source.exists(p));
   return { jobs, sharedInputs, missing };
 }

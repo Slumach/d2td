@@ -3,10 +3,16 @@
   "hero": {
     "token": "PA",
     "modes": ["NU", "A1"],
-    "weapon": "Crystal Sword",
-    "armor": "Plate Mail",
-    "helm": "Full Helm",
-    "shield": "Kite Shield"
+    "lines": {
+      "zealot": { "weapon": "Crystal Sword", "shield": "Kite Shield" },
+      "holy": { "weapon": "Scepter", "shield": "Kite Shield" },
+      "aura": {}
+    },
+    "tiers": [
+      { "body": "lit" },
+      { "body": "med", "helm": "Cap" },
+      { "body": "hvy", "helm": "Full Helm" }
+    ]
   },
   "colorShifts": {
     "champion": { "table": "hueVariations", "index": 12 },

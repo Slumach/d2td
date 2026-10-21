@@ -460,7 +460,7 @@ export class GameScene extends Phaser.Scene {
       seen.add(t.id);
       const px = toPx(t.x);
       const py = HUD_HEIGHT + toPx(t.y) + TILE / 4;
-      const texture = heroKey(t.evolved !== '');
+      const texture = heroKey(t);
       let view = this.towers.get(t.id);
       if (view && view.texture !== texture) {
         view.sprite.destroy();

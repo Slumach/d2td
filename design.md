@@ -65,6 +65,8 @@ The Paladin is the reference class: two damage lines and one aura line, and ever
 
 Smite is parked: either the stun alternative at Zealot T1, or saved for the Smiter evolution (open question).
 
+A tower shows its line and tier the way D2 shows gear. The line is the weapon: Zealot carries a sword and shield, Holy a scepter and shield, Aura goes unarmed. The tier is the armour weight: T1 light armour and no helm, T2 medium armour and a cap, T3 heavy armour and a full helm. Evolved towers wear T3 gear in the evolved recolour. It is render-only, built from the Paladin's armour and weapon layer variants at extraction (src/data/render/sprites.json).
+
 | Evolution | Recipe | What it does |
 | --- | --- | --- |
 | Zealdin | Zeal (T2+) + Fanaticism (T3) | Zeal swings at Fanaticism speed; projects a half-radius Fanaticism aura. |

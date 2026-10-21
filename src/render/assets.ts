@@ -33,7 +33,19 @@ export function monsterKey(id: string, rank: string): string {
   return `mon:${id}:${variant}`;
 }
 
-export const heroKey = (evolved: boolean) => `hero:${evolved ? 'evolved' : 'normal'}`;
+/** Hero looks: the line's weapon set at a tier's armour weight, plus the evolved recolour. */
+export const HERO_LINES = Object.keys(sprites.hero.lines);
+const HERO_LOOKS = [...sprites.hero.tiers.map((_, i) => `t${i + 1}`), 'evolved'];
+
+/**
+ * The look of a tower: its line picks the weapon (sword, scepter, bare hands), its tier the
+ * armour and helm. A tower with no line yet stands unarmed in the lightest armour.
+ */
+export function heroKey(tower: { line: string; tier: number; evolved: string }): string {
+  const line = HERO_LINES.includes(tower.line) ? tower.line : 'aura';
+  const look = tower.evolved ? 'evolved' : `t${Math.min(Math.max(tower.tier, 1), sprites.hero.tiers.length)}`;
+  return `hero:${line}:${look}`;
+}
 export const missileKey = (id: string) => `mis:${id}`;
 export const iconKey = (skillName: string) => `icon:${skillName}`;
 
@@ -51,7 +63,9 @@ export function preloadAssets(scene: Phaser.Scene): void {
     const variants = BOSSES.has(id) ? ['normal'] : ['normal', 'champion', 'unique'];
     for (const v of variants) atlas(`mon:${id}:${v}`, `monsters/${id}/${v}.json`, `monsters/${id}/`);
   }
-  for (const v of ['normal', 'evolved']) atlas(`hero:${v}`, `hero/paladin/${v}.json`, 'hero/paladin/');
+  for (const line of HERO_LINES) {
+    for (const look of HERO_LOOKS) atlas(`hero:${line}:${look}`, `hero/paladin/${line}-${look}.json`, 'hero/paladin/');
+  }
   for (const id of MISSILE_IDS) atlas(missileKey(id), `missiles/${id}.json`, 'missiles/');
   if (scene.cache.json.exists(ICON_INDEX)) return;
   scene.load.json(ICON_INDEX, `${ICON_DIR}index.json`);
