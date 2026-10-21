@@ -5,7 +5,7 @@ import { canBuild } from './sim.ts';
 import { testSim } from './testkit.ts';
 
 describe('map', () => {
-  it('keeps the M1 path length after the M5 trim to 28 x 17', () => {
+  it('runs a switchback road 40 to 50% longer than the M1 path, on the 28 x 17 grid', () => {
     // The 30 x 17 map's waypoints, for the length the path must keep
     const before = createMap([
       { x: -1, y: 3 }, { x: 6, y: 3 }, { x: 6, y: 12 }, { x: 11, y: 12 }, { x: 15, y: 8 }, { x: 15, y: 3 },
@@ -14,7 +14,8 @@ describe('map', () => {
     const map = createMap();
     expect(map.width).toBe(28);
     expect(map.height).toBe(17);
-    expect(map.length).toBe(before.length);
+    expect(map.length / before.length).toBeGreaterThan(1.4);
+    expect(map.length / before.length).toBeLessThan(1.5);
   });
 });
 

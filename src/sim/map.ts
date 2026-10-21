@@ -1,6 +1,7 @@
-// The map: a 28 x 17 grid with one hard-coded winding path. Every tile off the path is
-// buildable. It was 30 x 17 until M5's isometric view, which fits 28 + 17 tiles across the
-// 1440 px canvas; the waypoints moved so the path kept its length to the unit.
+// The map: a 28 x 17 grid with one hard-coded winding path. Every tile off the path and off
+// the scenery is buildable. It was 30 x 17 until M5's isometric view, which fits 28 + 17
+// tiles across the 1440 px canvas. The road then became switchbacks, 89 tiles instead of 63,
+// so a wave has time to be a stream rather than a rush.
 
 import bloodmoor from '../data/map/bloodmoor.json';
 import { UNITS_PER_TILE, idiv, isqrt } from './fixed.ts';
@@ -15,17 +16,19 @@ export interface Point {
 
 /** Path waypoints in tile coordinates. The ends sit just off the map so monsters walk in and out. */
 export const PATH_TILES: readonly Point[] = [
-  { x: -1, y: 3 },
-  { x: 6, y: 3 },
-  { x: 6, y: 13 },
-  { x: 10, y: 13 },
-  { x: 14, y: 9 },
-  { x: 14, y: 3 },
-  { x: 20, y: 3 },
-  { x: 20, y: 13 },
-  { x: 24, y: 13 },
-  { x: 24, y: 7 },
-  { x: 28, y: 7 },
+  { x: -1, y: 2 },
+  { x: 4, y: 2 },
+  { x: 4, y: 14 },
+  { x: 9, y: 14 },
+  { x: 9, y: 2 },
+  { x: 14, y: 2 },
+  { x: 14, y: 12 },
+  { x: 16, y: 14 },
+  { x: 21, y: 14 },
+  { x: 21, y: 2 },
+  { x: 25, y: 2 },
+  { x: 25, y: 15 },
+  { x: 28, y: 15 },
 ];
 
 export interface PathSegment {

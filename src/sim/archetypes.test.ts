@@ -99,7 +99,7 @@ describe('archetypes', () => {
 
   it('melee: Sacrifice only reaches monsters touching its tile', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'sacrifice');
+    placeTower(sim, 2, 3, 'sacrifice');
     const near = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     const far = addMonster(sim, 'zombie1', BESIDE + 4000, { hp: 1_000_000 });
     [near, far].forEach(freeze);
@@ -110,7 +110,7 @@ describe('archetypes', () => {
 
   it('melee: Zeal swings several times per attack, spreading over targets', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'zeal', { tier: 2, level: 3 });
+    placeTower(sim, 2, 3, 'zeal', { tier: 2, level: 3 });
     const a = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     const b = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
     [a, b].forEach(freeze);
@@ -123,7 +123,7 @@ describe('archetypes', () => {
 
   it('melee: Vengeance adds fire, cold and lightning, so it still hurts physical immunes', () => {
     const sim = testSim();
-    placeTower(sim, 2, 4, 'vengeance', { tier: 3 });
+    placeTower(sim, 2, 3, 'vengeance', { tier: 3 });
     const m = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000, mods: ['stoneSkin'] });
     freeze(m);
     sim.data.rules.mods.stoneSkin.resist.phys = 100;

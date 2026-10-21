@@ -146,6 +146,7 @@ The Act 1 roster covers every TD archetype without inventing anything. HP, speed
 | Andariel | Act boss | Wave 30, poison immune. |
 
 - Waves mix 2 to 4 monster types and alternate swarm-heavy and tank-heavy. Champions (one mod) every 5 waves, uniques (two mods) every 10, Blood Raven on 10 and 20, Andariel on 30. After 30 the map loops at Nightmare scaling, then Hell.
+- Pacing (Oct 2026): a wave is a stream, not a clump. Tanks come one at a time, about 1.25 s apart; swarms come in packs of 3 to 4, as Fallen move in D2, with about 4 s between packs; champions, uniques and bosses follow after a pause. With no towers a normal wave lasts 50 to 70 s from first spawn to last exit: the count grows past its base only while the wave is shorter than that, up to a cap, and difficulty grows through HP instead. Waves with Zombies (0.6 tiles a second in monstats) and boss waves run longer, about two and a half minutes. Spacing, packs, counts and the target length are in src/data/balance.json; npm run waves reports the timing.
 - Monster mods are D2's: Extra Fast, Extra Strong, Stone Skin (physical resist), Magic Resistant, Fire, Cold and Lightning Enchanted (immunity plus a death burst that stuns nearby summons), Cursed (towers in radius lose 25% damage), Teleportation (skips one path segment).
 - Normal, Nightmare and Hell use the three HP and resistance columns of monstats.txt. Hell immunities are the point: no single line clears Hell, so the player has to mix elements and magic.
 - Enemies never attack towers in v0.1. They only fight summons blocking the path.

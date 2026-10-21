@@ -42,9 +42,9 @@ describe('map', () => {
   it('marks a connected path and leaves the rest buildable', () => {
     const map = createMap();
     expect([map.width, map.height]).toEqual([28, 17]);
-    expect(isPathTile(map, 0, 3)).toBe(true);
+    expect(isPathTile(map, 0, 2)).toBe(true);
     expect(isPathTile(map, 0, 0)).toBe(false);
-    expect(isPathTile(map, 10, 13) && isPathTile(map, 14, 9)).toBe(true);
+    expect(isPathTile(map, 14, 12) && isPathTile(map, 16, 14)).toBe(true);
   });
 });
 
@@ -67,13 +67,32 @@ describe('data', () => {
     const waves = fixtureGameData(30).waves;
     const normalCount = (i: number) => waves[i]!.groups.filter((g) => g.rank === 'normal').reduce((n, g) => n + g.count, 0);
     expect(waves.map((w) => w.kind).slice(0, 4)).toEqual(['swarm', 'tank', 'swarm', 'tank']);
-    expect(normalCount(0)).toBe(b.waves.swarm.base + b.waves.swarm.perWave * 1);
-    expect(normalCount(1)).toBe(b.waves.tank.base + b.waves.tank.perWave * 2);
+    // The formula is the floor; a short wave grows toward its target duration, never past the cap
+    const floor = (spec: typeof b.waves.swarm, n: number) => Math.min(spec.cap, spec.base + Math.floor(n / spec.addEvery));
+    waves.forEach((w, i) => {
+      const spec = b.waves[w.kind];
+      expect(normalCount(i)).toBeGreaterThanOrEqual(floor(spec, i + 1));
+      expect(normalCount(i)).toBeLessThanOrEqual(spec.cap);
+    });
     for (const w of waves) {
-      const types = w.groups.filter((g) => g.rank === 'normal').length;
+      const types = new Set(w.groups.filter((g) => g.rank === 'normal').map((g) => g.monster)).size;
       expect(types).toBeGreaterThanOrEqual(b.waves.minTypes);
       expect(types).toBeLessThanOrEqual(b.waves.maxTypes);
     }
+  });
+
+  it('streams tanks one at a time and sends swarms in packs with gaps', () => {
+    const b = DESIGN.balance.waves;
+    const waves = fixtureGameData(30).waves;
+    const normal = (i: number) => waves[i]!.groups.filter((g) => g.rank === 'normal');
+    for (const g of normal(1)) expect(g.count).toBe(1);
+    const packs = normal(4);
+    for (const g of packs.slice(0, -1)) {
+      expect(g.count).toBeGreaterThanOrEqual(b.swarm.pack!.min);
+      expect(g.count).toBeLessThanOrEqual(b.swarm.pack!.max);
+    }
+    expect(packs[0]!.delayTicks).toBeUndefined();
+    for (const g of packs.slice(1)) expect(g.delayTicks).toBe(b.swarm.pack!.gapTicks - b.swarm.spacingTicks);
   });
 
   it('places champions, uniques and bosses by the fixed schedule, with fixed mods', () => {

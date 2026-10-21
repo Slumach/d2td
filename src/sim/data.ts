@@ -7,6 +7,7 @@ import type { HitFilter, SkillDef, SkillJson } from './archetypes/types.ts';
 import { auraMultiplier, isAura, standardDps, withTierBonus } from './dps.ts';
 import { VELOCITY_TO_UNITS_PER_TICK, UNITS_PER_TILE, d2FramesToTicks, idiv } from './fixed.ts';
 import { ELEMENTS, MONSTER_MODS, type Element, type MonsterMod, type Rank } from './state.ts';
+import { createMap } from './map.ts';
 import { findRow, int, monumodConstant, str, type Tables } from './tables.ts';
 
 export type { TableRow, Tables } from './tables.ts';
@@ -50,9 +51,17 @@ export interface MonstersJson {
 }
 
 interface WaveKindJson {
+  /** Normal monsters in wave n: min(cap, base + floor(n / addEvery)). */
   base: number;
-  perWave: number;
+  addEvery: number;
+  cap: number;
+  /** Ticks between monsters; for a swarm, between monsters of one pack. */
   spacingTicks: number;
+  /**
+   * Swarms come in packs, as D2's Fallen do: sizes cycle from min to max, and gapTicks
+   * pass from one pack's last monster to the next pack's first.
+   */
+  pack?: { min: number; max: number; gapTicks: number };
 }
 
 /** src/data/balance.json. Multipliers are integer percents so the sim stays integer. */
@@ -92,6 +101,12 @@ export interface BalanceJson {
     minTypes: number;
     maxTypes: number;
     championPackSize: number;
+    /**
+     * A short wave grows past its base count, one monster at a time up to the cap, until its
+     * stream plus the slowest monster's walk down the path lasts this long. Slow waves keep
+     * their base count; fast swarms get more monsters.
+     */
+    targetTicks: number;
     swarm: WaveKindJson;
     tank: WaveKindJson;
   };
@@ -170,6 +185,8 @@ export interface WaveGroup {
   monster: string;
   count: number;
   spacingTicks: number;
+  /** Extra ticks before this group's first monster: the gap before a pack, champions or a boss. */
+  delayTicks?: number;
   rank: Rank;
   /** Mods every monster of the group carries, from the schedule. */
   mods: MonsterMod[];
@@ -293,6 +310,7 @@ export function generateWaves(
 ): WaveDef[] {
   const hp = compound(balance.hpPctPerWave, count);
   const bounty = compound(balance.bountyPctPerWave, count);
+  const pathUnits = createMap().length;
   const w = balance.waves;
   const waves: WaveDef[] = [];
   for (let n = 1; n <= count; n++) {
@@ -301,30 +319,43 @@ export function generateWaves(
     const pool = monsters.pools[kind].filter((p) => p.minWave <= n).map((p) => p.id);
     const types = Math.min(pool.length, w.minTypes + (Math.floor(n / 2) % (w.maxTypes - w.minTypes + 1)));
     const picked = Array.from({ length: types }, (_, i) => pool[(Math.floor(n / 2) + i) % pool.length]!);
-    const size = spec.base + spec.perWave * n;
-
-    // Round-robin through the picked types so every wave has even proportions
+    // A stream that takes turns through the picked types: one monster at a time for tanks,
+    // packs of min to max for swarms with a gap between packs
+    const pack = spec.pack;
+    const stream = (size: number): WaveGroup[] => {
+      const out: WaveGroup[] = [];
+      const add = (monster: string, count: number, delayTicks: number) =>
+        out.push({ monster, count, spacingTicks: spec.spacingTicks, rank: 'normal', mods: [], ...(delayTicks > 0 ? { delayTicks } : {}) });
+      if (pack) {
+        for (let k = 0, left = size; left > 0; k++) {
+          const c = Math.min(left, pack.min + (k % (pack.max - pack.min + 1)));
+          add(picked[k % picked.length]!, c, k === 0 ? 0 : pack.gapTicks - spec.spacingTicks);
+          left -= c;
+        }
+      } else {
+        for (let i = 0; i < size; i++) add(picked[i % picked.length]!, 1, 0);
+      }
+      return out;
+    };
+    const span = (gs: WaveGroup[]) => gs.reduce((t, g) => t + (g.delayTicks ?? 0) + g.count * g.spacingTicks, 0) - spec.spacingTicks;
+    // How long the slowest monster actually in the stream takes to walk the whole path
+    const walk = (gs: WaveGroup[]) => idiv(pathUnits, Math.max(1, Math.min(...gs.map((g) => defs[g.monster]!.speed))));
+    let size = Math.min(spec.cap, spec.base + Math.floor(n / spec.addEvery));
+    let groups = stream(size);
+    while (size < spec.cap && span(groups) + walk(groups) < w.targetTicks) groups = stream(++size);
     const counts = new Map<string, number>();
-    for (let i = 0; i < size; i++) {
-      const id = picked[i % picked.length]!;
-      counts.set(id, (counts.get(id) ?? 0) + 1);
-    }
-    const groups: WaveGroup[] = [...counts].map(([monster, c]) => ({
-      monster,
-      count: c,
-      spacingTicks: spec.spacingTicks,
-      rank: 'normal',
-      mods: [],
-    }));
+    for (const g of groups) counts.set(g.monster, (counts.get(g.monster) ?? 0) + g.count);
+    // Champions, uniques and bosses arrive after a pause, like a pack of their own
+    const pause = (pack?.gapTicks ?? spec.spacingTicks * 2) - spec.spacingTicks;
 
     const key = String(n);
     const lead = picked[0]!;
     const schedule = balance.modSchedule;
     const uniqueMods = schedule.uniques[key];
     const championMods = schedule.champions[key];
-    if (uniqueMods) groups.push({ monster: lead, count: 1, spacingTicks: spec.spacingTicks, rank: 'unique', mods: uniqueMods });
+    if (uniqueMods) groups.push({ monster: lead, count: 1, spacingTicks: spec.spacingTicks, delayTicks: pause, rank: 'unique', mods: uniqueMods });
     if (championMods) {
-      groups.push({ monster: lead, count: w.championPackSize, spacingTicks: spec.spacingTicks, rank: 'champion', mods: championMods });
+      groups.push({ monster: lead, count: w.championPackSize, spacingTicks: spec.spacingTicks, delayTicks: pause, rank: 'champion', mods: championMods });
     }
 
     const boss = monsters.bosses[key];
@@ -343,6 +374,7 @@ export function generateWaves(
         monster: boss,
         count: 1,
         spacingTicks: spec.spacingTicks,
+        delayTicks: pause,
         rank: 'boss',
         mods: schedule.bosses[key] ?? [],
         hp: Math.max(256, idiv(total, monstersInWave) * multiplier),

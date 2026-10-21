@@ -13,8 +13,8 @@
     "halfWidth": 0.62,
     "wobble": 0.22,
     "edge": 0.18,
-    "extendStart": { "x": -14, "y": 3 },
-    "extendEnd": { "x": 42, "y": 7 }
+    "extendStart": { "x": -14, "y": 2 },
+    "extendEnd": { "x": 40, "y": 15 }
   },
   "prefabs": {
     "tree1": { "pieces": [{ "file": "Act1/Town/Trees.dt1", "o": 14, "key": "1-0", "at": [0, 0] }, { "file": "Act1/Town/Trees.dt1", "o": 14, "key": "1-1", "at": [1, -1] }] },
@@ -79,7 +79,7 @@
     { "prefab": "tree4", "at": [-5.5, 11] },
     { "prefab": "tree9", "at": [-2, 14.5] },
     { "prefab": "deadtree2", "at": [-7, 4] },
-    { "prefab": "rocks1", "at": [-3, 1.5] },
+    { "prefab": "rocks1", "at": [-4, 6] },
 
     { "prefab": "ruin", "at": [15, 23] },
     { "prefab": "tree11", "at": [6, 19] },
@@ -92,12 +92,12 @@
     { "prefab": "tree1", "at": [31, 1.5] },
     { "prefab": "tree5", "at": [33, 11] },
     { "prefab": "deadtree1", "at": [35, 5.5] },
-    { "prefab": "tree8", "at": [30.5, 15] },
+    { "prefab": "tree8", "at": [30.5, 11.5] },
     { "prefab": "rocks2", "at": [29.5, 10.5] },
 
     { "prefab": "tree4", "at": [2.5, 9.5] },
     { "prefab": "rocks1", "at": [8.5, 16] },
-    { "prefab": "tree9", "at": [17.5, 14.5] },
+    { "prefab": "tree9", "at": [18.5, 9.5] },
     { "prefab": "ruinwall2", "at": [26.5, 2.5] },
     { "prefab": "rocks3", "at": [9.5, 1.5] },
     { "prefab": "ruinrubble", "at": [22.5, 16] }
@@ -105,7 +105,7 @@
   "blocked": [
     [2, 9], [2, 10], [3, 9],
     [8, 15], [9, 15], [8, 16],
-    [17, 14], [17, 15], [18, 14],
+    [18, 9], [18, 10], [19, 9],
     [26, 2], [27, 2], [26, 3],
     [9, 1], [10, 1],
     [22, 15], [23, 15], [22, 16]

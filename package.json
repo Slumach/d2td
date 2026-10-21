@@ -19,7 +19,9 @@
     "app": "npm run build:app && electron .",
     "dist": "npm run build:app && electron-builder --win nsis --publish never && tsx tools/payload-check.ts",
     "payload-check": "tsx tools/payload-check.ts",
-    "mp-soak": "tsx tools/mp-soak.ts"
+    "mp-soak": "tsx tools/mp-soak.ts",
+    "waves": "tsx tools/waves.ts",
+    "tune": "tsx tools/tune.ts"
   },
   "dependencies": {
     "@jamiephan/casclib": "0.3.0"

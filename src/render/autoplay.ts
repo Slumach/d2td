@@ -15,7 +15,7 @@ interface Driver {
 /** Build, level, tier and evolve on fixed tiles beside the path, then keep calling waves. */
 const PLAN: { x: number; y: number; skill: string; tiers?: string[] }[] = [
   { x: 3, y: 4, skill: 'holy-bolt', tiers: ['blessed-hammer'] },
-  { x: 4, y: 4, skill: 'might', tiers: ['concentration'] },
+  { x: 3, y: 5, skill: 'might', tiers: ['concentration'] },
   { x: 5, y: 6, skill: 'sacrifice', tiers: ['zeal', 'vengeance'] },
   { x: 7, y: 8, skill: 'holy-bolt', tiers: ['blessed-hammer', 'fist-of-the-heavens'] },
   { x: 5, y: 9, skill: 'sacrifice' },
@@ -54,7 +54,7 @@ function planStep(driver: Driver, s: SimState): boolean {
     }
   }
   const holy = at(3, 4);
-  const conc = at(4, 4);
+  const conc = at(3, 5);
   if (holy && conc && !holy.evolved) {
     driver.issue({ type: 'evolve', towerA: holy.id, towerB: conc.id });
     return true;

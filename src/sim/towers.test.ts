@@ -41,7 +41,7 @@ describe('tower model', () => {
 
   it('refuses path tiles, occupied tiles and unknown classes', () => {
     const sim = testSim();
-    run(sim, { type: 'build', x: 0, y: 3, cls: 'paladin' }, { type: 'build', x: 3, y: 5, cls: 'druid' });
+    run(sim, { type: 'build', x: 0, y: 2, cls: 'paladin' }, { type: 'build', x: 3, y: 5, cls: 'druid' });
     expect(sim.state.towers).toHaveLength(0);
     built(sim, 3, 5, 'holy-bolt');
     expect(canBuild(sim, 3, 5)).toBe(false);
