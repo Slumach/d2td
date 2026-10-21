@@ -3,7 +3,7 @@
 // player builds only on the arcs they own, pays from their own gold, and changes only
 // their own towers.
 
-import { MAX_TIER, MAX_TOWER_LEVEL, type EvolutionDef } from './data.ts';
+import { MAX_TIER, MAX_TOWER_LEVEL, type EvolutionDef, type StageGate } from './data.ts';
 import { idiv } from './fixed.ts';
 import { arcAt, inBounds, isBlocked, isPathTile, tileCenter } from './map.ts';
 import { TARGETING_MODES, type Sim, type Targeting, type Tower } from './state.ts';
@@ -55,7 +55,24 @@ export function upgradeCost(sim: Sim, tower: Tower): number | undefined {
   return sim.data.economy.levelCosts[tower.tier - 1]?.[tower.level - 1];
 }
 
+/**
+ * The stage a tier waits for, while it is still closed: T2 opens in Normal Act 2, T3 in
+ * Nightmare Act 1, evolutions (T4) in Hell Act 3, T5 in Hell Act 5 (balance.json tierGates).
+ * A tier opens once the first wave of its stage has started.
+ */
+export function tierGate(sim: Sim, tier: number): StageGate | undefined {
+  const gate = sim.data.tierGates[tier];
+  return gate && sim.state.wave < gate.wave ? gate : undefined;
+}
+
+/** What the next tier costs, if the tower can take it now (its tier gate open included). */
 export function tierCost(sim: Sim, tower: Tower): number | undefined {
+  if (tierGate(sim, tower.tier + 1)) return undefined;
+  return tierPrice(sim, tower);
+}
+
+/** What the next tier costs once its gate opens: levels maxed and a tier left on the line. */
+export function tierPrice(sim: Sim, tower: Tower): number | undefined {
   const line = lineOf(sim, tower);
   if (tower.evolved || !line || tower.level < MAX_TOWER_LEVEL || tower.tier >= MAX_TIER) return undefined;
   if (tower.tier >= line.tiers.length || tower.picks.length < tower.tier) return undefined;
@@ -165,7 +182,7 @@ export function evolve(sim: Sim, a: Tower, b: Tower): void {
   const s = sim.state;
   const cost = sim.data.economy.evolveCost;
   const match = evolutionFor(sim, a, b);
-  if (!match || a.owner !== b.owner || !pay(sim, a.owner, cost)) return;
+  if (!match || tierGate(sim, MAX_TIER + 1) || a.owner !== b.owner || !pay(sim, a.owner, cost)) return;
   const { recipe, attack, partner } = match;
   // The partner aura keeps the level it reached: its current level if it still has it,
   // otherwise it was maxed to tier past it

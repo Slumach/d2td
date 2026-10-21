@@ -21,7 +21,7 @@ import type { HitFilter, SkillDef } from '../src/sim/archetypes/types.ts';
 import { auraSources } from '../src/sim/auras.ts';
 import { EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, type GameData } from '../src/sim/data.ts';
 import { tileCenter, isPathTile } from '../src/sim/map.ts';
-import { activeSkill, canBuild, createSim, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
+import { activeSkill, canBuild, createSim, evolutionFor, pendingChoices, step, tierCost, tierGate, upgradeCost } from '../src/sim/sim.ts';
 import { withMods } from '../src/sim/combat.ts';
 import { ELEMENTS, type Command, type Element, type Sim, type TimedCommand, type Tower } from '../src/sim/state.ts';
 
@@ -234,7 +234,7 @@ function comingFoes(sim: Sim): Foe[] {
       if (g.rank !== 'boss' && w >= sim.state.wave + LOOKAHEAD_WAVES) continue;
       const d = sim.data.monsters[g.monster]!;
       const rankPct = g.rank === 'champion' ? rules.championHpPct : g.rank === 'unique' ? rules.uniqueHpPct : 0;
-      const each = avg({ min: d.minHp, max: d.maxHp }) * (wave.hpPermille / 1000) * (1 + rankPct / 100);
+      const each = avg({ min: d.minHp, max: d.maxHp }) * (1 + rankPct / 100);
       const key = `${g.monster}:${g.mods.join(',')}`;
       const foe = byKey.get(key) ?? { hp: 0, resist: { ...d.resist } };
       if (!byKey.has(key)) for (const e of ELEMENTS) foe.resist[e] = withMods(rules, d.resist[e], e, g.mods, g.rank, d.difficulty);
@@ -254,7 +254,7 @@ function nextWaveHp(sim: Sim): number {
   for (const g of wave.groups) {
     if (g.rank !== 'normal') continue;
     const d = sim.data.monsters[g.monster]!;
-    total += ((d.minHp + d.maxHp) / 2) * (wave.hpPermille / 1000) * g.count;
+    total += ((d.minHp + d.maxHp) / 2) * g.count;
     count += g.count;
   }
   return count > 0 ? total / count : 256;
@@ -479,8 +479,8 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
     }
   }
 
-  // Evolutions: any adjacent pair that makes a recipe, judged as the merged tower
-  if (config.evolve) {
+  // Evolutions: any adjacent pair that makes a recipe, judged as the merged tower, once they open
+  if (config.evolve && !tierGate(sim, MAX_TIER + 1)) {
     for (let i = 0; i < towers.length; i++) {
       for (let j = i + 1; j < towers.length; j++) {
         const match = evolutionFor(sim, towers[i]!, towers[j]!);
@@ -509,7 +509,8 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
     const line = sim.data.classes[t.cls]?.lines[t.line];
     const tierPrice = sim.data.economy.tierCosts[t.tier - 1];
     const established = towers.length >= LOOKAHEAD_MIN_TOWERS;
-    if (config.tiers && established && line && tierPrice !== undefined && t.tier < line.tiers.length && t.picks.length >= t.tier) {
+    const open = !tierGate(sim, t.tier + 1);
+    if (config.tiers && established && open && line && tierPrice !== undefined && t.tier < line.tiers.length && t.picks.length >= t.tier) {
       let remaining = tierPrice;
       for (let lv = t.level; lv < MAX_TOWER_LEVEL; lv++) remaining += sim.data.economy.levelCosts[t.tier - 1]![lv - 1]!;
       const opts = line.tiers[t.tier] ?? [];
@@ -616,6 +617,8 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
           continue;
         }
         if (t.level < MAX_TOWER_LEVEL) return levelUp(s, t);
+        // A tier still closed by its stage: the engine plays until it opens
+        if (tierGate(s, t.tier + 1)) return undefined;
         return tierUp(s, t, (opts) => branchAt(t.tier + 1, opts));
       }
       const a = byTag(s, goal.a);
@@ -625,6 +628,7 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
         goals.shift();
         continue;
       }
+      if (tierGate(s, MAX_TIER + 1)) return undefined;
       if ((s.state.gold[0] ?? 0) < s.data.economy.evolveCost) return [];
       evolvedOn[match.recipe.id] = s.state.wave;
       goals.shift();

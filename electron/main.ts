@@ -307,6 +307,11 @@ void app.whenReady().then(async () => {
     saveSettings(settings);
   });
   ipcMain.on('quit', () => app.quit());
+  // Checkpoints: one file per save slot in userData
+  const savePath = (slot: unknown) => join(app.getPath('userData'), slot === 'mp' ? 'checkpoint-mp.json' : 'checkpoint.json');
+  ipcMain.handle('load-checkpoint', (_e, slot: unknown) => (existsSync(savePath(slot)) ? readFileSync(savePath(slot), 'utf8') : null));
+  ipcMain.handle('save-checkpoint', (_e, slot: unknown, json: unknown) => writeFileSync(savePath(slot), String(json)));
+  ipcMain.handle('clear-checkpoint', (_e, slot: unknown) => rmSync(savePath(slot), { force: true }));
   ipcMain.handle('mp-host', () => hostMultiplayer(win));
   ipcMain.handle('mp-join', async (_e, code: string) => {
     const address = decodeJoinCode(String(code));

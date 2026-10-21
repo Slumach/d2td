@@ -43,7 +43,6 @@ export class Relay {
   private readonly opts: RelayOptions;
   private peers: Peer[] = [];
   private mode: MatchMode = 'team';
-  private difficulty = 0;
   private started = false;
   private tick = 0;
   private queue: PlayerCommand[] = [];
@@ -89,7 +88,7 @@ export class Relay {
   }
 
   private sendLobby(): void {
-    this.broadcast({ t: 'lobby', players: this.lobbyPlayers(), mode: this.mode, difficulty: this.difficulty });
+    this.broadcast({ t: 'lobby', players: this.lobbyPlayers(), mode: this.mode });
   }
 
   private reject(socket: Socket, reason: string): void {
@@ -120,13 +119,10 @@ export class Relay {
     if (m.t === 'mode' && peer.host && !this.started && (m.mode === 'team' || m.mode === 'ffa')) {
       this.mode = m.mode;
       this.sendLobby();
-    } else if (m.t === 'difficulty' && peer.host && !this.started && [0, 1, 2].includes(m.difficulty)) {
-      this.difficulty = m.difficulty;
-      this.sendLobby();
     } else if (m.t === 'start' && peer.host && !this.started) {
       // A team shares one ring, an arc each
       if (this.mode === 'team' && this.joined.length > MAX_TEAM_PLAYERS) return this.log(`relay: a team takes up to ${MAX_TEAM_PLAYERS} players`);
-      this.start();
+      this.start(resumeOf(m.resume, this.mode, this.joined.length));
     } else if (m.t === 'cmd' && this.started) {
       const command = validCommand(m.command);
       if (command) this.queue.push({ player: peer.slot, command });
@@ -155,20 +151,23 @@ export class Relay {
     this.sendLobby();
   }
 
-  private start(): void {
+  /** Starts the match: fresh, or from the host's checkpoint, whose tick the bundles carry on from. */
+  private start(resume?: { json: string; seed: number; tick: number }): void {
     this.started = true;
     const players = this.lobbyPlayers();
-    const seed = (this.opts.seed ?? (() => randomInt(1, 0x7fffffff)))();
-    this.log(`relay: start ${this.mode} at difficulty ${this.difficulty} with ${players.map((p) => p.name).join(', ')}, seed ${seed}`);
+    const seed = resume?.seed ?? (this.opts.seed ?? (() => randomInt(1, 0x7fffffff)))();
+    if (resume) this.tick = resume.tick;
+    this.log(`relay: ${resume ? `resume at tick ${resume.tick}` : 'start'} ${this.mode} with ${players.map((p) => p.name).join(', ')}, seed ${seed}`);
     for (const p of this.joined) {
-      sendLine(p.socket, { t: 'start', seed, mode: this.mode, difficulty: this.difficulty, players, you: p.slot } satisfies HostMessage);
+      sendLine(p.socket, { t: 'start', seed, mode: this.mode, players, you: p.slot, ...(resume ? { resume: resume.json } : {}) } satisfies HostMessage);
     }
     const tickMs = this.opts.tickMs ?? TICK_MS;
     const t0 = performance.now();
+    const first = this.tick;
     const pump = () => {
       if (this.stopped) return;
       // Emit every tick that is due, so a late timer catches up instead of drifting
-      const due = tickMs > 0 ? Math.floor((performance.now() - t0) / tickMs) : this.tick + 1;
+      const due = tickMs > 0 ? first + Math.floor((performance.now() - t0) / tickMs) : this.tick + 1;
       while (this.tick < due) {
         this.broadcast({ t: 'tick', tick: this.tick, cmds: this.queue });
         this.queue = [];
@@ -225,5 +224,17 @@ export class Relay {
       });
       this.sendLobby();
     }
+  }
+}
+
+/** A checkpoint the host wants to resume, if it fits this lobby: its mode and player count, and not absurdly big. */
+function resumeOf(json: unknown, mode: MatchMode, players: number): { json: string; seed: number; tick: number } | undefined {
+  if (typeof json !== 'string' || json.length > 8_000_000) return undefined;
+  try {
+    const cp = JSON.parse(json) as { mode?: unknown; players?: unknown; seed?: unknown; tick?: unknown };
+    if (cp.mode !== mode || cp.players !== players || !Number.isSafeInteger(cp.seed) || !Number.isSafeInteger(cp.tick)) return undefined;
+    return { json, seed: cp.seed as number, tick: cp.tick as number };
+  } catch {
+    return undefined;
   }
 }

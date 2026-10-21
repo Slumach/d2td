@@ -3,13 +3,13 @@
 //
 //   npm run balance
 //   npm run balance -- --waves 30 --seeds 1,2,3,4,5
-//   npm run balance -- --hp 112 --bounty 105 --cost 160     try multipliers without editing the file
-//   npm run balance -- --hell                               the M6 gate: the class bots at Hell
+//   npm run balance -- --cost 160                           try a level cost multiplier without editing the file
+//   npm run balance -- --hell                               the class bots
 //
 // Targets, by median over the seeds (default 5)
 //   BOLT loses on wave 10 or 15, HOLY on 20, TWOLINE on 30
 //   PALADIN survives all 30 waves and has a Hammerdin by wave 15
-// The Hell gate, started at Hell
+// The Hell gate (over the whole campaign)
 //   no single-class bot (PALADIN, SORC, NECRO) clears it on any seed; MIXED3 does, by median
 
 import { pathToFileURL } from 'node:url';
@@ -21,18 +21,11 @@ import { HELL_STRATEGIES, STRATEGIES, runBot, type RunResult, type Strategy } fr
 import { loadTables } from './lib/load-tables.ts';
 
 export interface Multipliers {
-  hp?: number;
-  bounty?: number;
   cost?: number;
 }
 
 export function withMultipliers(design: DesignData, m: Multipliers): DesignData {
-  const balance: BalanceJson = {
-    ...design.balance,
-    hpPctPerWave: m.hp ?? design.balance.hpPctPerWave,
-    bountyPctPerWave: m.bounty ?? design.balance.bountyPctPerWave,
-    levelCostPctPerLevel: m.cost ?? design.balance.levelCostPctPerLevel,
-  };
+  const balance: BalanceJson = { ...design.balance, levelCostPctPerLevel: m.cost ?? design.balance.levelCostPctPerLevel };
   return { ...design, balance };
 }
 
@@ -134,8 +127,8 @@ export function checkHellGate(results: RunResult[]): Targets {
   return { ok: notes.length === 0, notes };
 }
 
-export function runAll(design: DesignData, waves: number, seeds: number[], strategies = STRATEGIES, difficulty = 0): RunResult[] {
-  const data = buildGameData(loadTables(), design, waves, { difficulty });
+export function runAll(design: DesignData, waves: number, seeds: number[], strategies = STRATEGIES): RunResult[] {
+  const data = buildGameData(loadTables(), design, waves);
   const results: RunResult[] = [];
   for (const strategy of strategies) for (const seed of seeds) results.push(runBot(data, strategy, seed));
   return results;
@@ -146,27 +139,24 @@ function main(): void {
     options: {
       waves: { type: 'string', default: '30' },
       seeds: { type: 'string', default: '1,2,3,4,5' },
-      hp: { type: 'string' },
-      bounty: { type: 'string' },
       cost: { type: 'string' },
       hell: { type: 'boolean', default: false },
       bots: { type: 'string' },
     },
   });
   const num = (v: string | undefined) => (v === undefined ? undefined : Number(v));
-  const design = withMultipliers(DESIGN, { hp: num(args.hp), bounty: num(args.bounty), cost: num(args.cost) });
+  const design = withMultipliers(DESIGN, { cost: num(args.cost) });
   const waves = Number(args.waves);
   const seeds = args.seeds.split(',').map(Number);
   const b = design.balance;
 
   console.log(
-    `hp ${b.hpPctPerWave}%/wave  bounty ${b.bountyPctPerWave}%/wave  ` +
-      `level cost ${b.levelCostBase.join('/')} x${b.levelCostPctPerLevel}%  tiers ${b.tierCosts.join('/')}  ` +
+    `level cost ${b.levelCostBase.join('/')} x${b.levelCostPctPerLevel}%  tiers ${b.tierCosts.join('/')}  ` +
       `evolve ${b.evolveCost}  start ${b.startingGold}g  ${waves} waves`,
   );
   console.log('strategy  seed  result    wave   peak  gold banked  towers  progress  top tier  evolutions');
   const strategies = args.bots ? (args.bots.split(',') as Strategy[]) : args.hell ? HELL_STRATEGIES : STRATEGIES;
-  const results = runAll(design, waves, seeds, strategies, args.hell ? 2 : 0);
+  const results = runAll(design, waves, seeds, strategies);
   for (const r of results) {
     const evolutions = Object.entries(r.evolvedOn).map(([id, wave]) => `${id}@w${wave}`).join(' ');
     console.log(

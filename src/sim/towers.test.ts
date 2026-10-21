@@ -5,7 +5,10 @@ import { EVOLVED_LEVEL_INDEX, MAX_TOWER_LEVEL } from './data.ts';
 import { step } from './sim.ts';
 import type { Command, Sim, Tower } from './state.ts';
 import { canBuild, evolutionFor, pendingChoices, sellValue, towerAt } from './towers.ts';
-import { placeTower, testSim } from './testkit.ts';
+import { placeTower, testSim as baseSim, ungated } from './testkit.ts';
+
+/** These tests are about what tiers and evolutions do, so every tier gate is open. */
+const testSim = () => ungated(baseSim());
 
 function run(sim: Sim, ...commands: Command[]): void {
   step(sim, commands);

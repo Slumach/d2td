@@ -92,5 +92,5 @@ export const DESIGN: DesignData = {
   classes: [paladin as ClassJson, sorceress as ClassJson, necromancer as ClassJson],
   evolutions: evolutions as Record<string, EvolutionJson>,
   monsters: monsters as MonstersJson,
-  balance: balance as BalanceJson,
+  balance: balance as unknown as BalanceJson,
 };

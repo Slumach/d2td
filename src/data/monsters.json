@@ -4,37 +4,53 @@
       "resurrect": { "monType": "fallen", "chanceColumn": "aip1", "rangeColumn": "aip4", "sequence": "seq_shamanresurrect" }
     }
   },
-  "waves": [
-    { "monster": "fallen1", "kind": "swarm", "area": "Blood Moor" },
-    { "monster": "quillrat1", "kind": "swarm", "area": "Blood Moor" },
-    { "monster": "zombie1", "kind": "tank", "area": "Den of Evil", "superunique": "corpsefire" },
-    { "monster": "fallenshaman1", "kind": "swarm", "area": "Cold Plains", "superunique": "bishibosh" },
-    { "monster": "zombie2", "kind": "tank", "area": "Burial Grounds" },
-    { "monster": "skeleton1", "kind": "tank", "area": "Burial Grounds", "superunique": "bonebreak" },
-    { "monster": "brute1", "kind": "tank", "area": "Cold Plains" },
-    { "monster": "corruptrogue1", "kind": "swarm", "area": "Cold Plains" },
-    { "monster": "cr_lancer1", "kind": "tank", "area": "Cold Plains" },
-    { "boss": "bloodraven", "area": "Burial Grounds" },
-    { "monster": "cr_archer1", "kind": "tank", "area": "Stony Field", "superunique": "coldcrow" },
-    { "monster": "goatman1", "kind": "tank", "area": "Stony Field" },
-    { "monster": "foulcrow1", "kind": "swarm", "area": "Stony Field" },
-    { "monster": "fallen2", "kind": "swarm", "area": "Stony Field", "superunique": "rakanishu" },
-    { "monster": "corruptrogue2", "kind": "swarm", "area": "Dark Wood" },
-    { "monster": "brute2", "kind": "tank", "area": "Dark Wood", "superunique": "treehead" },
-    { "monster": "quillrat2", "kind": "swarm", "area": "Dark Wood" },
-    { "monster": "sk_archer1", "kind": "tank", "area": "Dark Wood" },
-    { "monster": "goatman2", "kind": "tank", "area": "Black Marsh" },
-    { "monster": "corruptrogue3", "kind": "swarm", "area": "Forgotten Tower", "superunique": "countess" },
-    { "monster": "quillrat4", "kind": "swarm", "area": "Outer Cloister", "superunique": "flamespike" },
-    { "monster": "corruptrogue4", "kind": "swarm", "area": "Barracks", "superunique": "smith" },
-    { "monster": "goatman5", "kind": "tank", "area": "Barracks" },
-    { "monster": "skeleton2", "kind": "tank", "area": "Tristram", "superunique": "griswold" },
-    { "monster": "wraith2", "kind": "tank", "area": "Jail" },
-    { "monster": "bighead2", "kind": "swarm", "area": "Jail", "superunique": "pitspawn" },
-    { "monster": "skmage_fire2", "kind": "tank", "area": "Cathedral", "superunique": "boneash" },
-    { "monster": "zombie3", "kind": "tank", "area": "Catacombs" },
-    { "monster": "vampire5", "kind": "tank", "area": "Catacombs" },
-    { "boss": "andariel", "area": "Catacombs" }
+  "acts": [
+    { "name": "Act 1", "waves": 6, "field": "Blood Moor", "lair": "Catacombs" },
+    { "name": "Act 2", "waves": 5, "field": "Rocky Waste", "lair": "Tal Rasha's Tomb" },
+    { "name": "Act 3", "waves": 5, "field": "Spider Forest", "lair": "Durance of Hate" },
+    { "name": "Act 4", "waves": 3, "field": "Plains of Despair", "lair": "Chaos Sanctuary" },
+    { "name": "Act 5", "waves": 6, "field": "Bloody Foothills", "lair": "Worldstone Chamber" }
+  ],
+  "act1": {
+    "normal": [
+      { "monster": "fallen1", "kind": "swarm", "area": "Blood Moor" },
+      { "monster": "quillrat1", "kind": "swarm", "area": "Blood Moor" },
+      { "monster": "zombie1", "kind": "tank", "area": "Den of Evil", "superunique": "corpsefire" },
+      { "monster": "fallenshaman1", "kind": "swarm", "area": "Cold Plains", "superunique": "bishibosh" },
+      { "monster": "skeleton1", "kind": "tank", "area": "Burial Grounds", "superunique": "bonebreak" },
+      { "boss": "bloodraven", "area": "Burial Grounds" }
+    ],
+    "nightmare": [
+      { "monster": "cr_archer1", "kind": "tank", "area": "Stony Field", "superunique": "coldcrow" },
+      { "monster": "goatman1", "kind": "tank", "area": "Stony Field" },
+      { "monster": "fallen2", "kind": "swarm", "area": "Stony Field", "superunique": "rakanishu" },
+      { "monster": "brute2", "kind": "tank", "area": "Dark Wood", "superunique": "treehead" },
+      { "monster": "corruptrogue3", "kind": "swarm", "area": "Forgotten Tower", "superunique": "countess" },
+      { "boss": "andariel", "area": "Catacombs" }
+    ],
+    "hell": [
+      { "monster": "quillrat4", "kind": "swarm", "area": "Outer Cloister", "superunique": "flamespike" },
+      { "monster": "corruptrogue4", "kind": "swarm", "area": "Barracks", "superunique": "smith" },
+      { "monster": "skeleton2", "kind": "tank", "area": "Tristram", "superunique": "griswold" },
+      { "monster": "bighead2", "kind": "swarm", "area": "Jail", "superunique": "pitspawn" },
+      { "monster": "skmage_fire2", "kind": "tank", "area": "Cathedral", "superunique": "boneash" },
+      { "boss": "andariel", "area": "Catacombs" }
+    ]
+  },
+  "placeholder": [
+    { "monster": "zombie2", "kind": "tank" },
+    { "monster": "brute1", "kind": "tank" },
+    { "monster": "corruptrogue1", "kind": "swarm" },
+    { "monster": "cr_lancer1", "kind": "tank" },
+    { "monster": "foulcrow1", "kind": "swarm" },
+    { "monster": "corruptrogue2", "kind": "swarm" },
+    { "monster": "quillrat2", "kind": "swarm" },
+    { "monster": "sk_archer1", "kind": "tank" },
+    { "monster": "goatman2", "kind": "tank" },
+    { "monster": "goatman5", "kind": "tank" },
+    { "monster": "wraith2", "kind": "tank" },
+    { "monster": "zombie3", "kind": "tank" },
+    { "monster": "vampire5", "kind": "tank" }
   ],
   "superuniques": [
     { "id": "corpsefire", "superunique": "Corpsefire", "class": "zombie1", "minion": "zombie1" },

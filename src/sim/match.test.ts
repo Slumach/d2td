@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createBot } from '../../tools/bots.ts';
+import { actJustStarted, restoreMatch, takeCheckpoint, type Checkpoint, type TimedPlayerCommand } from './checkpoint.ts';
 import { fixtureGameData } from './fixture.ts';
 import { arcAt } from './map.ts';
 import { aliveOf, createMatch, matchHash, playersIn, stepMatch, type Match, type PlayerCommand } from './match.ts';
@@ -120,6 +121,35 @@ describe('ffa match', () => {
     run(match, 1);
     expect(match.state.status).toBe('over');
     expect(match.state.winners).toEqual([1]);
+  });
+});
+
+describe('checkpoints', () => {
+  it('carries a run on exactly: a checkpoint restored and stepped on matches the run that never stopped', () => {
+    const full = fixtureGameData();
+    const bot = (match: Match) => createBot('PALADIN', match.zones[0]!);
+    const a = createMatch(full, 9, 'solo', 1);
+    const botA = bot(a);
+    const log: TimedPlayerCommand[] = [];
+    let saved: Checkpoint | undefined;
+    let before = 0;
+    while (a.state.tick < 12_000) {
+      const now = botA.decide(a.zones[0]!).map((command) => ({ player: 0, command }));
+      for (const c of now) log.push({ tick: a.state.tick, ...c });
+      stepMatch(a, now);
+      if (!saved && actJustStarted(a, 0, before)) saved = takeCheckpoint(a, 9, log);
+      before = a.zones[0]!.state.wave;
+      if (saved && a.state.tick >= saved.tick + 500) break;
+    }
+    expect(saved).toBeDefined();
+    expect(saved).toMatchObject({ mode: 'solo', players: 1, seed: 9, difficulty: 0, act: 2 });
+    // Replay the commands the first run sent after the checkpoint, on the restored match
+    const b = restoreMatch(full, JSON.parse(JSON.stringify(saved)) as Checkpoint);
+    while (b.state.tick < a.state.tick) {
+      const t = b.state.tick;
+      stepMatch(b, log.filter((c) => c.tick === t).map(({ player, command }) => ({ player, command })));
+    }
+    expect(matchHash(b)).toBe(matchHash(a));
   });
 });
 

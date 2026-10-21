@@ -1,6 +1,7 @@
 // What moves the match forward for GameScene. Locally that is the frame clock; online it
 // is the relay's tick bundles, so every player runs the same ticks with the same commands.
 
+import { restoreMatch, type Checkpoint, type TimedPlayerCommand } from '../sim/checkpoint.ts';
 import type { GameData } from '../sim/data.ts';
 import { createMatch, stepMatch, type Match } from '../sim/match.ts';
 import { TICKS_PER_SECOND } from '../sim/fixed.ts';
@@ -14,9 +15,11 @@ const MAX_TICKS_PER_FRAME = 10;
 
 export interface Driver {
   readonly match: Match;
-  /** This player's zone. */
+  /** This player's slot. */
   readonly me: number;
   readonly online: boolean;
+  /** Every command run so far, by tick: a checkpoint keeps it. */
+  readonly log: readonly TimedPlayerCommand[];
   readonly players: LobbyPlayer[];
   /** Runs the ticks due this frame, calling onTick after each. */
   advance(deltaMs: number, speed: number, onTick: () => void): void;
@@ -29,23 +32,24 @@ export class LocalDriver implements Driver {
   readonly me = 0;
   readonly online = false;
   readonly players: LobbyPlayer[] = [{ slot: 0, name: 'You' }];
+  readonly log: TimedPlayerCommand[];
   private pending: Command[] = [];
   private accumulator = 0;
 
-  constructor(data: GameData, seed: number) {
-    this.match = createMatch(data, seed, 'solo', 1);
+  /** A fresh solo run, or one carried on from a checkpoint. */
+  constructor(data: GameData, seed: number, resume?: Checkpoint) {
+    this.match = resume ? restoreMatch(data, resume) : createMatch(data, seed, 'solo', 1);
+    this.log = resume ? [...resume.log] : [];
   }
 
   advance(deltaMs: number, speed: number, onTick: () => void): void {
     this.accumulator = Math.min(this.accumulator + deltaMs * speed, TICK_MS * MAX_TICKS_PER_FRAME * speed);
     while (this.accumulator >= TICK_MS) {
       this.accumulator -= TICK_MS;
-      const commands = this.pending;
+      const commands = this.pending.map((command) => ({ player: 0, command }));
       this.pending = [];
-      stepMatch(
-        this.match,
-        commands.map((command) => ({ player: 0, command })),
-      );
+      for (const c of commands) this.log.push({ tick: this.match.state.tick, ...c });
+      stepMatch(this.match, commands);
       onTick();
     }
   }
@@ -71,6 +75,10 @@ export class NetDriver implements Driver {
 
   get me(): number {
     return this.lockstep.me;
+  }
+
+  get log(): readonly TimedPlayerCommand[] {
+    return this.lockstep.log;
   }
 
   advance(deltaMs: number, _speed: number, onTick: () => void): void {

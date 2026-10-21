@@ -76,7 +76,7 @@ export const FIXTURE_TABLES: Tables = {
     monster('necroskeleton', 'skeleton', { minHP: 20, maxHP: 20, A1MinD: 2, A1MaxD: 4, lUndead: 1 }),
     monster('necromage', 'skeleton', { minHP: 40, maxHP: 40, A1MinD: 1, A1MaxD: 2, lUndead: 1 }),
   ],
-  monlvl: Array.from({ length: 41 }, (_, Level) => ({ Level, HP: 5 + Level * 4, DM: 2 + Level, 'DM(H)': 4 + Level * 2 })),
+  monlvl: Array.from({ length: 100 }, (_, Level) => ({ Level, HP: 5 + Level * 4, DM: 2 + Level, 'DM(H)': 4 + Level * 2 })),
   monumod: [
     ...[['strong', 5], ['fast', 6], ['curse', 7], ['resist', 8], ['fire', 9], ['lightning', 17], ['cold', 18], ['spectralhit', 27]].map(([uniquemod, id]) => ({ uniquemod: uniquemod!, id: id! })),
     { '*constant desc': 'Champion HP % Bonus', constants: 100 },
@@ -85,6 +85,9 @@ export const FIXTURE_TABLES: Tables = {
   ],
   monseq: Array.from({ length: 15 }, (_, frame) => ({ sequence: 'seq_shamanresurrect', mode: 'A2', frame })),
   weapons: [{ name: 'Crystal Sword', mindam: 4, maxdam: 12 }],
+  levels: [2, 3, 4, 5].flatMap((act) =>
+    [0, 1, 2].map((i) => ({ Name: `act${act}-${i}`, Act: act - 1, mon1: 'zombie1', MonLvlEx: act * 5 + i, 'MonLvlEx(N)': 30 + act * 3 + i, 'MonLvlEx(H)': 34 + act * 2 + i })),
+  ),
   superuniques: [
     { Superunique: 'Corpsefire', Name: 'Corpsefire', Class: 'zombie1', Mod1: 27, MinGrp: 2, MaxGrp: 2 },
     { Superunique: 'Bishibosh', Name: 'Bishibosh', Class: 'fallenshaman1', Mod1: 8, MinGrp: 1, MaxGrp: 3 },

@@ -21,7 +21,7 @@ import { updateSummons } from './archetypes/summon.ts';
 import { build, evolve, pickBranch, pickSkill, sell, setTargeting, towerById, upgrade, upgradeTier } from './towers.ts';
 
 export type * from './state.ts';
-export { canBuild, evolutionFor, pendingChoices, sellValue, tierCost, towerAt, towerById, upgradeCost } from './towers.ts';
+export { canBuild, evolutionFor, pendingChoices, sellValue, tierCost, tierGate, tierPrice, towerAt, towerById, upgradeCost } from './towers.ts';
 export { activeSkill } from './auras.ts';
 export { damageAgainst, effectiveResist } from './combat.ts';
 
@@ -133,8 +133,8 @@ function applyCommand(sim: Sim, command: Command): void {
 
 /**
  * Send Next Wave: the next wave starts now instead of when the timer runs out, and every
- * player on the ring is paid for the time it skipped (economy.earlySendGoldPerSecond,
- * scaled by the wave's bounty multiplier).
+ * player on the ring is paid for the time it skipped (economy.earlySendGoldPerTenLevels a
+ * second, per ten levels of the wave's monster).
  */
 function sendEarly(sim: Sim): void {
   const s = sim.state;
@@ -150,7 +150,7 @@ export function earlySendBonus(sim: Sim): number {
   const waveDef = sim.data.waves[s.wave];
   if (!waveDef) return 0;
   const seconds = idiv(Math.max(0, s.nextWaveTick - s.tick), TICKS_PER_SECOND);
-  return idiv(seconds * sim.data.economy.earlySendGoldPerSecond * waveDef.bountyPermille, 1000);
+  return idiv(seconds * sim.data.economy.earlySendGoldPerTenLevels * waveDef.level, 10);
 }
 
 /**

@@ -8,12 +8,13 @@
 import Phaser from 'phaser';
 
 import { DESIGN } from '../data/design.ts';
-import type { MpEvent, LauncherApi } from '../launcher/api.ts';
+import type { MpEvent, LauncherApi, SaveSlot } from '../launcher/api.ts';
 import { menuMusic, preloadFrontend } from '../launcher/frontend.ts';
 import { MpSession } from '../launcher/session.ts';
 import { Lockstep } from '../net/lockstep.ts';
 import type { LobbyPlayer } from '../net/protocol.ts';
-import { baseMonsterId, buildGameData, DIFFICULTY_NAMES, MAX_TOWER_LEVEL, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
+import { actJustStarted, takeCheckpoint, type Checkpoint } from '../sim/checkpoint.ts';
+import { baseMonsterId, buildGameData, MAX_TIER, MAX_TOWER_LEVEL, stageName, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
 import { standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
 import { aliveOf, arcOwner, ringOf, seatOf, type MatchMode } from '../sim/match.ts';
@@ -26,6 +27,8 @@ import {
   pendingChoices,
   sellValue,
   tierCost,
+  tierGate,
+  tierPrice,
   towerAt,
   towerById,
   upgradeCost,
@@ -60,6 +63,7 @@ import { facingFromVector, type Facing8 } from './facing.ts';
 import { ISO_H, ISO_W, WORLD_WIDTH, ellipseOf, project, screenVector, tileAtWorld, tileDiamond } from './iso.ts';
 import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, PANEL_TOP } from './layout.ts';
 import { Minimap } from './minimap.ts';
+import { saveCheckpoint } from './saves.ts';
 import { WorldView } from './view.ts';
 import { SkillFx, type Point } from './skillfx.ts';
 import { SoundBank, preloadSounds } from './sound.ts';
@@ -109,18 +113,27 @@ type Selection = { kind: 'tile'; x: number; y: number } | { kind: 'tower'; id: n
 export interface OnlineStart {
   seed: number;
   mode: MatchMode;
-  difficulty: number;
   players: LobbyPlayer[];
   you: number;
+  /** The host saves the game at every new act. */
+  host: boolean;
+  /** Carry on from the host's checkpoint. */
+  resume?: Checkpoint;
 }
 
-/** A single-player run: the difficulty it starts at. */
+/** A single-player run: a new campaign, or one carried on from its checkpoint. */
 export interface SoloStart {
-  difficulty: number;
+  resume?: Checkpoint;
 }
 
-/** The registry key for the last chosen single-player difficulty, so Restart keeps it. */
-export const DIFFICULTY_KEY = 'difficulty';
+/** Act colours for the grey-box ground until an act's art exists: field, then boss lair. */
+const ACT_TINTS: [number, number][] = [
+  [0x30402a, 0x34343a],
+  [0x6a5a3c, 0x4a3a2c],
+  [0x2c4a3a, 0x2a3424],
+  [0x4a2a22, 0x3a1a18],
+  [0x5a6470, 0x3c4450],
+];
 
 interface MonsterView {
   sprite: Phaser.GameObjects.Sprite;
@@ -165,6 +178,11 @@ export class GameScene extends Phaser.Scene {
   /** The ring on screen: your own, or another FFA player's while watching. */
   private view = 0;
   private camera!: WorldView;
+  /** Which slot this game saves its checkpoints to; none for a multiplayer guest. */
+  private saves: SaveSlot | undefined;
+  /** The ring's wave count on the last tick, to catch the start of an act. */
+  private waveSeen = 0;
+  private stageText!: Phaser.GameObjects.Text;
   private minimap!: Minimap;
   private aliveGfx!: Phaser.GameObjects.Graphics;
   private aliveText!: Phaser.GameObjects.Text;
@@ -261,20 +279,33 @@ export class GameScene extends Phaser.Scene {
     if (!TABLE_NAMES.every((name) => this.cache.json.exists(name))) return;
     const tables = Object.fromEntries(TABLE_NAMES.map((name) => [name, this.cache.json.get(name)])) as unknown as Tables;
     const design = (this.registry.get('design') as DesignData | undefined) ?? DESIGN;
-    if (start) this.registry.set(DIFFICULTY_KEY, start.difficulty);
-    const difficulty = start?.difficulty ?? (this.registry.get(DIFFICULTY_KEY) as number | undefined) ?? 0;
-    // After the last wave the map loops at the next difficulty, up to Hell
-    this.gameData = buildGameData(tables, design, undefined, { difficulty, loop: true });
+    // The campaign: five acts on Normal, then Nightmare, then Hell
+    this.gameData = buildGameData(tables, design);
+    this.saves = undefined;
     if (start && 'players' in start) {
       const session = MpSession.of(this.registry.get('launcher') as LauncherApi);
-      const lockstep = new Lockstep({ data: this.gameData, seed: start.seed, mode: start.mode, players: start.players.length, me: start.you, send: (m) => session.send(m) });
+      this.seed = start.resume?.seed ?? start.seed;
+      const lockstep = new Lockstep({
+        data: this.gameData,
+        seed: this.seed,
+        mode: start.mode,
+        players: start.players.length,
+        me: start.you,
+        send: (m) => session.send(m),
+        ...(start.resume ? { resume: start.resume } : {}),
+      });
       this.driver = new NetDriver(lockstep, start.players);
-      this.view = start.you;
+      this.view = ringOf(lockstep.match, start.you);
+      // The host keeps the multiplayer save
+      if (start.host) this.saves = 'mp';
       session.listen((e) => this.onNet(e, lockstep));
     } else {
-      this.driver = new LocalDriver(this.gameData, this.seed);
+      if (start?.resume) this.seed = start.resume.seed;
+      this.driver = new LocalDriver(this.gameData, this.seed, start?.resume);
       this.view = 0;
+      this.saves = 'solo';
     }
+    this.waveSeen = this.sim.state.wave;
     this.icons = iconIndex(this);
     createAnimations(this);
     this.fx = this.camera.asWorld(() => new SkillFx(this, DEPTH.effects));
@@ -298,6 +329,12 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(3101)
       .setShadow(1, 1, '#000000', 2);
+    this.stageText = this.add
+      .text(GAME_WIDTH / 2, ALIVE_BAR.y + ALIVE_BAR.height + 14, '', { fontFamily: FONT, fontSize: '14px', color: '#c8bc98' })
+      .setOrigin(0.5)
+      .setDepth(3101)
+      .setShadow(1, 1, '#000000', 2);
+    this.stageText.setText(this.stage().label);
     this.lookAtArcOf(this.driver.me);
 
     const text = { fontFamily: FONT, fontSize: '24px', color: '#e8e0c0' };
@@ -386,10 +423,29 @@ export class GameScene extends Phaser.Scene {
     this.scene.start('Menu');
   }
 
+  /**
+   * On the tick a new act's first wave starts: save the run (single player, or the host of
+   * a multiplayer game), and show the act's map.
+   */
+  private atActBoundary(): void {
+    const match = this.driver!.match;
+    const ring = ringOf(match, this.driver!.me);
+    const before = this.waveSeen;
+    this.waveSeen = match.zones[ring]!.state.wave;
+    if (this.waveSeen !== before) this.redrawGround();
+    if (!this.saves || !actJustStarted(match, ring, before)) return;
+    const launcher = this.registry.get('launcher') as LauncherApi | undefined;
+    void saveCheckpoint(launcher, this.saves, takeCheckpoint(match, this.seed, this.driver!.log, ring));
+    const wave = match.zones[ring]!.data.waves[this.waveSeen - 1]!;
+    this.toast(`${stageName(wave.difficulty, wave.act)}: saved`);
+  }
+
   /** A fresh single-player run on the next seed: the end-of-run click and the pause menu's Restart. */
   restartRun(): void {
     this.seed++;
     this.driver = new LocalDriver(this.gameData, this.seed);
+    this.waveSeen = 0;
+    this.redrawGround();
     this.clearViews();
     this.endOverlay.setVisible(false);
   }
@@ -463,6 +519,7 @@ export class GameScene extends Phaser.Scene {
     if (!this.halted) {
       this.driver.advance(delta, speed, () => {
         this.camera.asWorld(() => this.syncTick());
+        this.atActBoundary();
         this.events.emit('sim-tick', this.sim.state.tick);
       });
     }
@@ -911,15 +968,35 @@ export class GameScene extends Phaser.Scene {
   private drawGround(): void {
     const g = (this.groundGfx ??= this.add.graphics().setDepth(DEPTH.ground)).clear();
     const { map } = this.sim;
+    const stage = this.stage();
+    const grass = ACT_TINTS[stage.act - 1]?.[stage.lair ? 1 : 0] ?? 0x30402a;
+    const darker = Phaser.Display.Color.IntegerToColor(grass).darken(8).color;
+    this.stageText?.setText(stage.label);
     for (let y = 0; y < map.height; y++) {
       for (let x = 0; x < map.width; x++) {
         const path = isPathTile(map, x, y);
         const blocked = isBlocked(map, x, y);
-        g.fillStyle(path ? 0x6a5a3a : blocked ? 0x1c2416 : (x + y) % 2 ? 0x2c3a24 : 0x30402a);
+        g.fillStyle(path ? 0x6a5a3a : blocked ? 0x1c2416 : (x + y) % 2 ? darker : grass);
         g.fillPoints(tileDiamond(x, y), true);
         if (!path && !blocked) g.lineStyle(1, this.arcColour(arcAt(map, x, y)), 0.18).strokePoints(tileDiamond(x, y), true);
       }
     }
+  }
+
+  /**
+   * The map the ring on screen shows: the act of its last wave started (Act 1 before the
+   * first), in its boss lair while that act's final wave is out. Only Act 1's art exists;
+   * the other acts are tinted grey boxes with a label.
+   */
+  private stage(): { act: number; lair: boolean; label: string } {
+    const s = this.sim.state;
+    const wave = this.sim.data.waves[Math.max(0, s.wave - 1)];
+    const act = wave?.act ?? 1;
+    const lair = s.wave > 0 && wave?.final === true;
+    const info = this.sim.data.acts[act - 1];
+    const place = info ? (lair ? info.lair : info.field) : '';
+    const placeholder = act > 1 ? ' (placeholder)' : '';
+    return { act, lair, label: `${stageName(wave?.difficulty ?? 0, act)}: ${place}${placeholder}` };
   }
 
   /** The ring on screen changed (FFA watching): redraw its ground. */
@@ -1052,13 +1129,11 @@ export class GameScene extends Phaser.Scene {
     return `Next wave in ${secs} s, send now for ${earlySendBonus(sim)} gold`;
   }
 
-  /** "Nightmare 4/30": the difficulty of the last wave called and its number in it. */
+  /** "Normal Act 1 3/6": the stage of the last wave started and its number in its act. */
   private waveLabel(called: number): string {
-    const data = this.sim.data;
-    const last = data.waves[called - 1];
-    const difficulty = last?.difficulty ?? data.difficulty;
-    const perDifficulty = data.waves.filter((w) => w.difficulty === difficulty).length;
-    return `${DIFFICULTY_NAMES[difficulty]} ${last?.number ?? 0}/${perDifficulty}`;
+    const last = this.sim.data.waves[called - 1];
+    if (!last) return 'Normal Act 1 0/6';
+    return `${stageName(last.difficulty, last.act)} ${last.actWave}/${last.actWaves}`;
   }
 
   /** The next wave's monsters as a D2 tooltip: counts by type, then champions, uniques and bosses. */
@@ -1080,7 +1155,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     const lines = [...[...normal].map(([id, n]) => `${n} ${nice(id)}`), ...special, '', `Kills so far: ${this.sim.state.kills}`];
-    return { title: `Next: ${DIFFICULTY_NAMES[def.difficulty]} wave ${def.number}`, body: lines.join('\n') };
+    return { title: `Next: ${stageName(def.difficulty, def.act)}, wave ${def.actWave}/${def.actWaves}${def.final ? ', act boss' : ''}`, body: lines.join('\n') };
   }
 
   private skillName(id: string): string {
@@ -1247,8 +1322,10 @@ export class GameScene extends Phaser.Scene {
     if (under.length) lines.push(`Under ${under.join(', ')}`);
     const level = active ? upgradeCost(sim, tower) : undefined;
     const tier = tierCost(sim, tower);
+    const lock = tierPrice(sim, tower) !== undefined ? tierGate(sim, tower.tier + 1) : undefined;
     if (level !== undefined) lines.push(`Next: level ${tower.level + 1} for ${level} gold`);
     else if (tier !== undefined) lines.push(`Next: tier ${tower.tier + 1} for ${tier} gold`);
+    else if (lock) lines.push(`T${tower.tier + 1} unlocks in ${stageName(lock.difficulty, lock.act)}`);
     lines.push(`Targeting ${tower.targeting}`);
 
     const buttons: PanelButton[] = [];
@@ -1262,10 +1339,15 @@ export class GameScene extends Phaser.Scene {
         if (options.length > 1) commands.push({ type: 'pickBranch', towerId: tower.id, skill });
         buttons.push({ label: options.length > 1 ? `Tier up: ${this.skillName(skill)}` : `Tier up ${tier}g`, enabled: this.gold >= tier, onClick: () => this.issue(...commands) });
       }
+    } else if (lock) {
+      buttons.push({ label: `T${tower.tier + 1} unlocks in ${stageName(lock.difficulty, lock.act)}`, enabled: false, onClick: () => undefined });
     }
+    const evolveLock = tierGate(sim, MAX_TIER + 1);
     for (const other of sim.state.towers) {
       const match = evolutionFor(sim, tower, other);
-      if (match) buttons.push({ label: `Evolve ${match.recipe.name}`, enabled: this.gold >= e.evolveCost, onClick: () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }) });
+      if (!match) continue;
+      if (evolveLock) buttons.push({ label: `${match.recipe.name} unlocks in ${stageName(evolveLock.difficulty, evolveLock.act)}`, enabled: false, onClick: () => undefined });
+      else buttons.push({ label: `Evolve ${match.recipe.name}`, enabled: this.gold >= e.evolveCost, onClick: () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }) });
     }
     const next = TARGETING_MODES[(TARGETING_MODES.indexOf(tower.targeting) + 1) % TARGETING_MODES.length]!;
     buttons.push({ label: 'Targeting', enabled: true, onClick: () => this.issue({ type: 'setTargeting', towerId: tower.id, mode: next }) });
@@ -1314,12 +1396,20 @@ export class GameScene extends Phaser.Scene {
         if (options.length > 1) commands.push({ type: 'pickBranch', towerId: tower.id, skill });
         specs.push(this.skillButton(skill, `T${tower.tier + 1}: ${this.skillName(skill)} (${tier}g)`, () => this.issue(...commands), this.gold >= tier));
       }
+    } else if (tierPrice(sim, tower) !== undefined && tierGate(sim, tower.tier + 1)) {
+      const lock = tierGate(sim, tower.tier + 1)!;
+      specs.push({ label: `T${tower.tier + 1} unlocks in ${stageName(lock.difficulty, lock.act)}`, enabled: false, onClick: () => undefined });
     } else if (!tower.evolved && line && tower.level < MAX_TOWER_LEVEL && tower.tier < line.tiers.length) {
       specs.push({ label: `T${tower.tier + 1} unlocks at level ${MAX_TOWER_LEVEL}`, enabled: false, onClick: () => undefined });
     }
+    const evolveLock = tierGate(sim, MAX_TIER + 1);
     for (const other of sim.state.towers) {
       const match = evolutionFor(sim, tower, other);
       if (!match) continue;
+      if (evolveLock) {
+        specs.push({ label: `${match.recipe.name} unlocks in ${stageName(evolveLock.difficulty, evolveLock.act)}`, enabled: false, onClick: () => undefined });
+        continue;
+      }
       specs.push({
         ...this.skillButton(match.recipe.attack.skill, `Evolve ${match.recipe.name} (${e.evolveCost}g)`, () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }), this.gold >= e.evolveCost),
         colour: '#5a2a70',

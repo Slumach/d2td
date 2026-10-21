@@ -6,7 +6,12 @@
 
 import monsters from './monsters.json';
 
-export const WAVE_MONSTER_ART: readonly string[] = monsters.waves.flatMap((w) => ('monster' in w && w.monster ? [w.monster] : []));
+export const WAVE_MONSTER_ART: readonly string[] = [
+  ...new Set([
+    ...Object.values(monsters.act1).flatMap((ws) => ws.flatMap((w) => ('monster' in w && w.monster ? [w.monster] : []))),
+    ...monsters.placeholder.map((p) => p.monster),
+  ]),
+];
 
 const named = [...monsters.superuniques, ...monsters.bosses];
 

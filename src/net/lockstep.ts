@@ -3,6 +3,7 @@
 // the relay and come back stamped in a later bundle, the host's included, so no one's input
 // is special. Transport is someone else's job: feed bundles in, send what onSend gives.
 
+import { restoreMatch, type Checkpoint, type TimedPlayerCommand } from '../sim/checkpoint.ts';
 import type { GameData } from '../sim/data.ts';
 import { createMatch, matchHash, stepMatch, type Match, type MatchMode, type PlayerCommand } from '../sim/match.ts';
 import type { Command } from '../sim/state.ts';
@@ -13,9 +14,11 @@ export interface LockstepOptions {
   seed: number;
   mode: MatchMode;
   players: number;
-  /** This player's slot, which is also their zone. */
+  /** This player's slot. */
   me: number;
   send: (message: ClientMessage) => void;
+  /** Carry on from the host's checkpoint instead of a fresh match. */
+  resume?: Checkpoint;
 }
 
 export class Lockstep {
@@ -25,9 +28,12 @@ export class Lockstep {
   private readonly bundles = new Map<number, PlayerCommand[]>();
   /** Highest tick whose bundle has arrived. */
   private newest = -1;
+  /** Every command run so far, for checkpoints. */
+  readonly log: TimedPlayerCommand[];
 
   constructor(opts: LockstepOptions) {
-    this.match = createMatch(opts.data, opts.seed, opts.mode, opts.players);
+    this.match = opts.resume ? restoreMatch(opts.data, opts.resume) : createMatch(opts.data, opts.seed, opts.mode, opts.players);
+    this.log = opts.resume ? [...opts.resume.log] : [];
     this.me = opts.me;
     this.send = opts.send;
   }
@@ -52,6 +58,7 @@ export class Lockstep {
       const cmds = this.bundles.get(tick);
       if (!cmds) break;
       this.bundles.delete(tick);
+      for (const c of cmds) this.log.push({ tick, ...c });
       stepMatch(this.match, cmds);
       ran++;
       onTick?.();

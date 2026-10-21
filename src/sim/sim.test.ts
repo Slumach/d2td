@@ -5,13 +5,13 @@ import { hasTables, loadTables } from '../../tools/lib/load-tables.ts';
 import { runBot, type Strategy } from '../../tools/bots.ts';
 import { damageAt, elementalAtLevel } from './archetypes/common.ts';
 import type { BuffAuraDef, ControlDef, DebuffDef, ProjectileDef } from './archetypes/types.ts';
-import { buildGameData, compound, resolveSkill, type GameData } from './data.ts';
+import { baseMonsterId, buildGameData, compound, resolveSkill, type GameData } from './data.ts';
 import { isqrt } from './fixed.ts';
 import { FIXTURE_BUILD, FIXTURE_TABLES, fixtureDesign, fixtureGameData } from './fixture.ts';
 import { stateHash } from './hash.ts';
 import { createMap, isPathTile } from './map.ts';
 import { createRng, nextU32, rollInt } from './rng.ts';
-import { createSim, runLog, step } from './sim.ts';
+import { createSim, runLog, step, tierGate } from './sim.ts';
 import type { TimedCommand } from './state.ts';
 
 describe('isqrt', () => {
@@ -62,81 +62,125 @@ describe('data', () => {
     expect(compound(112, 3)).toEqual([1000, 1120, 1254]);
   });
 
-  it('lays out the schedule: one monster a wave for streamTicks, act bosses on their own waves', () => {
-    const data = fixtureGameData(30);
+  it('lays out the campaign: five acts of 6, 5, 5, 3 and 6 waves on Normal, Nightmare and Hell, each ending on its boss', () => {
+    const data = fixtureGameData();
     const waves = data.waves;
+    expect(waves).toHaveLength(75);
+    const acts = [6, 5, 5, 3, 6];
+    let i = 0;
+    for (let d = 0; d < 3; d++) {
+      acts.forEach((n, a) => {
+        for (let k = 1; k <= n; k++, i++) {
+          expect(waves[i]).toMatchObject({ difficulty: d, act: a + 1, actWave: k, actWaves: n, final: k === n, number: i + 1 });
+          expect(waves[i]!.kind === 'boss').toBe(k === n);
+        }
+      });
+    }
+    // Act 1 closes on Blood Raven on Normal and Andariel after; the placeholder acts repeat that boss
+    const boss = (w: (typeof waves)[number]) => baseMonsterId(w.groups.find((g) => g.rank === 'boss')!.monster);
+    expect(waves.filter((w) => w.final).map(boss)).toEqual([...Array(5).fill('bloodraven'), ...Array(10).fill('andariel')]);
+    // Act 1 shows different monsters on each difficulty
+    const act1 = (d: number) => new Set(waves.filter((w) => w.difficulty === d && w.act === 1 && !w.final).map((w) => baseMonsterId(w.groups[0]!.monster)));
+    for (const [a, b] of [[0, 1], [0, 2], [1, 2]] as const) for (const id of act1(a)) expect(act1(b).has(id)).toBe(false);
+    // Every regular wave is one monster for streamTicks, 1 to 1.5 s apart
     const b = DESIGN.balance.waves;
-    expect(waves.filter((w) => w.kind === 'boss').map((w) => w.groups.find((g) => g.rank === 'boss')!.monster)).toEqual(['bloodraven', 'andariel']);
-    waves.forEach((w, i) => {
-      const entry = DESIGN.monsters.waves[i]!;
-      if (w.kind === 'boss' || !('monster' in entry)) return;
-      // One monster type in the stream (its first and last groups), a monster every spacingTicks for streamTicks
+    for (const w of waves) {
+      if (w.kind === 'boss') continue;
+      const spacing = b[w.kind].spacingTicks;
       const first = w.groups[0]!;
       const last = w.groups.at(-1)!;
-      expect([first.monster, last.monster]).toEqual([entry.monster, entry.monster]);
-      const spacing = b[w.kind].spacingTicks;
+      expect(last.monster).toBe(first.monster);
       expect(first.count + (w.groups.length > 1 ? last.count : 0)).toBe(Math.trunc(b.streamTicks / spacing));
-      for (const g of w.groups) expect(g.spacingTicks).toBe(spacing);
       expect(spacing).toBeGreaterThanOrEqual(20);
       expect(spacing).toBeLessThanOrEqual(30);
-    });
-    // The Fallen Shaman keeps a wave of its own
-    expect(waves.some((w) => w.kind !== 'boss' && w.groups[0]!.monster === 'fallenshaman1')).toBe(true);
+    }
   });
 
   it('a superunique walks in the middle of its wave as the unique, with its pack and its superuniques.txt mods', () => {
-    const data = fixtureGameData(30);
-    const n = DESIGN.monsters.waves.findIndex((w) => 'superunique' in w && w.superunique === 'rakanishu') + 1;
-    const groups = data.waves[n - 1]!.groups;
-    const at = groups.findIndex((g) => g.monster === 'rakanishu');
+    const data = fixtureGameData();
+    const wave = data.waves.find((w) => w.groups.some((g) => g.monster === 'rakanishu@nightmare'))!;
+    expect(wave).toMatchObject({ difficulty: 1, act: 1 });
+    const groups = wave.groups;
+    const at = groups.findIndex((g) => g.monster === 'rakanishu@nightmare');
     expect(groups[at]).toMatchObject({ rank: 'unique', count: 1, mods: ['lightningEnchanted'] });
     // Its pack walks just before it, the wave's stream on either side
-    expect(groups[at - 1]).toMatchObject({ monster: 'fallen2', rank: 'normal', count: 4 });
-    expect(groups[0]!.monster).toBe('fallen2');
-    expect(groups.at(-1)!.monster).toBe('fallen2');
+    expect(groups[at - 1]).toMatchObject({ monster: 'fallen2@nightmare', rank: 'normal', count: 4 });
+    expect(groups[0]!.monster).toBe('fallen2@nightmare');
+    expect(groups.at(-1)!.monster).toBe('fallen2@nightmare');
     expect(data.monsters['rakanishu']).toMatchObject({ base: 'fallen2', name: 'Rakanishu', artVariant: 'su_rakanishu' });
     // An act boss's wave is its pack, then the boss
-    const raven = data.waves.find((w) => w.kind === 'boss')!.groups;
-    expect(raven.map((g) => [g.monster, g.rank, g.count])).toEqual([['zombie2', 'normal', 3], ['bloodraven', 'boss', 1]]);
+    expect(data.waves[5]!.groups.map((g) => [g.monster, g.rank, g.count])).toEqual([['zombie2', 'normal', 3], ['bloodraven', 'boss', 1]]);
     expect(data.monsters['foulcrow1']!.flying).toBe(true);
   });
 
-  it('places champion packs by the fixed schedule, as the wave\'s own monster', () => {
-    const waves = fixtureGameData(30).waves;
-    const ranked = (n: number, rank: string) => waves[n - 1]!.groups.filter((g) => g.rank === rank);
+  it("puts each act's champion pack, the wave's own monster, in its last wave before the boss", () => {
+    const waves = fixtureGameData().waves;
     const s = DESIGN.balance.modSchedule;
-    const specials = (rank: string) => waves.map((_, i) => i + 1).filter((n) => ranked(n, rank).length > 0);
-    expect(specials('champion')).toEqual([5, 15, 25]);
-    expect(ranked(5, 'champion')).toEqual([expect.objectContaining({ count: DESIGN.balance.waves.championPackSize, mods: s.champions['5'] })]);
-    for (const n of [5, 15, 25]) {
-      const own = waves[n - 1]!.groups[0]!.monster;
-      expect(ranked(n, 'champion')[0]!.monster).toBe(own);
+    for (const w of waves) {
+      const packs = w.groups.filter((g) => g.rank === 'champion');
+      expect(packs.length > 0).toBe(w.actWave === w.actWaves - 1);
+      if (packs.length === 0) continue;
+      expect(packs[0]!.monster).toBe(w.groups[0]!.monster);
+      expect(packs[0]!.count).toBe(DESIGN.balance.waves.championPackSize);
     }
-    expect(ranked(30, 'boss')[0]).toMatchObject({ monster: 'andariel', mods: ['magicResistant', 'extraStrong'] });
+    expect(waves[4]!.groups.find((g) => g.rank === 'champion')!.mods).toEqual(s.champions['1']);
+    expect(waves.find((w) => w.difficulty === 0 && w.final && w.act === 1)!.groups.at(-1)!.mods).toEqual([]);
   });
 
   it('gives every seed the same specials: mods are scheduled, not rolled', () => {
     const modsOn = (seed: number, wave: number) => {
-      const sim = createSim(fixtureGameData(30), seed);
+      const sim = createSim(fixtureGameData(), seed);
       sim.state.wave = wave - 1;
       sim.state.waves = Array.from({ length: wave - 1 }, () => ({ remaining: 0 }));
       step(sim, [{ type: 'callWave' }]);
       return sim.state.spawns.filter((sp) => sp.rank !== 'normal').map((sp) => `${sp.rank}:${sp.mods.join('+')}`);
     };
-    for (const wave of [5, 10, 14, 30]) expect(modsOn(1, wave)).toEqual(modsOn(99, wave));
+    for (const wave of [5, 6, 30, 55]) expect(modsOn(1, wave)).toEqual(modsOn(99, wave));
   });
 
-  it("a boss rolls its own monstats HP on the wave's curve, like any monster", () => {
-    const data = fixtureGameData(30);
+  it("takes monster HP and bounty from its level through monlvl, with no wave curve; placeholder acts raise Act 1's monsters to their act's levels", () => {
+    const data = fixtureGameData();
     const sim = createSim(data, 1);
-    sim.state.wave = 29;
-    sim.state.waves = Array.from({ length: 29 }, () => ({ remaining: 0 }));
+    // Act 2 on Normal: the fixture's levels.txt has its areas at 10, 11 and 12; the 20th to
+    // 80th percentile is 10 to 11, climbed over the act's five waves
+    const act2 = data.waves.filter((w) => w.difficulty === 0 && w.act === 2);
+    expect(act2.map((w) => w.level)).toEqual([10, 10, 10, 10, 11]);
+    const def = data.monsters[act2[0]!.groups[0]!.monster]!;
+    expect(def.level).toBe(10);
+    expect(def.id).toBe(`${def.base}@normal:10`);
+    // A spawned monster rolls within its own HP: nothing scales it by wave
+    sim.state.wave = act2[0]!.number - 1;
+    sim.state.waves = Array.from({ length: sim.state.wave }, () => ({ remaining: 0 }));
     step(sim, [{ type: 'callWave' }]);
-    sim.state.spawns = sim.state.spawns.map((sp) => ({ ...sp, tick: sim.state.tick }));
+    sim.state.spawns = sim.state.spawns.slice(0, 1).map((sp) => ({ ...sp, tick: sim.state.tick }));
     step(sim, []);
-    const andariel = sim.state.monsters.find((m) => m.def === 'andariel')!;
-    const def = data.monsters['andariel']!;
-    expect(andariel.maxHp).toBe(Math.trunc((def.maxHp * data.waves[29]!.hpPermille) / 1000));
+    const m = sim.state.monsters[0]!;
+    expect(m.maxHp).toBeGreaterThanOrEqual(def.minHp);
+    expect(m.maxHp).toBeLessThanOrEqual(def.maxHp);
+    expect(m.level).toBe(10);
+  });
+
+  it('opens tiers by stage: T2 in Normal Act 2, T3 in Nightmare Act 1, evolutions in Hell Act 3, T5 in Hell Act 5', () => {
+    const data = fixtureGameData();
+    expect(Object.fromEntries(Object.entries(data.tierGates).map(([t, g]) => [t, [g.difficulty, g.act, g.wave]]))).toEqual({
+      2: [0, 2, 7],
+      3: [1, 1, 26],
+      4: [2, 3, 62],
+      5: [2, 5, 70],
+    });
+    const sim = createSim(data, 1);
+    sim.state.gold[0] = 100_000;
+    step(sim, [{ type: 'build', x: 11, y: 6, cls: 'paladin', skill: 'holy-bolt' }]);
+    const tower = sim.state.towers[0]!;
+    for (let i = 0; i < 4; i++) step(sim, [{ type: 'upgrade', towerId: tower.id }]);
+    expect(tierGate(sim, 2)).toMatchObject({ difficulty: 0, act: 2 });
+    step(sim, [{ type: 'upgradeTier', towerId: tower.id }]);
+    expect(tower.tier).toBe(1);
+    // Once Normal Act 2's first wave has started, T2 opens
+    sim.state.wave = 7;
+    expect(tierGate(sim, 2)).toBeUndefined();
+    step(sim, [{ type: 'upgradeTier', towerId: tower.id }]);
+    expect(tower.tier).toBe(2);
   });
 
   it('builds tier ladders: every tier-up reaches the floor, five rising steps to the cap', () => {
@@ -248,7 +292,11 @@ function replaySuite(name: string, getData: () => GameData, strategies: Strategy
  * Replay runs on a rich economy so the bot's log reaches tiers, branches and evolutions
  * whatever balance.json says; determinism must not depend on tuning.
  */
-const RICH: typeof DESIGN = { ...DESIGN, balance: { ...DESIGN.balance, startingGold: 20_000 } };
+/** Plenty of gold, and every tier open from the start, so a short replay reaches tiers and an evolution. */
+const RICH: typeof DESIGN = {
+  ...DESIGN,
+  balance: { ...DESIGN.balance, startingGold: 20_000, tierGates: { 2: [0, 1], 3: [0, 1], 4: [0, 1], 5: [0, 1] } },
+};
 
 replaySuite('replay (fixture data)', () => buildGameData(FIXTURE_TABLES, fixtureDesign(RICH), 30, FIXTURE_BUILD), ['PALADIN', 'TWOLINE']);
 
@@ -284,35 +332,14 @@ describe.skipIf(!hasTables())('real tables', () => {
 if (hasTables()) replaySuite('replay (real tables)', () => buildGameData(loadTables(), RICH, 30), ['PALADIN']);
 
 describe('difficulty', () => {
-  it('Nightmare and Hell monsters are their own entries, read from the (N) and (H) columns', () => {
-    const data = fixtureGameData(30, { difficulty: 2 });
+  it('Nightmare and Hell monsters are their own entries, at their own levels from the (N) and (H) columns', () => {
+    const data = fixtureGameData();
     const zombie = data.monsters['zombie1@hell']!;
     expect(zombie).toMatchObject({ base: 'zombie1', difficulty: 2 });
     expect(zombie.resist.cold).toBe(120);
-    // Bounty follows Normal's level
-    expect(zombie.level).toBe(fixtureGameData().monsters['zombie1']!.level);
-    expect(data.waves[0]!.difficulty).toBe(2);
-    for (const g of data.waves[0]!.groups) expect(g.monster.endsWith('@hell')).toBe(true);
-  });
-
-  it('after the last wave the map loops at the next difficulty, through Hell', () => {
-    const data = fixtureGameData(30, { loop: true });
-    expect(data.waves).toHaveLength(90);
-    expect(data.waves.map((w) => w.difficulty)).toEqual([...Array(30).fill(0), ...Array(30).fill(1), ...Array(30).fill(2)]);
-    expect(data.waves[30]!.number).toBe(1);
-    expect(fixtureGameData(30, { difficulty: 1, loop: true }).waves).toHaveLength(60);
-  });
-
-  it.skipIf(!hasTables())("scales each difficulty's wave monsters to Normal's average HP", () => {
-    const data = buildGameData(loadTables(), DESIGN, 30, { loop: true });
-    const avg = (d: number) => {
-      const pooled = new Set(DESIGN.monsters.waves.flatMap((w) => ('monster' in w ? [w.monster] : [])));
-      const defs = Object.values(data.monsters).filter((m) => m.difficulty === d && pooled.has(m.base));
-      return defs.reduce((n, m) => n + m.minHp + m.maxHp, 0) / defs.length;
-    };
-    // Within rounding: no monster drops below 1 HP, and the smallest round up a lot
-    for (const d of [1, 2]) expect(Math.abs(avg(d) / avg(0) - 1)).toBeLessThan(0.15);
-    // The columns still say who is tough: a Hell zombie outlasts a Hell fallen
-    expect(data.monsters['zombie1@hell']!.maxHp).toBeGreaterThan(data.monsters['fallen1@hell']!.maxHp);
+    expect(data.monsters['brute1@hell']!.level).toBe(30);
+    // Hell's Act 1 waves are all Hell entries
+    const hellAct1 = data.waves.find((w) => w.difficulty === 2 && w.act === 1)!;
+    for (const g of hellAct1.groups) expect(g.monster).toContain('@hell');
   });
 });

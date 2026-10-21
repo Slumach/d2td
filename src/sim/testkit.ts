@@ -47,19 +47,26 @@ export function placeTower(sim: Sim, x: number, y: number, skill: string, opts: 
   return tower;
 }
 
-/** A monster at a ring distance, counted in wave 0. */
+/** A monster at a ring distance, counted in wave 0 (or `wave`). */
 export function addMonster(
   sim: Sim,
   def: string,
   dist: number,
-  opts: { rank?: Rank; mods?: MonsterMod[]; hp?: number } = {},
+  opts: { rank?: Rank; mods?: MonsterMod[]; hp?: number; wave?: number } = {},
 ): Monster {
   const s = sim.state;
-  if (s.waves.length === 0) s.waves.push({ remaining: 0 });
-  const m = createMonster(sim, def, 0, opts.rank ?? 'normal', opts.mods ?? [], dist, opts.hp);
+  const wave = opts.wave ?? 0;
+  while (s.waves.length <= wave) s.waves.push({ remaining: 0 });
+  const m = createMonster(sim, def, wave, opts.rank ?? 'normal', opts.mods ?? [], dist, opts.hp);
   s.monsters.push(m);
-  s.waves[0]!.remaining++;
+  s.waves[wave]!.remaining++;
   return m;
+}
+
+/** Opens every tier gate, for tests of what towers do once they may tier up and evolve. */
+export function ungated(sim: Sim): Sim {
+  sim.data.tierGates = {};
+  return sim;
 }
 
 export function ticks(sim: Sim, n: number, commands: Command[] = []): void {

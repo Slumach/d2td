@@ -80,7 +80,14 @@ export interface LauncherApi {
   mpLeave(): Promise<void>;
   /** Multiplayer events from the main process. Register once. */
   onMp(callback: (e: MpEvent) => void): void;
+  /** The checkpoint in a save slot (single player, or the host's multiplayer game) as JSON, or null. */
+  loadCheckpoint(slot: SaveSlot): Promise<string | null>;
+  saveCheckpoint(slot: SaveSlot, json: string): Promise<void>;
+  clearCheckpoint(slot: SaveSlot): Promise<void>;
 }
+
+/** Single player's save, and the host's multiplayer save. */
+export type SaveSlot = 'solo' | 'mp';
 
 declare global {
   interface Window {

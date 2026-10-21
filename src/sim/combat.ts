@@ -168,8 +168,7 @@ export function withBonus(amount: number, damagePct: number): number {
 export function bounty(sim: Sim, monster: Monster): number {
   const e = sim.data.economy;
   const mult = (monster.rank === 'boss' ? e.bossBountyMultiplier[baseMonsterId(monster.def)] : undefined) ?? e.rankBountyMultiplier[monster.rank];
-  const base = monster.level * e.bountyPerLevel * mult;
-  return idiv(base * sim.data.waves[monster.wave]!.bountyPermille, 1000);
+  return monster.level * e.bountyPerLevel * mult;
 }
 
 /** A kill: its bounty goes to the player whose tower last hurt it. */

@@ -12,6 +12,11 @@ export function variantId(id: string, difficulty: number): string {
   return difficulty === 0 ? id : `${id}@${DIFFICULTIES[difficulty]}`;
 }
 
+/** A monster raised to a level of its own on a difficulty (the placeholder acts): `${id}@${difficulty}:${level}`. */
+export function levelVariantId(id: string, difficulty: number, level: number): string {
+  return `${id}@${DIFFICULTIES[difficulty]}:${level}`;
+}
+
 /** The monster or boss id behind a difficulty variant: what leak costs and bounties key on. */
 export function baseMonsterId(def: string): string {
   const at = def.indexOf('@');

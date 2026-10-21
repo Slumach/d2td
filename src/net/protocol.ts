@@ -9,7 +9,7 @@ import type { Command } from '../sim/state.ts';
 import type { MatchMode, PlayerCommand } from '../sim/match.ts';
 
 /** Bumped whenever a message changes shape; players on different protocols cannot join. */
-export const PROTOCOL = 1;
+export const PROTOCOL = 2;
 export const DEFAULT_PORT = 47310;
 /** Ticks between match hash reports. */
 export const HASH_EVERY = 100;
@@ -34,9 +34,8 @@ export type ClientMessage =
       token?: string;
     }
   | { t: 'mode'; mode: MatchMode }
-  /** 0 Normal, 1 Nightmare, 2 Hell: where the match starts; later difficulties follow. */
-  | { t: 'difficulty'; difficulty: number }
-  | { t: 'start' }
+  /** The host starts the match; with `resume`, from its saved checkpoint (JSON). */
+  | { t: 'start'; resume?: string }
   | { t: 'cmd'; command: Command }
   | { t: 'hash'; tick: number; hash: number };
 
@@ -44,8 +43,8 @@ export type ClientMessage =
 export type HostMessage =
   | { t: 'welcome'; you: number; host: boolean }
   | { t: 'reject'; reason: string }
-  | { t: 'lobby'; players: LobbyPlayer[]; mode: MatchMode; difficulty: number }
-  | { t: 'start'; seed: number; mode: MatchMode; difficulty: number; players: LobbyPlayer[]; you: number }
+  | { t: 'lobby'; players: LobbyPlayer[]; mode: MatchMode }
+  | { t: 'start'; seed: number; mode: MatchMode; players: LobbyPlayer[]; you: number; resume?: string }
   | { t: 'tick'; tick: number; cmds: PlayerCommand[] }
   | { t: 'left'; slot: number; name: string }
   | { t: 'desync'; tick: number };

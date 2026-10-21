@@ -5,8 +5,10 @@
 import Phaser from 'phaser';
 
 import { LOBBY_MODES, type LobbyPlayer } from '../net/protocol.ts';
-import { DIFFICULTY_NAMES } from '../sim/data.ts';
+import { stageName } from '../sim/data.ts';
+import type { Checkpoint } from '../sim/checkpoint.ts';
 import { MAX_TEAM_PLAYERS, type MatchMode } from '../sim/match.ts';
+import { loadCheckpoint } from '../render/saves.ts';
 import type { OnlineStart } from '../render/GameScene.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
 import { FONT, button } from '../render/ui.ts';
@@ -40,8 +42,9 @@ export class LobbyScene extends Phaser.Scene {
   private message = '';
   private players: LobbyPlayer[] = [];
   private mode: MatchMode = 'team';
-  private difficulty = 0;
   private me = -1;
+  /** The host's multiplayer checkpoint, if one is saved. */
+  private saved: Checkpoint | undefined;
   private isHost = false;
   private codes: JoinCode[] = [];
   private upnp: UpnpStatus | 'trying' = 'trying';
@@ -53,9 +56,13 @@ export class LobbyScene extends Phaser.Scene {
   create(data: { role: 'host' | 'join' }): void {
     this.role = data.role;
     this.session = MpSession.of(this.registry.get(LAUNCHER_KEY) as LauncherApi);
-    Object.assign(this, { phase: data.role === 'host' ? 'connecting' : 'code', message: '', players: [], mode: 'team', difficulty: 0, me: -1, isHost: false, codes: [], upnp: 'trying', field: undefined });
+    Object.assign(this, { phase: data.role === 'host' ? 'connecting' : 'code', message: '', players: [], mode: 'team', me: -1, isHost: false, codes: [], upnp: 'trying', field: undefined, saved: undefined });
     this.session.listen((e) => this.onEvent(e));
     if (this.role === 'host') {
+      void loadCheckpoint(this.registry.get(LAUNCHER_KEY) as LauncherApi, 'mp').then((cp) => {
+        this.saved = cp;
+        this.draw();
+      });
       void this.session.host().then((r) => {
         if (!r.ok) {
           this.message = r.error ?? 'Could not open a lobby.';
@@ -85,13 +92,13 @@ export class LobbyScene extends Phaser.Scene {
       } else if (m.t === 'lobby') {
         this.players = m.players;
         this.mode = m.mode;
-        this.difficulty = m.difficulty;
       } else if (m.t === 'reject') {
         this.message = m.reason;
       } else if (m.t === 'start') {
         // Hold the tick bundles that follow until the game scene is ready for them
         this.session.hold();
-        const start: OnlineStart = { seed: m.seed, mode: m.mode, difficulty: m.difficulty, players: m.players, you: m.you };
+        const resume = m.resume ? (JSON.parse(m.resume) as Checkpoint) : undefined;
+        const start: OnlineStart = { seed: m.seed, mode: m.mode, players: m.players, you: m.you, host: this.isHost, ...(resume ? { resume } : {}) };
         this.scene.start('Game', start);
         return;
       }
@@ -193,29 +200,21 @@ export class LobbyScene extends Phaser.Scene {
     const about = add(this.add.text(LEFT, y, MODE_TEXT[this.mode].about, MUTED));
     y += about.height + 30;
 
-    add(this.add.text(LEFT, y, 'Difficulty', MUTED));
-    y += 30;
-    if (this.isHost) {
-      let x = LEFT;
-      DIFFICULTY_NAMES.forEach((name, difficulty) => {
-        const chosen = difficulty === this.difficulty;
-        this.parts.push(
-          ...button(this, x, y, { label: name, onClick: () => this.session.send({ t: 'difficulty', difficulty }), colour: chosen ? '#6a3020' : '#3a2c1c', width: 220 }),
-        );
-        x += 240;
-      });
-      y += 50;
-    } else {
-      add(this.add.text(LEFT, y, DIFFICULTY_NAMES[this.difficulty]!, TEXT));
-      y += 34;
-    }
-    const loop = add(this.add.text(LEFT, y, 'After wave 30 the map loops at the next difficulty, up to Hell.', MUTED));
-    y += loop.height + 30;
+    const campaign = add(this.add.text(LEFT, y, 'The campaign: five acts on Normal, then Nightmare, then Hell. The host saves at every new act.', MUTED));
+    y += campaign.height + 30;
 
     if (this.isHost && this.mode === 'team' && this.players.length > MAX_TEAM_PLAYERS) {
       add(this.add.text(LEFT, y + 6, `A team takes up to ${MAX_TEAM_PLAYERS} players: pick Free for all, or wait for someone to leave.`, TEXT));
     } else if (this.isHost) {
       this.parts.push(...button(this, LEFT, y, { label: 'Start', onClick: () => this.session.send({ t: 'start' }), colour: '#6a3020', width: 200 }));
+      // The saved game carries on with the same mode and the same number of players
+      const cp = this.saved;
+      if (cp && cp.mode === this.mode && cp.players === this.players.length) {
+        const label = `Continue ${stageName(cp.difficulty, cp.act)}`;
+        this.parts.push(...button(this, LEFT + 220, y, { label, onClick: () => this.session.send({ t: 'start', resume: JSON.stringify(cp) }), colour: '#3a4c2c', width: 320 }));
+      } else if (cp) {
+        add(this.add.text(LEFT + 220, y + 6, `A saved ${MODE_TEXT[cp.mode].name} game for ${cp.players} waits.`, MUTED));
+      }
     } else {
       add(this.add.text(LEFT, y + 6, 'Waiting for the host to start.', TEXT));
     }

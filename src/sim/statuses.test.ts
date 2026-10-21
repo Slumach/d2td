@@ -18,7 +18,8 @@ const DESIGN_TARGET = DESIGN.balance.tierLadder.debuffTargetResist;
 // The tower stands at tile (2, 4); a monster at path distance 3000 is beside it.
 const BESIDE = 3000;
 const ALL = filterFrom(undefined);
-const hell = () => testSim(fixtureGameData(30, { difficulty: 2 }));
+// Every difficulty's monsters are in the campaign's data; these tests use the Hell ones
+const hell = () => testSim();
 
 describe('cold', () => {
   it('Ice Bolt chills: the monster walks chillPct slower for the cold length, then recovers', () => {
@@ -96,7 +97,7 @@ describe('immunities', () => {
 });
 
 describe('Hell walls', () => {
-  const nightmare = () => testSim(fixtureGameData(30, { difficulty: 1 }));
+  const nightmare = () => testSim();
   const fifth = (sim: ReturnType<typeof testSim>, m: Monster, element: Element) => {
     sim.fx = computeAuras(sim);
     return effectiveResist(sim, m, element);
@@ -145,28 +146,29 @@ describe('Hell walls', () => {
   });
 
   it("the walls land on the named monsters and champion packs: Hell's immunities, Nightmare's resistances", () => {
-    const named = (sim: ReturnType<typeof testSim>, id: string) =>
-      sim.data.waves.flatMap((w) => w.groups).find((g) => g.monster === variantId(id, sim.data.difficulty))!.mods;
-    const groups = (sim: ReturnType<typeof testSim>, n: number, rank: string) =>
-      sim.data.waves[n - 1]!.groups.filter((g) => g.rank === rank).map((g) => g.mods);
-    const h = hell();
+    const sim = testSim();
+    const groupsOf = (d: number) => sim.data.waves.filter((w) => w.difficulty === d).flatMap((w) => w.groups);
+    // A named monster wherever it walks on a difficulty (Treehead and Griswold only exist where their act 1 waves are)
+    const named = (d: number, id: string) => groupsOf(d).find((g) => g.monster === variantId(id, d))?.mods;
+    const champions = (d: number) => groupsOf(d).filter((g) => g.rank === 'champion').map((g) => g.mods);
     // Every Hell champion pack: Stone Skin (lifting a champion to physical 100) and Poison Immune
-    for (const n of [5, 15, 25]) expect(groups(h, n, 'champion')[0]).toEqual(expect.arrayContaining(['stoneSkin', 'poisonImmune']));
-    expect(groups(h, 5, 'champion')[0]).toEqual(['extraFast', 'stoneSkin', 'poisonImmune']);
-    expect(named(h, 'treehead')).toContain('magicImmune');
-    expect(named(h, 'griswold')).toEqual(expect.arrayContaining(['magicImmune', 'physicalImmune']));
+    for (const mods of champions(2)) expect(mods).toEqual(expect.arrayContaining(['stoneSkin', 'poisonImmune']));
+    expect(champions(2)[0]).toEqual(['extraFast', 'stoneSkin', 'poisonImmune']);
+    expect(named(2, 'griswold')).toEqual(expect.arrayContaining(['magicImmune', 'physicalImmune']));
     // Andariel: Magic Immune in place of Magic Resistant, never both
-    expect(named(h, 'andariel')).toEqual(['extraStrong', 'magicImmune', 'poisonImmune', 'physicalImmune']);
-    const n = nightmare();
-    expect(groups(n, 5, 'champion')[0]).toEqual(['extraFast', 'poisonResistant']);
-    expect(named(n, 'treehead')).toContain('magicResistant');
-    expect(named(n, 'andariel')).toEqual(['magicResistant', 'extraStrong', 'poisonResistant']);
-    expect(groups(testSim(fixtureGameData(30)), 5, 'champion')[0]).toEqual(['extraFast']);
+    expect(named(2, 'andariel')).toEqual(['extraStrong', 'magicImmune', 'poisonImmune', 'physicalImmune']);
+    expect(champions(1)[0]).toEqual(['extraFast', 'poisonResistant']);
+    expect(named(1, 'treehead')).toContain('magicResistant');
+    expect(named(1, 'andariel')).toEqual(['magicResistant', 'extraStrong', 'poisonResistant']);
+    expect(champions(0)[0]).toEqual(['extraFast']);
+    // Treehead walks on Nightmare only; on Hell the rule would give him Magic Immune
+    expect(resolveMods(DESIGN.balance, ['extraStrong', 'extraFast', ...DESIGN.balance.modSchedule.added.hell!.named!['treehead']!])).toContain('magicImmune');
   });
 
   it("Hell's Andariel is physical, magic and poison immune, with her raw fire, cold and lightning", () => {
     const sim = hell();
-    const mods = sim.data.waves[29]!.groups.find((g) => g.rank === 'boss')!.mods;
+    const final = sim.data.waves.find((w) => w.difficulty === 2 && w.act === 1 && w.final)!;
+    const mods = final.groups.find((g) => g.rank === 'boss')!.mods;
     const andariel = addMonster(sim, 'andariel@hell', 0, { rank: 'boss', mods });
     for (const e of ['phys', 'mag', 'pois'] as const) expect(damageAgainst(sim, andariel, 1000, e, ALL)).toBe(0);
     const raw = sim.data.monsters['andariel@hell']!.resist;
@@ -195,7 +197,7 @@ describe('Hell walls', () => {
 });
 
 describe('Hell walls, round two', () => {
-  const nightmare = () => testSim(fixtureGameData(30, { difficulty: 1 }));
+  const nightmare = () => testSim();
 
   it('Stone Skin: +50 on Normal, +80 on Nightmare and Hell short of immune, 100 on a Hell champion', () => {
     const normal = testSim();
@@ -427,7 +429,9 @@ describe('Static Field and Enchant', () => {
 
     const h = hell();
     placeTower(h, 6, 5, 'static-field');
-    const hm = addMonster(h, 'brute1@hell', BESIDE, { hp: 1_000_000 });
+    // The floor is the difficulty of the monster's wave: a Hell one
+    const hellWave = h.data.waves.findIndex((w) => w.difficulty === 2);
+    const hm = addMonster(h, 'brute1@hell', BESIDE, { hp: 1_000_000, wave: hellWave });
     freeze(hm);
     ticks(h, 2000);
     expect(hm.hp).toBe(Math.trunc((1_000_000 * h.data.rules.staticFloorPct[2]!) / 100));
