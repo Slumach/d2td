@@ -2,7 +2,10 @@
 
 import Phaser from 'phaser';
 
-export const FONT = 'monospace';
+import { EXOCET } from './feel.ts';
+
+/** D2R's Exocet from the player's files, with a serif in its place until setup has run. */
+export const FONT = `${EXOCET}, Georgia, serif`;
 
 export interface ButtonSpec {
   label: string;
@@ -22,23 +25,32 @@ export interface Tooltip {
   hide(): void;
 }
 
-/** One shared tooltip box, anchored above the panel. */
+/** D2's item and skill box: translucent black, text centred, the name in gold over white lines. */
+const TOOLTIP_GOLD = '#c7b377';
+const TOOLTIP_WHITE = '#e8e8e8';
+
+/** One shared tooltip box, anchored above the panel with its bottom-left at (x, bottom). */
 export function createTooltip(scene: Phaser.Scene, x: number, bottom: number): Tooltip {
-  const text = scene.add
-    .text(x, bottom, '', {
-      fontFamily: FONT,
-      fontSize: '20px',
-      color: '#f0e8d0',
-      backgroundColor: '#0c0a08e8',
-      padding: { x: 14, y: 10 },
-      lineSpacing: 4,
-    })
-    .setOrigin(0, 1)
-    .setDepth(5000)
-    .setVisible(false);
+  const box = scene.add.graphics().setDepth(5000).setVisible(false);
+  const title = scene.add.text(0, 0, '', { fontFamily: FONT, fontSize: '20px', color: TOOLTIP_GOLD, align: 'center' }).setOrigin(0.5, 0).setDepth(5001).setVisible(false);
+  const body = scene.add.text(0, 0, '', { fontFamily: FONT, fontSize: '17px', color: TOOLTIP_WHITE, align: 'center', lineSpacing: 4 }).setOrigin(0.5, 0).setDepth(5001).setVisible(false);
+  const PAD = 12;
   return {
-    show: (title, body) => text.setText(body ? `${title}\n\n${body}` : title).setVisible(true),
-    hide: () => text.setVisible(false),
+    show: (t, b) => {
+      title.setText(t);
+      body.setText(b);
+      const w = Math.max(title.width, b ? body.width : 0) + PAD * 2;
+      const h = title.height + (b ? body.height + 8 : 0) + PAD * 2;
+      const top = bottom - h;
+      box.clear().fillStyle(0x000000, 0.82).fillRect(x, top, w, h).setVisible(true);
+      title.setPosition(x + w / 2, top + PAD).setVisible(true);
+      body.setPosition(x + w / 2, top + PAD + title.height + 8).setVisible(b !== '');
+    },
+    hide: () => {
+      box.setVisible(false);
+      title.setVisible(false);
+      body.setVisible(false);
+    },
   };
 }
 
@@ -61,11 +73,11 @@ export function button(scene: Phaser.Scene, x: number, y: number, spec: ButtonSp
       fixedWidth: hasIcon ? 0 : (spec.width ?? 0),
       align: 'center',
     })
-    .setDepth(30);
+    .setDepth(3100);
   const parts: Phaser.GameObjects.GameObject[] = [text];
   const targets: (Phaser.GameObjects.Text | Phaser.GameObjects.Image)[] = [text];
   if (hasIcon) {
-    const img = scene.add.image(x, y, spec.icon!).setOrigin(0, 0).setDisplaySize(ICON_SIZE, ICON_SIZE).setDepth(30);
+    const img = scene.add.image(x, y, spec.icon!).setOrigin(0, 0).setDisplaySize(ICON_SIZE, ICON_SIZE).setDepth(3100);
     img.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
     if (!enabled) img.setAlpha(0.45);
     parts.push(img);

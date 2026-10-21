@@ -3,7 +3,7 @@
 
 import { MAX_TIER, MAX_TOWER_LEVEL, type EvolutionDef } from './data.ts';
 import { idiv } from './fixed.ts';
-import { inBounds, isPathTile, tileCenter } from './map.ts';
+import { inBounds, isBlocked, isPathTile, tileCenter } from './map.ts';
 import { TARGETING_MODES, type Sim, type Targeting, type Tower } from './state.ts';
 
 export function towerAt(sim: Sim, x: number, y: number): Tower | undefined {
@@ -15,7 +15,7 @@ export function towerById(sim: Sim, id: number): Tower | undefined {
 }
 
 export function canBuild(sim: Sim, x: number, y: number): boolean {
-  return inBounds(sim.map, x, y) && !isPathTile(sim.map, x, y) && towerAt(sim, x, y) === undefined;
+  return inBounds(sim.map, x, y) && !isPathTile(sim.map, x, y) && !isBlocked(sim.map, x, y) && towerAt(sim, x, y) === undefined;
 }
 
 function lineOf(sim: Sim, tower: Tower) {

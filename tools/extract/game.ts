@@ -10,11 +10,20 @@ import { dirname, join } from 'node:path';
 
 import sprites from '../../src/data/render/sprites.json';
 import { iconJob } from './icons.ts';
+import { cursorJob, fontJob, soundJob } from './feel.ts';
+import { mapJob } from './map.ts';
 import type { DataSource } from './source.ts';
 import { spriteJobs, type SpriteJob } from './sprites.ts';
 import { tableJobs } from './tables.ts';
 
 export const CHECKSUM_FILE = 'checksums.json';
+/**
+ * Bumped whenever the extraction makes new or different files, so an older extraction fails
+ * verification and setup asks for a fresh one. 2: M5's map, cursor, font and sounds.
+ */
+export const EXTRACT_VERSION = 2;
+/** What verifyGame reports when the extraction is from an older version of the game. */
+export const OUTDATED = 'version';
 
 export interface Progress {
   done: number;
@@ -25,6 +34,7 @@ export interface Progress {
 export interface ChecksumList {
   /** Where the files came from. */
   source: string;
+  version: number;
   files: Record<string, string>;
 }
 
@@ -43,7 +53,7 @@ function sha256(bytes: Uint8Array): string {
 /** Every job the game needs, and exactly which game files they read. */
 export function planGame(source: DataSource): GamePlan {
   const sprite = spriteJobs(source);
-  const jobs = [...tableJobs(source), ...sprite.jobs, ...sprites.iconClasses.map((c) => iconJob(source, c))];
+  const jobs = [...tableJobs(source), ...sprite.jobs, ...sprites.iconClasses.map((c) => iconJob(source, c)), mapJob(source), cursorJob(source), fontJob(source), soundJob(source)];
   const inputs = [...new Set([...sprite.sharedInputs, ...jobs.flatMap((j) => j.inputs)])].sort();
   const missing = [...new Set([...sprite.missing, ...inputs.filter((p) => !source.exists(p))])].sort();
   return { jobs, inputs, missing };
@@ -72,7 +82,7 @@ export async function extractGame(
       files[file.path] = sha256(file.bytes);
     }
   }
-  const list: ChecksumList = { source: source.label, files };
+  const list: ChecksumList = { source: source.label, version: EXTRACT_VERSION, files };
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, CHECKSUM_FILE), JSON.stringify(list, null, 2));
   onProgress?.({ done: plan.jobs.length, total: plan.jobs.length, file: '' });
@@ -90,6 +100,7 @@ export function verifyGame(outDir: string): VerifyResult {
   const listPath = join(outDir, CHECKSUM_FILE);
   if (!existsSync(listPath)) return { ok: false, bad: [CHECKSUM_FILE] };
   const list = JSON.parse(readFileSync(listPath, 'utf8')) as ChecksumList;
+  if (list.version !== EXTRACT_VERSION) return { ok: false, bad: [OUTDATED] };
   const bad: string[] = [];
   for (const [path, hash] of Object.entries(list.files)) {
     const full = join(outDir, path);

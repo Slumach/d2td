@@ -1,10 +1,10 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { CHECKSUM_FILE, extractGame, verifyGame } from './game.ts';
+import { CHECKSUM_FILE, EXTRACT_VERSION, OUTDATED, extractGame, verifyGame } from './game.ts';
 import type { DataSource } from './source.ts';
 import { TABLES, tableJobs } from './tables.ts';
 
@@ -51,6 +51,15 @@ describe('game extraction', () => {
     expect(verifyGame(out)).toEqual({ ok: false, bad: [first] });
     rmSync(join(out, CHECKSUM_FILE));
     expect(verifyGame(out).ok).toBe(false);
+  });
+
+  it('reports an extraction from an older version as outdated', async () => {
+    const out = tempDir();
+    const source = fakeSource();
+    await extractGame(source, out, undefined, tableJobs(source));
+    const list = JSON.parse(readFileSync(join(out, CHECKSUM_FILE), 'utf8'));
+    writeFileSync(join(out, CHECKSUM_FILE), JSON.stringify({ ...list, version: EXTRACT_VERSION - 1 }));
+    expect(verifyGame(out)).toEqual({ ok: false, bad: [OUTDATED] });
   });
 
   it('refuses to run when the source lacks an input', async () => {

@@ -32,7 +32,9 @@ import {
 import { TABLE_NAMES, type Tables } from '../sim/tables.ts';
 import { TARGETING_MODES } from '../sim/state.ts';
 import {
+  GROUND_KEY,
   ICON_INDEX,
+  MAP_KEY,
   MISSILES_FOR,
   animKey,
   createAnimations,
@@ -43,12 +45,16 @@ import {
   monsterKey,
   originOf,
   preloadAssets,
+  sceneryKey,
   type IconIndex,
+  type MapManifest,
 } from './assets.ts';
 import { angle64, spriteDirection } from './directions.ts';
 import { LocalDriver, NetDriver, type Driver } from './driver.ts';
 import { facingFromVector, type Facing8 } from './facing.ts';
-import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, PANEL_TOP, TILE } from './layout.ts';
+import { ISO_H, ISO_W, ORIGIN, ellipseOf, project, screenVector, tileAtScreen, tileDiamond } from './iso.ts';
+import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, PANEL_TOP } from './layout.ts';
+import { SoundBank, preloadSounds } from './sound.ts';
 import { FONT, buttonRow, createTooltip, type ButtonSpec, type Tooltip } from './ui.ts';
 
 const CLASS = 'paladin';
@@ -58,13 +64,12 @@ const FACE_RANGE = 6 * UNITS_PER_TILE;
 const LINE_COLOURS: Record<string, number> = { zealot: 0xc84a3a, holy: 0xe0b840, aura: 0x4a84d8 };
 const EVOLVED_COLOUR = 0xa050d0;
 
-const DEPTH = { ground: 1, rings: 2, corpses: 3, units: 10, overlay: 1500, effects: 2000 };
+const DEPTH = { ground: 1, rings: 2, corpses: 3, units: 10, overlay: 1500, effects: 2000, chrome: 2900 };
 /** Dev: ?debug logs every sprite the scene creates. */
 const DEBUG = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug');
 
-function toPx(units: number): number {
-  return (units * TILE) / UNITS_PER_TILE;
-}
+/** Zones have no art yet; they draw as a translucent ellipse of this radius in units. */
+const ZONE_RADIUS = (UNITS_PER_TILE * 5) / 8;
 
 type Selection = { kind: 'tile'; x: number; y: number } | { kind: 'tower'; id: number } | undefined;
 
@@ -99,6 +104,8 @@ interface MissileView {
   y: number;
   /** Set for strikes: the skill whose impact art plays when the missile ends. */
   skill: string;
+  /** The missile art, which also names its sounds. */
+  art: string;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -125,6 +132,7 @@ export class GameScene extends Phaser.Scene {
   private tooltip!: Tooltip;
   private icons: IconIndex | undefined;
   private panel: Phaser.GameObjects.GameObject[] = [];
+  private sounds!: SoundBank;
 
   private monsters = new Map<number, MonsterView>();
   private corpses = new Map<number, Phaser.GameObjects.Sprite>();
@@ -139,6 +147,7 @@ export class GameScene extends Phaser.Scene {
   preload(): void {
     for (const name of TABLE_NAMES) this.load.json(name, `data/${name}.json`);
     preloadAssets(this);
+    preloadSounds(this);
     this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
       this.add.text(16, 16, `Missing ${file.src}. Run npm run extract first.`, { color: '#e0c080' }).setDepth(9000);
     });
@@ -169,8 +178,11 @@ export class GameScene extends Phaser.Scene {
     }
     this.icons = this.cache.json.get(ICON_INDEX) as IconIndex | undefined;
     createAnimations(this);
+    this.sounds = new SoundBank(this);
+    this.sounds.startLoops();
 
-    this.add.graphics().setDepth(0).fillStyle(0x1a1a14).fillRect(0, 0, GAME_WIDTH, HUD_HEIGHT).fillRect(0, PANEL_TOP, GAME_WIDTH, GAME_HEIGHT - PANEL_TOP);
+    // HUD and panel backgrounds sit over the map, so tall scenery never paints across them
+    this.add.graphics().setDepth(DEPTH.chrome).fillStyle(0x1a1a14).fillRect(0, 0, GAME_WIDTH, HUD_HEIGHT).fillRect(0, PANEL_TOP, GAME_WIDTH, GAME_HEIGHT - PANEL_TOP);
     this.drawGround();
     this.ringGfx = this.add.graphics().setDepth(DEPTH.rings);
     this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
@@ -215,9 +227,7 @@ export class GameScene extends Phaser.Scene {
 
   private tileAt(p: Phaser.Input.Pointer): { x: number; y: number } | undefined {
     if (p.y < HUD_HEIGHT || p.y >= PANEL_TOP) return undefined;
-    const x = Math.floor(p.x / TILE);
-    const y = Math.floor((p.y - HUD_HEIGHT) / TILE);
-    return x >= 0 && x < this.sim.map.width && y >= 0 && y < this.sim.map.height ? { x, y } : undefined;
+    return tileAtScreen(p.x, p.y);
   }
 
   private onMapClick(p: Phaser.Input.Pointer): void {
@@ -381,12 +391,10 @@ export class GameScene extends Phaser.Scene {
 
   private syncMonsters(): void {
     const s = this.sim.state;
-    const oy = HUD_HEIGHT;
     const alive = new Set<number>();
     for (const m of s.monsters) {
       alive.add(m.id);
-      const px = toPx(m.x);
-      const py = oy + toPx(m.y);
+      const { x: px, y: py } = project(m.x, m.y);
       let view = this.monsters.get(m.id);
       if (!view) {
         const texture = monsterKey(m.def, m.rank);
@@ -395,7 +403,10 @@ export class GameScene extends Phaser.Scene {
         this.monsters.set(m.id, view);
       }
       const moved = m.x !== view.x || m.y !== view.y;
-      if (moved) view.facing = facingFromVector(m.x - view.x, m.y - view.y);
+      if (moved) {
+        const v = screenVector(m.x - view.x, m.y - view.y);
+        view.facing = facingFromVector(v.x, v.y);
+      }
       // Standing still and not stunned or casting means it is fighting a blocker
       const mode = moved ? 'WL' : m.stunTicks > 0 || m.castTicks > 0 ? view.mode || 'WL' : 'A1';
       if (mode === 'A1' && view.mode === 'A1' && !view.sprite.anims.isPlaying) view.sprite.play(animKey(view.texture, 'A1', view.facing));
@@ -422,6 +433,8 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       fresh.splice(fresh.indexOf(corpse), 1);
+      this.sounds.death(view.def);
+      this.sounds.gold();
       view.sprite.clearTint().setDepth(DEPTH.corpses);
       view.sprite.play(animKey(view.texture, 'DT', view.facing));
       // Then the body on the ground (D2's DD mode), held until the corpse goes
@@ -458,8 +471,7 @@ export class GameScene extends Phaser.Scene {
     const seen = new Set<number>();
     for (const t of s.towers) {
       seen.add(t.id);
-      const px = toPx(t.x);
-      const py = HUD_HEIGHT + toPx(t.y) + TILE / 4;
+      const { x: px, y: py } = project(t.x, t.y);
       const texture = heroKey(t);
       let view = this.towers.get(t.id);
       if (view && view.texture !== texture) {
@@ -472,11 +484,16 @@ export class GameScene extends Phaser.Scene {
         this.towers.set(t.id, view);
       }
       const target = this.nearestMonster(t, FACE_RANGE);
-      if (target) view.facing = facingFromVector(target.x - t.x, target.y - t.y);
+      if (target) {
+        const v = screenVector(target.x - t.x, target.y - t.y);
+        view.facing = facingFromVector(v.x, v.y);
+      }
       // The cooldown jumping back up means the tower acted this tick
       const acted = t.cooldown > view.cooldown;
       view.cooldown = t.cooldown;
       if (acted) {
+        const active = activeSkill(this.sim, t);
+        if (active) this.sounds.cast(active.skill.id);
         view.sprite.play(animKey(texture, 'A1', view.facing));
         view.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => view!.sprite.play(animKey(texture, 'NU', view!.facing)));
         this.meleeHit(t);
@@ -500,8 +517,10 @@ export class GameScene extends Phaser.Scene {
     const target = this.nearestMonster(t, active.skill.rangeUnits);
     if (!target) return;
     const hit = active.skill.id === 'vengeance' ? 'vengeance-hit' : 'zeal-hit';
-    const angle = angle64(target.x - t.x, target.y - t.y);
-    for (const m of MISSILES_FOR[hit] ?? []) this.effect(m, toPx(target.x), HUD_HEIGHT + toPx(target.y) - 15, angle);
+    const v = screenVector(target.x - t.x, target.y - t.y);
+    const angle = angle64(v.x, v.y);
+    const at = project(target.x, target.y);
+    for (const m of MISSILES_FOR[hit] ?? []) this.effect(m, at.x, at.y - 15, angle);
   }
 
   private syncMissiles(): void {
@@ -512,8 +531,7 @@ export class GameScene extends Phaser.Scene {
       const skill = this.sim.data.skills[m.skill];
       const art = MISSILES_FOR[m.skill]?.[0];
       if (!skill || !art) continue;
-      const px = toPx(m.x);
-      const py = HUD_HEIGHT + toPx(m.y);
+      const { x: px, y: py } = project(m.x, m.y);
       let view = this.missiles.get(m.id);
       if (!view) {
         const texture = missileKey(art);
@@ -521,12 +539,14 @@ export class GameScene extends Phaser.Scene {
         const sprite = this.sprite(texture, px, py).setDepth(DEPTH.effects);
         if ((metaOf(this, texture).blend ?? 0) > 0) sprite.setBlendMode(Phaser.BlendModes.ADD);
         const strike = skill.archetype === 'splash' && skill.delivery === 'strike';
-        view = { sprite, x: m.x, y: m.y, skill: strike ? m.skill : '' };
+        view = { sprite, x: m.x, y: m.y, skill: strike ? m.skill : '', art };
+        this.sounds.travel(art);
         this.missiles.set(m.id, view);
       }
       const texture = view.sprite.texture.key;
       const meta = metaOf(this, texture);
-      const dir = String(spriteDirection(angle64(m.x - view.x, m.y - view.y), meta.dccDirections ?? 1));
+      const v = screenVector(m.x - view.x, m.y - view.y);
+      const dir = String(spriteDirection(angle64(v.x, v.y), meta.dccDirections ?? 1));
       this.playIfChanged(view.sprite, animKey(texture, 'MS', dir), true);
       view.sprite.setPosition(px, py);
       view.x = m.x;
@@ -534,6 +554,7 @@ export class GameScene extends Phaser.Scene {
     }
     for (const [id, view] of this.missiles) {
       if (seen.has(id)) continue;
+      this.sounds.hit(view.art);
       // A strike's impact plays the skill's other art there: FoH sprays its holy bolts
       if (view.skill) for (const art of MISSILES_FOR[view.skill]!.slice(1)) this.effect(art, view.sprite.x, view.sprite.y);
       view.sprite.destroy();
@@ -547,8 +568,7 @@ export class GameScene extends Phaser.Scene {
     for (const u of s.summons) {
       seen.add(u.id);
       const texture = monsterKey('skeleton1', 'normal');
-      const px = toPx(u.x);
-      const py = HUD_HEIGHT + toPx(u.y);
+      const { x: px, y: py } = project(u.x, u.y);
       let sprite = this.summons.get(u.id);
       if (!sprite) {
         if (!this.textures.exists(texture)) continue;
@@ -573,12 +593,27 @@ export class GameScene extends Phaser.Scene {
   // ---- shapes that stay shapes: ground, rings, bars ----
 
   private drawGround(): void {
+    const manifest = this.cache.json.get(MAP_KEY) as MapManifest | undefined;
+    if (manifest && this.textures.exists(GROUND_KEY)) {
+      // The baked Blood Moor; a layout change since the bake only shifts it
+      const dx = ORIGIN.x - manifest.ground.originX;
+      const dy = ORIGIN.y - HUD_HEIGHT - manifest.ground.originY;
+      this.add.image(dx, HUD_HEIGHT + dy, GROUND_KEY).setOrigin(0).setDepth(DEPTH.ground);
+      for (const obj of manifest.objects) {
+        const prefab = manifest.prefabs[obj.prefab];
+        if (!prefab || !this.textures.exists(sceneryKey(obj.prefab))) continue;
+        const p = project(obj.at[0]! * UNITS_PER_TILE, obj.at[1]! * UNITS_PER_TILE);
+        const img = this.add.image(Math.round(p.x), Math.round(p.y), sceneryKey(obj.prefab));
+        img.setOrigin(prefab.anchorX / img.width, prefab.anchorY / img.height).setDepth(DEPTH.units + p.y / 1000);
+      }
+      return;
+    }
     const g = this.add.graphics().setDepth(DEPTH.ground);
     const { map } = this.sim;
     for (let y = 0; y < map.height; y++) {
       for (let x = 0; x < map.width; x++) {
         g.fillStyle(isPathTile(map, x, y) ? 0x6a5a3a : (x + y) % 2 ? 0x2c3a24 : 0x30402a);
-        g.fillRect(x * TILE, HUD_HEIGHT + y * TILE, TILE, TILE);
+        g.fillPoints(tileDiamond(x, y), true);
       }
     }
   }
@@ -587,16 +622,14 @@ export class GameScene extends Phaser.Scene {
     const { state, fx } = this.sim;
     const g = this.overlayGfx.clear();
     const rings = this.ringGfx.clear();
-    const oy = HUD_HEIGHT;
     const selected = this.selection?.kind === 'tower' ? this.selection.id : undefined;
 
     // Base rings in the tower's line colour; evolved towers ring purple
     for (const t of state.towers) {
       const colour = t.evolved ? EVOLVED_COLOUR : (LINE_COLOURS[t.line] ?? 0x707070);
-      const cx = toPx(t.x);
-      const cy = oy + toPx(t.y) + TILE / 4;
-      rings.fillStyle(colour, 0.35).fillEllipse(cx, cy, TILE * 0.9, TILE * 0.45);
-      rings.lineStyle(t.id === selected ? 3 : 2, colour, t.id === selected ? 1 : 0.8).strokeEllipse(cx, cy, TILE * 0.9, TILE * 0.45);
+      const { x: cx, y: cy } = project(t.x, t.y);
+      rings.fillStyle(colour, 0.35).fillEllipse(cx, cy, ISO_W * 0.7, ISO_H * 0.7);
+      rings.lineStyle(t.id === selected ? 3 : 2, colour, t.id === selected ? 1 : 0.8).strokeEllipse(cx, cy, ISO_W * 0.7, ISO_H * 0.7);
     }
 
     // Aura rings: faint for every emitter, bright for the selected tower
@@ -604,18 +637,24 @@ export class GameScene extends Phaser.Scene {
       const t = towerById(this.sim, e.towerId);
       if (!t) continue;
       g.lineStyle(e.towerId === selected ? 2 : 1, 0x80b0ff, e.towerId === selected ? 0.8 : 0.15);
-      g.strokeCircle(toPx(t.x), oy + toPx(t.y), toPx(e.radiusUnits));
+      const c = project(t.x, t.y);
+      const r = ellipseOf(e.radiusUnits);
+      g.strokeEllipse(c.x, c.y, r.w, r.h);
     }
     const sel = selected !== undefined ? towerById(this.sim, selected) : undefined;
     const active = sel && activeSkill(this.sim, sel);
     if (sel && active && active.skill.rangeUnits > 0) {
-      g.lineStyle(1, 0xffffff, 0.5).strokeCircle(toPx(sel.x), oy + toPx(sel.y), toPx(active.skill.rangeUnits));
+      const c = project(sel.x, sel.y);
+      const r = ellipseOf(active.skill.rangeUnits);
+      g.lineStyle(1, 0xffffff, 0.5).strokeEllipse(c.x, c.y, r.w, r.h);
     }
 
     // Zones (no Paladin skill makes one) stay translucent circles
     for (const m of state.missiles) {
       if (this.sim.data.skills[m.skill]?.archetype !== 'zone') continue;
-      g.fillStyle(0x80c0ff, 0.2).fillCircle(toPx(m.x), oy + toPx(m.y), (TILE * 5) / 8);
+      const c = project(m.x, m.y);
+      const r = ellipseOf(ZONE_RADIUS);
+      g.fillStyle(0x80c0ff, 0.2).fillEllipse(c.x, c.y, r.w, r.h);
     }
 
     // HP bars over monsters
@@ -623,8 +662,9 @@ export class GameScene extends Phaser.Scene {
       const view = this.monsters.get(m.id);
       const w = m.rank === 'boss' ? 42 : 24;
       // A D2 frame box reaches about twice the body's height above the feet
-      const top = view ? view.sprite.y - view.sprite.displayOriginY * 0.45 - 6 : oy + toPx(m.y) - TILE / 2;
-      const x = toPx(m.x) - w / 2;
+      const at = project(m.x, m.y);
+      const top = view ? view.sprite.y - view.sprite.displayOriginY * 0.45 - 6 : at.y - 40;
+      const x = at.x - w / 2;
       g.fillStyle(0x200000).fillRect(x, top, w, 4);
       g.fillStyle(m.rank === 'normal' ? 0x40e040 : 0xe0c040).fillRect(x, top, (w * Math.max(0, m.hp)) / m.maxHp, 4);
     }
@@ -632,7 +672,7 @@ export class GameScene extends Phaser.Scene {
     if (this.hover && state.status === 'playing') {
       const { x, y } = this.hover;
       const ok = canBuild(this.sim, x, y) || towerAt(this.sim, x, y) !== undefined;
-      g.lineStyle(2, ok ? 0xffffff : 0xff4040, 0.5).strokeRect(x * TILE + 1, oy + y * TILE + 1, TILE - 2, TILE - 2);
+      g.lineStyle(2, ok ? 0xffffff : 0xff4040, 0.6).strokePoints(tileDiamond(x, y), true);
     }
   }
 

@@ -1,0 +1,9 @@
+{
+  "comment": "Which game events make a sound. The sounds themselves come from D2's tables at extraction: skills.txt stsound for casts, missiles.txt TravelSound and HitSound, monstats.txt MonSound then monsounds.txt DeathSound for deaths, and levels.txt SoundEnv then soundenviron.txt for the level's song and day ambience.",
+  "level": "Blood Moor",
+  "cast": ["holy-bolt", "blessed-hammer", "zeal", "sacrifice", "fist-of-the-heavens"],
+  "travel": ["blessedhammer"],
+  "hit": ["holybolt", "fistoftheheavensbolt", "blessedhammer"],
+  "gold": "item_gold",
+  "volumePct": { "music": 30, "ambience": 45, "sfx": 70 }
+}

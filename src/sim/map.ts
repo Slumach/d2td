@@ -1,9 +1,11 @@
-// The M1 map: a 30 x 17 grid with one hard-coded winding path. Every tile off the path
-// is buildable.
+// The map: a 28 x 17 grid with one hard-coded winding path. Every tile off the path is
+// buildable. It was 30 x 17 until M5's isometric view, which fits 28 + 17 tiles across the
+// 1440 px canvas; the waypoints moved so the path kept its length to the unit.
 
+import bloodmoor from '../data/map/bloodmoor.json';
 import { UNITS_PER_TILE, idiv, isqrt } from './fixed.ts';
 
-export const MAP_WIDTH = 30;
+export const MAP_WIDTH = 28;
 export const MAP_HEIGHT = 17;
 
 export interface Point {
@@ -15,15 +17,15 @@ export interface Point {
 export const PATH_TILES: readonly Point[] = [
   { x: -1, y: 3 },
   { x: 6, y: 3 },
-  { x: 6, y: 12 },
-  { x: 11, y: 12 },
-  { x: 15, y: 8 },
-  { x: 15, y: 3 },
-  { x: 22, y: 3 },
-  { x: 22, y: 13 },
-  { x: 26, y: 13 },
-  { x: 26, y: 7 },
-  { x: 30, y: 7 },
+  { x: 6, y: 13 },
+  { x: 10, y: 13 },
+  { x: 14, y: 9 },
+  { x: 14, y: 3 },
+  { x: 20, y: 3 },
+  { x: 20, y: 13 },
+  { x: 24, y: 13 },
+  { x: 24, y: 7 },
+  { x: 28, y: 7 },
 ];
 
 export interface PathSegment {
@@ -42,7 +44,12 @@ export interface GameMap {
   length: number;
   /** pathTiles[y * width + x] is true for tiles the path crosses. */
   pathTiles: boolean[];
+  /** blocked[y * width + x] is true where scenery stands: no path, but no tower either. */
+  blocked: boolean[];
 }
+
+/** Playable tiles the Blood Moor's scenery stands on (src/data/map/bloodmoor.json). */
+export const BLOCKED_TILES: readonly Point[] = bloodmoor.blocked.map(([x, y]) => ({ x: x!, y: y! }));
 
 export function tileCenter(tile: Point): Point {
   return {
@@ -51,7 +58,7 @@ export function tileCenter(tile: Point): Point {
   };
 }
 
-export function createMap(waypoints: readonly Point[] = PATH_TILES): GameMap {
+export function createMap(waypoints: readonly Point[] = PATH_TILES, blockedTiles: readonly Point[] = BLOCKED_TILES): GameMap {
   const segments: PathSegment[] = [];
   let start = 0;
   for (let i = 1; i < waypoints.length; i++) {
@@ -73,7 +80,12 @@ export function createMap(waypoints: readonly Point[] = PATH_TILES): GameMap {
     }
   }
 
-  return { width: MAP_WIDTH, height: MAP_HEIGHT, segments, length: start, pathTiles };
+  const blocked = new Array<boolean>(MAP_WIDTH * MAP_HEIGHT).fill(false);
+  for (const t of blockedTiles) {
+    if (t.x >= 0 && t.x < MAP_WIDTH && t.y >= 0 && t.y < MAP_HEIGHT) blocked[t.y * MAP_WIDTH + t.x] = true;
+  }
+
+  return { width: MAP_WIDTH, height: MAP_HEIGHT, segments, length: start, pathTiles, blocked };
 }
 
 /** 4-connected tiles from a to b, so a diagonal segment leaves no gaps a tower could fill. */
@@ -95,6 +107,10 @@ function tileWalk(a: Point, b: Point): Point[] {
 
 export function isPathTile(map: GameMap, x: number, y: number): boolean {
   return map.pathTiles[y * map.width + x] === true;
+}
+
+export function isBlocked(map: GameMap, x: number, y: number): boolean {
+  return map.blocked[y * map.width + x] === true;
 }
 
 export function inBounds(map: GameMap, x: number, y: number): boolean {

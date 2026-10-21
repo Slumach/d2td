@@ -10,7 +10,7 @@ Non-commercial fan project. The game ships zero Blizzard assets and reads them f
 
 ## Decisions locked (Oct 20)
 
-- Unit art: classic D2 sprites at 1x on 48 px tiles, nearest-neighbour, never scaled individually. The whole canvas zooms by the largest whole number that fits the window (1 at 1080p, 2 at 4K) and the rest is letterboxed (changed from 2x after M2b: at 2x units stood two tiles tall). HD .sprite files for UI, skill icons, item art and fonts. The HD 3D models are a later experiment on one monster and never block the game.
+- Unit art: classic D2 sprites at 1x in D2's own 2:1 isometric view (M5), nearest-neighbour, never scaled individually. The whole canvas zooms by the largest whole number that fits the window (1 at 1080p, 2 at 4K) and the rest is letterboxed (changed from 2x after M2b: at 2x units stood two tiles tall). HD .sprite files for UI, skill icons, item art and fonts. The HD 3D models are a later experiment on one monster and never block the game.
 - Map: fixed path. Towers go on any open tile off the path. No mazing.
 - Evolution: two adjacent prerequisite towers are consumed into one evolved tower. One tile is freed.
 - Launch classes: Paladin, Sorceress, Necromancer. Amazon, Barbarian, Druid and Assassin come after the loop is fun.
@@ -31,7 +31,7 @@ Non-commercial fan project. The game ships zero Blizzard assets and reads them f
 
 Build, survive a wave, spend the gold, repeat. A run ends when 20 lives are gone: a leaked monster costs 1 life, a leaked boss costs 5.
 
-- The map is a square tile grid (30 x 17 tiles, drawn at 48 px; 1440 x 816 plus HUD and panel fits 1080p at zoom 1) with the path as an ordered list of waypoints. Diagonal path segments are allowed; monsters have 8-direction sprites, so they always face the way they walk.
+- The map is a square tile grid (28 x 17 tiles since M5, when 30 x 17 no longer fit the canvas isometrically; the waypoints moved so the path kept its length to the unit) with the path as an ordered list of waypoints. The renderer shows it in D2's isometric view; the sim grid stays square. Diagonal path segments are allowed; monsters have 8-direction sprites, so they always face the way they walk.
 - Path tiles and scenery tiles are unbuildable. Everything else is buildable, one tower per tile.
 - Range is measured in tiles from the tower's centre. Melee towers reach 1.5 tiles, so they only work when placed touching the path.
 - Targeting per tower: First, Last, Strongest, Weakest, Closest. Default First.
@@ -189,12 +189,12 @@ A Hammerdin therefore costs both parents built, levelled and tiered, plus the ev
 
 ## Visuals and asset pipeline
 
-The look is D2R's legacy toggle done well: classic sprites at 1x with nearest-neighbour sampling, HD panels, fonts and skill icons around them. Tiles are 48 px, so the map is 1440 x 816 and the canvas with HUD and panel is 1440 x 1000, which fits 1080p at zoom 1 with a title bar above the taskbar. The canvas zooms as a whole by the largest whole number that fits the window and letterboxes the rest; no sprite is scaled on its own and nothing is ever scaled by a fraction. Tile size is render-only: the sim's tile stays 1000 units, so ranges and path lengths do not change.
+The look is D2R's legacy toggle done well: classic sprites at 1x with nearest-neighbour sampling, HD panels, fonts and skill icons around them. Since M5 the renderer projects the square sim grid into D2's 2:1 view: one sim tile is a 64 x 32 diamond, two by two of D2's subtiles, so 28 x 17 tiles make a 1440 x 720 diamond inside the 1440 x 816 map area, and the canvas with HUD and panel is 1440 x 1000, which fits 1080p at zoom 1 with a title bar above the taskbar. Sprites, missiles, HP bars, range ellipses, the build highlight and clicks all go through the projection and its inverse, and everything on the map sorts by projected y; the HUD and panel stay flat. The canvas zooms as a whole by the largest whole number that fits the window and letterboxes the rest; no sprite is scaled on its own and nothing is ever scaled by a fraction. Tile size is render-only: the sim's tile stays 1000 units, so ranges and path lengths do not change.
 
 - Monsters, heroes and missiles: classic DCC/DC6 frames composited through COF layer files, coloured with the Act 1 palette (pal.dat) and the PL2 colour shifts for champions and uniques.
 - UI, skill icons, item art, fonts: D2R HD .sprite files, decoded to PNG.
-- Map: flat tile colours in M1. Blood Moor rendered from classic DT1 tiles in M5.
-- Sound: classic WAV from the CASC, same path D2 Survivors takes.
+- Map (M5): the Blood Moor, baked at extraction from the player's DT1 tiles (decoder ported from OpenDiablo2) and our layout in src/data/map/bloodmoor.json. Grass and dirt floor tiles from Act1/Town/Floor.dt1 cover the map area, a dirt road follows the sim path with a noisy blended edge, rock floor tiles are sprinkled in, and trees, rock piles, fences and ruins stand around and on the map as prefabs of DT1 pieces. Each prefab is its own image anchored at its foot so units sort in front of and behind it; shadows are baked into the ground. Scenery on the playable grid blocks building on those tiles.
+- Sound (M5): D2R's own FLAC from the CASC, chosen through the tables: skills.txt cast sounds, missiles.txt travel and hit sounds, monsounds.txt death sounds, the gold chime, and the Wilderness song and day ambience from levels.txt and soundenviron.txt. D2's hand cursor and D2R's Exocet font come from the same extraction.
 
 Pipeline, a Node script run locally against files exported with CascView:
 

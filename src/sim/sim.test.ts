@@ -41,10 +41,10 @@ describe('rng', () => {
 describe('map', () => {
   it('marks a connected path and leaves the rest buildable', () => {
     const map = createMap();
-    expect([map.width, map.height]).toEqual([30, 17]);
+    expect([map.width, map.height]).toEqual([28, 17]);
     expect(isPathTile(map, 0, 3)).toBe(true);
     expect(isPathTile(map, 0, 0)).toBe(false);
-    expect(isPathTile(map, 11, 12) && isPathTile(map, 15, 8)).toBe(true);
+    expect(isPathTile(map, 10, 13) && isPathTile(map, 14, 9)).toBe(true);
   });
 });
 

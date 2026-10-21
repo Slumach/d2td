@@ -4,6 +4,7 @@
 
 import Phaser from 'phaser';
 
+import { loadFeel } from '../render/feel.ts';
 import { FONT, button } from '../render/ui.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
 import type { GameScene } from '../render/GameScene.ts';
@@ -98,6 +99,7 @@ export class SetupScene extends Phaser.Scene {
   private async onExtract(): Promise<void> {
     const result = await this.extract();
     if (result.ok) {
+      await loadFeel();
       this.scene.start('Menu');
       return;
     }
@@ -109,7 +111,10 @@ export class SetupScene extends Phaser.Scene {
 
   private async smoke(): Promise<void> {
     let setup: SetupResult = { ok: true, files: 0 };
-    if (!this.state.setupOk) setup = await this.extract();
+    if (!this.state.setupOk) {
+      setup = await this.extract();
+      if (setup.ok) await loadFeel();
+    }
     if (!setup.ok) {
       this.api.reportSmoke({ setup, wave: 0, kills: 0, lives: 0, waveCleared: false, error: setup.error });
       return;
@@ -143,7 +148,10 @@ export class SetupScene extends Phaser.Scene {
     );
     y += 130;
 
-    if (this.state.bad.length > 0 && !this.state.bad.includes('checksums.json')) {
+    if (this.state.bad.includes('version')) {
+      add(this.add.text(LEFT, y, 'This version of the game reads a few more files from Diablo II: Resurrected. Click Extract game files once more.', { ...TEXT, color: '#e0b060' }));
+      y += 70;
+    } else if (this.state.bad.length > 0 && !this.state.bad.includes('checksums.json')) {
       add(this.add.text(LEFT, y, 'Some extracted files are missing or changed. Extract again to repair them.', { ...TEXT, color: '#e0b060' }));
       y += 50;
     }

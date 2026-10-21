@@ -1,3 +1,4 @@
+import { loadFeel } from './render/feel.ts';
 import { startGame } from './render/start.ts';
 
 // Inside Electron the preload exposes window.d2td, and setup and the main menu come first.
@@ -7,6 +8,8 @@ import { startGame } from './render/start.ts';
 //   ?rich      plenty of starting gold, so autoplay reaches tiers and an evolution
 //   ?speed=4   run the sim 4 times as fast
 const params = new URLSearchParams(window.location.search);
+// The cursor and font come from the extraction; before first setup they simply are not there
+await loadFeel();
 if (window.d2td) {
   startGame({ launcher: window.d2td });
 } else {
