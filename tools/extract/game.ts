@@ -49,20 +49,29 @@ export function planGame(source: DataSource): GamePlan {
   return { jobs, inputs, missing };
 }
 
-/** Runs `jobs` into `outDir`, then writes the checksum list over every output. */
-export function extractGame(source: DataSource, outDir: string, onProgress?: (p: Progress) => void, jobs?: SpriteJob[]): ChecksumList {
+/**
+ * Runs `jobs` into `outDir`, then writes the checksum list over every output. Yields to the
+ * event loop between jobs so the launcher window stays responsive and shows progress.
+ */
+export async function extractGame(
+  source: DataSource,
+  outDir: string,
+  onProgress?: (p: Progress) => void,
+  jobs?: SpriteJob[],
+): Promise<ChecksumList> {
   const plan = jobs ? { jobs, missing: [...new Set(jobs.flatMap((j) => j.inputs))].filter((p) => !source.exists(p)) } : planGame(source);
   if (plan.missing.length > 0) throw new Error(`Missing from ${source.label}: ${plan.missing.join(', ')}`);
   const files: Record<string, string> = {};
-  plan.jobs.forEach((job, i) => {
+  for (const [i, job] of plan.jobs.entries()) {
     onProgress?.({ done: i, total: plan.jobs.length, file: job.label });
+    await new Promise((resolve) => setImmediate(resolve));
     for (const file of job.run()) {
       const out = join(outDir, file.path);
       mkdirSync(dirname(out), { recursive: true });
       writeFileSync(out, file.bytes);
       files[file.path] = sha256(file.bytes);
     }
-  });
+  }
   const list: ChecksumList = { source: source.label, files };
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, CHECKSUM_FILE), JSON.stringify(list, null, 2));

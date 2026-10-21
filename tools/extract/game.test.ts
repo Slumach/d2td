@@ -32,20 +32,20 @@ afterEach(() => {
 });
 
 describe('game extraction', () => {
-  it('writes every job output and a checksum list that verifies', () => {
+  it('writes every job output and a checksum list that verifies', async () => {
     const out = tempDir();
     const source = fakeSource();
     const progress: number[] = [];
-    const list = extractGame(source, out, (p) => progress.push(p.done), tableJobs(source));
+    const list = await extractGame(source, out, (p) => progress.push(p.done), tableJobs(source));
     expect(Object.keys(list.files).sort()).toEqual(TABLES.map((t) => `data/${t}.json`).sort());
     expect(progress.at(-1)).toBe(TABLES.length);
     expect(verifyGame(out)).toEqual({ ok: true, bad: [] });
   });
 
-  it('catches a changed or missing output', () => {
+  it('catches a changed or missing output', async () => {
     const out = tempDir();
     const source = fakeSource();
-    extractGame(source, out, undefined, tableJobs(source));
+    await extractGame(source, out, undefined, tableJobs(source));
     const first = `data/${TABLES[0]}.json`;
     writeFileSync(join(out, first), '[]');
     expect(verifyGame(out)).toEqual({ ok: false, bad: [first] });
@@ -53,9 +53,9 @@ describe('game extraction', () => {
     expect(verifyGame(out).ok).toBe(false);
   });
 
-  it('refuses to run when the source lacks an input', () => {
+  it('refuses to run when the source lacks an input', async () => {
     const skip = INPUTS[1]!;
     const source = fakeSource([skip]);
-    expect(() => extractGame(source, tempDir(), undefined, tableJobs(source))).toThrow(skip);
+    await expect(extractGame(source, tempDir(), undefined, tableJobs(source))).rejects.toThrow(skip);
   });
 });

@@ -3,3 +3,5 @@ dist/
 assets-raw/
 assets-extracted/
 *.tsbuildinfo
+dist-electron/
+release/

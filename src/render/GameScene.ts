@@ -45,15 +45,9 @@ import {
 } from './assets.ts';
 import { angle64, spriteDirection } from './directions.ts';
 import { facingFromVector, type Facing8 } from './facing.ts';
+import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, PANEL_TOP, TILE } from './layout.ts';
 import { FONT, buttonRow, createTooltip, type ButtonSpec, type Tooltip } from './ui.ts';
 
-/** Render-side tile size. The sim's tile is UNITS_PER_TILE units and does not change with it. */
-const TILE = 48;
-const HUD_HEIGHT = 64;
-const MAP_HEIGHT = 17 * TILE;
-const PANEL_TOP = HUD_HEIGHT + MAP_HEIGHT;
-export const GAME_WIDTH = 30 * TILE;
-export const GAME_HEIGHT = PANEL_TOP + 136;
 const TICK_MS = 1000 / TICKS_PER_SECOND;
 /** Do not let a stalled tab replay minutes of ticks in one frame. */
 const MAX_TICKS_PER_FRAME = 10;

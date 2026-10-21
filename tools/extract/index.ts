@@ -49,7 +49,7 @@ try {
     console.log(plan.missing.length === 0 ? 'Nothing missing.' : `Missing:\n  ${plan.missing.join('\n  ')}`);
   } else {
     const t0 = Date.now();
-    const list = extractGame(source, args.out, (p) => p.file && console.log(`  ${p.done + 1}/${p.total} ${p.file}`));
+    const list = await extractGame(source, args.out, (p) => p.file && console.log(`  ${p.done + 1}/${p.total} ${p.file}`));
     console.log(`Wrote ${Object.keys(list.files).length} files to ${args.out} in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
   }
 } finally {

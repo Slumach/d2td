@@ -4,28 +4,64 @@
   "version": "0.0.0",
   "description": "Non-commercial Diablo II fan tower defense. Bring your own D2R install.",
   "type": "module",
+  "main": "dist-electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tools",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tools && tsc --noEmit -p electron",
     "extract": "tsx tools/extract/index.ts",
     "balance": "tsx tools/balance.ts",
-    "ladders": "tsx tools/ladders.ts"
+    "ladders": "tsx tools/ladders.ts",
+    "build:app": "tsc --noEmit && tsc --noEmit -p electron && vite build && vite build -c vite.electron.config.ts",
+    "app": "npm run build:app && electron .",
+    "dist": "npm run build:app && electron-builder --win nsis --publish never && tsx tools/payload-check.ts",
+    "payload-check": "tsx tools/payload-check.ts"
   },
   "dependencies": {
-    "@jamiephan/casclib": "0.3.0",
-    "phaser": "3.90.0"
+    "@jamiephan/casclib": "0.3.0"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
     "electron": "43.7.7",
     "electron-builder": "26.17.0",
+    "phaser": "3.90.0",
     "tsx": "4.20.3",
     "typescript": "5.8.3",
     "vite": "6.4.4",
     "vitest": "5.0.5"
+  },
+  "build": {
+    "appId": "local.d2td.towerdefense",
+    "productName": "D2 Tower Defense",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/@jamiephan/casclib/**"
+    ],
+    "npmRebuild": false,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "allowScripts": {
     "esbuild@0.25.12": true,

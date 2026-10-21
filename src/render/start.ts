@@ -1,11 +1,16 @@
-// Starts the game: a Phaser instance running GameScene, or the M0 pipeline proof.
+// Starts the game: a Phaser instance running GameScene, the Electron launcher's setup and
+// menu scenes in front of it, or the M0 pipeline proof.
 
 import Phaser from 'phaser';
 
 import { DESIGN } from '../data/design.ts';
+import type { LauncherApi } from '../launcher/api.ts';
+import { MenuScene } from '../launcher/MenuScene.ts';
+import { LAUNCHER_KEY, SetupScene } from '../launcher/SetupScene.ts';
 import type { DesignData } from '../sim/data.ts';
 import { startAutoplay } from './autoplay.ts';
-import { GAME_HEIGHT, GAME_WIDTH, GameScene } from './GameScene.ts';
+import { GameScene } from './GameScene.ts';
+import { GAME_HEIGHT, GAME_WIDTH } from './layout.ts';
 import { ZombieWalkScene } from './ZombieWalkScene.ts';
 import { integerZoom } from './zoom.ts';
 
@@ -20,6 +25,8 @@ export interface StartOptions {
   speed?: number;
   /** 0 to 100. */
   volume?: number;
+  /** Inside Electron: setup and the main menu come before the game. */
+  launcher?: LauncherApi;
   parent?: string;
 }
 
@@ -50,11 +57,13 @@ export function startGame(opts: StartOptions = {}): Phaser.Game {
     pixelArt: true,
     // No Scale.FIT: the whole canvas zooms by a whole number and the page letterboxes it
     scale: { mode: Phaser.Scale.NONE, zoom: fitZoom(width, height) },
-    scene: opts.m0 ? [ZombieWalkScene] : [GameScene],
+    // Only the first scene starts on its own; the launcher's scenes start the rest
+    scene: opts.m0 ? [ZombieWalkScene] : opts.launcher ? [SetupScene, MenuScene, GameScene] : [GameScene],
     callbacks: {
       preBoot: (g) => {
         g.registry.set(DESIGN_KEY, design);
         g.registry.set('speed', Math.max(1, Math.min(16, opts.speed ?? 1)));
+        if (opts.launcher) g.registry.set(LAUNCHER_KEY, opts.launcher);
       },
     },
   });

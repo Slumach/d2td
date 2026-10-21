@@ -13,6 +13,8 @@ export interface ButtonSpec {
   icon?: string;
   /** Shown above the panel while hovered. */
   tooltip?: { title: string; body: string };
+  /** A fixed width with the label centred, for menus. Text buttons only. */
+  width?: number;
 }
 
 export interface Tooltip {
@@ -54,6 +56,8 @@ export function button(scene: Phaser.Scene, x: number, y: number, spec: ButtonSp
       backgroundColor: enabled ? (spec.colour ?? '#4a3420') : '#2a2420',
       padding: { x: 10, y: hasIcon ? 12 : 6 },
       fixedHeight: hasIcon ? ICON_SIZE : 0,
+      fixedWidth: hasIcon ? 0 : (spec.width ?? 0),
+      align: 'center',
     })
     .setDepth(30);
   const parts: Phaser.GameObjects.GameObject[] = [text];
