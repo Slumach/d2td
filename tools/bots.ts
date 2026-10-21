@@ -207,6 +207,11 @@ function attackParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boolea
 
 /** The next few waves, as the monster mix the bot plays against. */
 const LOOKAHEAD_WAVES = 3;
+/**
+ * Bosses count from further out: the schedule is fixed and the player sees what is coming,
+ * so buying an answer to a boss's immunities ahead of time is ordinary play.
+ */
+const BOSS_LOOKAHEAD_WAVES = 5;
 
 interface Foe {
   /** HP share of this monster across the coming waves. */
@@ -217,17 +222,19 @@ interface Foe {
 /**
  * The coming waves' monsters with their resistances, weighted by total HP. Champions,
  * uniques and bosses count with their mods' resistances, so an immune special (Hell's Magic
- * and Poison Immunes) is a foe the bot has to cover like any other.
+ * and Poison Immunes) is a foe the bot has to cover like any other; a boss counts from
+ * BOSS_LOOKAHEAD_WAVES out.
  */
 function comingFoes(sim: Sim): Foe[] {
   const byKey = new Map<string, { hp: number; resist: Record<Element, number> }>();
   const rules = sim.data.rules;
-  for (let w = sim.state.wave; w < Math.min(sim.data.waves.length, sim.state.wave + LOOKAHEAD_WAVES); w++) {
+  for (let w = sim.state.wave; w < Math.min(sim.data.waves.length, sim.state.wave + BOSS_LOOKAHEAD_WAVES); w++) {
     const wave = sim.data.waves[w]!;
     for (const g of wave.groups) {
+      if (g.rank !== 'boss' && w >= sim.state.wave + LOOKAHEAD_WAVES) continue;
       const d = sim.data.monsters[g.monster]!;
       const rankPct = g.rank === 'champion' ? rules.championHpPct : g.rank === 'unique' ? rules.uniqueHpPct : 0;
-      const each = g.hp ?? avg({ min: d.minHp, max: d.maxHp }) * (wave.hpPermille / 1000) * (1 + rankPct / 100);
+      const each = avg({ min: d.minHp, max: d.maxHp }) * (wave.hpPermille / 1000) * (1 + rankPct / 100);
       const key = `${g.monster}:${g.mods.join(',')}`;
       const foe = byKey.get(key) ?? { hp: 0, resist: { ...d.resist } };
       if (!byKey.has(key)) for (const e of ELEMENTS) foe.resist[e] = withMods(rules, d.resist[e], e, g.mods, g.rank, d.difficulty);

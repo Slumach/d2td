@@ -60,7 +60,7 @@ export function spawnMonsters(sim: Sim): void {
   const s = sim.state;
   while (s.spawns.length > 0 && s.spawns[0]!.tick <= s.tick) {
     const spawn = s.spawns.shift()!;
-    s.monsters.push(createMonster(sim, spawn.def, spawn.wave, spawn.rank, spawn.mods, 0, spawn.hp || undefined));
+    s.monsters.push(createMonster(sim, spawn.def, spawn.wave, spawn.rank, spawn.mods, 0));
   }
 }
 

@@ -10,9 +10,10 @@ export interface Tables {
   skills: TableRow[];
   missiles: TableRow[];
   weapons: TableRow[];
+  superuniques: TableRow[];
 }
 
-export const TABLE_NAMES: readonly (keyof Tables)[] = ['monstats', 'monlvl', 'monumod', 'monseq', 'skills', 'missiles', 'weapons'];
+export const TABLE_NAMES: readonly (keyof Tables)[] = ['monstats', 'monlvl', 'monumod', 'monseq', 'skills', 'missiles', 'weapons', 'superuniques'];
 
 /** An integer column; empty cells are 0. Throws on text so a typo in a column name fails loudly. */
 export function int(row: TableRow, key: string): number {

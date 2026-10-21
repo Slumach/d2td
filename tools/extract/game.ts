@@ -25,8 +25,9 @@ export const CHECKSUM_FILE = 'checksums.json';
  * 3: the switchback road and D2's frontend for the menus.
  * 4: D2R's HUD pieces, and the ground baked for the whole canvas.
  * 5: the Sorceress and Necromancer: heroes, summons, missiles, overlays, icons and sounds.
+ * 6: the Act 1 schedule: every wave monster, boss and pack, superunique palettes, superuniques.txt.
  */
-export const EXTRACT_VERSION = 5;
+export const EXTRACT_VERSION = 6;
 /** What verifyGame reports when the extraction is from an older version of the game. */
 export const OUTDATED = 'version';
 

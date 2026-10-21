@@ -4,6 +4,7 @@ import type { HitFilter, MonsterAuraFx, SkillCommon, TowerBuff } from './archety
 import { idiv } from './fixed.ts';
 import { rollInt } from './rng.ts';
 import type { Rules } from './data.ts';
+import { baseMonsterId } from './difficulty.ts';
 import type { Element, Monster, MonsterMod, Rank, Sim, Targeting, Tower } from './state.ts';
 
 export interface Point {
@@ -54,9 +55,7 @@ export function baseResist(sim: Sim, monster: Monster, element: Element): number
 /** Lives a leak of this monster costs; Andariel's ends the run (all of them). */
 export function leakCost(sim: Sim, m: Pick<Monster, 'rank' | 'def'>): number {
   const e = sim.data.economy;
-  if (m.rank !== 'boss') return e.leakCost[m.rank];
-  const cost = e.bossLeakCost[sim.data.monsters[m.def]?.base ?? m.def];
-  if (cost === undefined) throw new Error(`balance.json bossLeakCost has no ${m.def}`);
+  const cost = m.rank === 'boss' ? (e.bossLeakCost[baseMonsterId(m.def)] ?? e.leakCost.boss) : e.leakCost[m.rank];
   return cost === 'all' ? e.lives : cost;
 }
 
@@ -171,7 +170,7 @@ export function withBonus(amount: number, damagePct: number): number {
 
 export function bounty(sim: Sim, monster: Monster): number {
   const e = sim.data.economy;
-  const mult = monster.rank === 'boss' ? (e.bossBountyMultiplier[monster.def] ?? 1) : e.rankBountyMultiplier[monster.rank];
+  const mult = (monster.rank === 'boss' ? e.bossBountyMultiplier[baseMonsterId(monster.def)] : undefined) ?? e.rankBountyMultiplier[monster.rank];
   const base = monster.level * e.bountyPerLevel * mult;
   return idiv(base * sim.data.waves[monster.wave]!.bountyPermille, 1000);
 }

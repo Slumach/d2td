@@ -6,29 +6,14 @@ import { ARCHETYPES } from './archetypes/index.ts';
 import type { HitFilter, SkillDef, SkillJson } from './archetypes/types.ts';
 import { auraMultiplier, isAura, standardDps, withTierBonus } from './dps.ts';
 import { VELOCITY_TO_UNITS_PER_TICK, UNITS_PER_TILE, d2FramesToTicks, idiv } from './fixed.ts';
+import { DIFFICULTIES, variantId, type DifficultyName } from './difficulty.ts';
 import { ELEMENTS, MONSTER_MODS, type Element, type MonsterMod, type Rank } from './state.ts';
 import { createMap } from './map.ts';
 import { findRow, int, monumodConstant, str, type TableRow, type Tables } from './tables.ts';
 
 export type { TableRow, Tables } from './tables.ts';
 
-/**
- * D2's three difficulties. A monster's Nightmare and Hell stats are their own entries,
- * keyed `${id}@nightmare` and `${id}@hell`, so the sim reads them like any other monster.
- */
-export const DIFFICULTIES = ['normal', 'nightmare', 'hell'] as const;
-export type DifficultyName = (typeof DIFFICULTIES)[number];
-export const DIFFICULTY_NAMES = ['Normal', 'Nightmare', 'Hell'] as const;
-
-export function variantId(id: string, difficulty: number): string {
-  return difficulty === 0 ? id : `${id}@${DIFFICULTIES[difficulty]}`;
-}
-
-/** The monstats id behind a difficulty variant: what sprites, names and sounds key on. */
-export function baseMonsterId(def: string): string {
-  const at = def.indexOf('@');
-  return at < 0 ? def : def.slice(0, at);
-}
+export { DIFFICULTIES, DIFFICULTY_NAMES, baseMonsterId, variantId, type DifficultyName } from './difficulty.ts';
 
 export const MAX_TOWER_LEVEL = 5;
 export const MAX_TIER = 3;
@@ -62,10 +47,32 @@ export interface ResurrectJson {
   sequence: string;
 }
 
+/** One normal wave of the Act 1 schedule: its monster, how it comes, and where D2 has it. */
+export interface WaveJson {
+  monster: string;
+  kind: 'swarm' | 'tank';
+  area: string;
+}
+
+/**
+ * A boss of the schedule, in campaign order (the last one closes the act). A superunique
+ * names its superuniques.txt row; `class` and `minion` repeat what the tables say (the
+ * monstats class and its minion1, or the class itself) so the renderer knows what art to
+ * load, and the build checks them against the tables.
+ */
+export interface BossJson {
+  id: string;
+  superunique?: string;
+  class: string;
+  minion?: string;
+  area: string;
+}
+
 export interface MonstersJson {
-  roster: Record<string, { role: string; resurrect?: ResurrectJson }>;
-  pools: Record<'swarm' | 'tank', { id: string; minWave: number }[]>;
-  bosses: Record<string, string>;
+  /** Monsters with an ability, by monstats id. */
+  roster: Record<string, { resurrect?: ResurrectJson }>;
+  waves: WaveJson[];
+  bosses: BossJson[];
 }
 
 interface WaveKindJson {
@@ -92,8 +99,8 @@ interface ModScheduleJson {
 export interface BalanceJson {
   startingGold: number;
   lives: number;
-  /** Lives a leaked monster costs by rank; a boss by id, where "all" ends the run. */
-  leakCost: Record<'normal' | 'champion' | 'unique', number>;
+  /** Lives a leaked monster costs by rank; bossLeakCost overrides a boss by id, where "all" ends the run. */
+  leakCost: Record<Rank, number>;
   bossLeakCost: Record<string, number | 'all'>;
   buildCost: number;
   /** Cost of the first level-up at T1, T2, T3. */
@@ -105,7 +112,8 @@ export interface BalanceJson {
   evolveCost: number;
   sellRefundPct: number;
   bountyPerLevel: number;
-  rankBountyMultiplier: Record<'normal' | 'champion' | 'unique', number>;
+  /** Bounty multiplier by rank; bossBountyMultiplier overrides a boss by id. */
+  rankBountyMultiplier: Record<Rank, number>;
   bossBountyMultiplier: Record<string, number>;
   /** Compounding per wave after the first. */
   bountyPctPerWave: number;
@@ -132,8 +140,11 @@ export interface BalanceJson {
   blockBreakTicks: number;
   waves: {
     count: number;
-    minTypes: number;
-    maxTypes: number;
+    /**
+     * The act's bosses but the last are spread evenly over these waves, in campaign order;
+     * the last boss closes the act on its final wave.
+     */
+    bossWaves: { first: number; last: number };
     championPackSize: number;
     /**
      * A short wave grows past its base count, one monster at a time up to the cap, until its
@@ -156,8 +167,6 @@ export interface BalanceJson {
    * buildGameData): Nightmare and Hell monsters are tougher than Normal ones, by this much.
    */
   difficultyHpPct: number[];
-  /** Boss HP as a multiple of its wave's average monster HP, by monster id. */
-  bossHpMultiplier: Record<string, number>;
   /**
    * Tier ladders: a tier must reach dpsPct of the tower it replaces; caps by tier. Auras
    * are valued by the multiplier they give a level-5 referenceSkill tower.
@@ -177,6 +186,8 @@ export interface BalanceJson {
       speedPct?: number;
       damagePct?: number;
       resist?: Partial<Record<Element, number>>;
+      /** An immune mod replaces these resistant mods: they never stack (Magic Immune over Magic Resistant). */
+      replaces?: MonsterMod[];
       byDifficulty?: Partial<Record<DifficultyName, { resist?: Partial<Record<Element, number>>; maxResist?: number; championResist?: number }>>;
     }
   >;
@@ -195,11 +206,22 @@ export interface DesignData {
 // ---- resolved game data ----
 
 export interface MonsterDef {
-  /** The difficulty variant's id; `base` is the monstats id. */
+  /**
+   * The difficulty variant's id; `base` is the monstats id its stats and art come from (a
+   * superunique's class). baseMonsterId(id) is the monster or boss without the difficulty.
+   */
   id: string;
   base: string;
   difficulty: number;
   name: string;
+  /** A superunique's own palette (its Utrans), as the atlas variant `su_${boss id}`. */
+  artVariant?: string;
+  /** monstats flying: flyers walk the path for now. */
+  flying: boolean;
+  /** A superunique's mods from superuniques.txt (Mod1 to Mod3). */
+  mods: MonsterMod[];
+  /** A boss's pack: monstats minion1 (or its own class), PartyMin-PartyMax or the superunique's MinGrp-MaxGrp, midway. */
+  minion?: { monster: string; count: number };
   monType: string;
   /**
    * monstats Level (normal): sets the bounty, in every difficulty, so gold follows the
@@ -253,12 +275,12 @@ export interface WaveGroup {
   rank: Rank;
   /** Mods every monster of the group carries, from the schedule. */
   mods: MonsterMod[];
-  /** Fixed HP (1/256) for bosses: a multiple of the wave's average monster HP. */
-  hp?: number;
 }
 
 export interface WaveDef {
-  kind: 'swarm' | 'tank';
+  kind: 'swarm' | 'tank' | 'boss';
+  /** The D2 area the wave's monster comes from. */
+  area: string;
   /** 0 Normal, 1 Nightmare, 2 Hell; and the wave's number within its difficulty, from 1. */
   difficulty: number;
   number: number;
@@ -272,7 +294,7 @@ export interface WaveDef {
 export interface Economy {
   startingGold: number;
   lives: number;
-  leakCost: Record<'normal' | 'champion' | 'unique', number>;
+  leakCost: Record<Rank, number>;
   bossLeakCost: Record<string, number | 'all'>;
   buildCost: number;
   /** levelCosts[tier - 1][n] is the gold to go from level n + 1 to n + 2 in that tier. */
@@ -282,7 +304,7 @@ export interface Economy {
   evolveCost: number;
   sellRefundPct: number;
   bountyPerLevel: number;
-  rankBountyMultiplier: Record<'normal' | 'champion' | 'unique', number>;
+  rankBountyMultiplier: Record<Rank, number>;
   bossBountyMultiplier: Record<string, number>;
   waveClearBonusPct: number;
   earlyCallBonusPct: number;
@@ -344,8 +366,31 @@ const HP_COLUMNS = [
   ['MinHP(H)', 'MaxHP(H)'],
 ];
 
+/** superuniques.txt Mod columns name monumod.txt rows; these are the ones the sim knows. */
+const UNIQUE_MODS: Record<string, MonsterMod> = {
+  strong: 'extraStrong',
+  fast: 'extraFast',
+  curse: 'cursed',
+  resist: 'magicResistant',
+  fire: 'fireEnchanted',
+  cold: 'coldEnchanted',
+  lightning: 'lightningEnchanted',
+  stoneskin: 'stoneSkin',
+};
+
+/** Midway through a min-max range of two table columns. */
+const midway = (row: TableRow, min: string, max: string) => idiv(int(row, min) + int(row, max), 2);
+
+/**
+ * A monster's entry for one difficulty, from monstats (and superuniques.txt for a named
+ * boss: its class's stats, its own name and mods, and the unique HP bonus).
+ */
 export function monsterDef(tables: Tables, design: MonstersJson, id: string, auraRangePerTile: number, difficulty = 0): MonsterDef {
-  const row = findRow(tables.monstats, 'Id', id);
+  const boss = design.bosses.find((b) => b.id === id);
+  const su = boss?.superunique ? findRow(tables.superuniques, 'Superunique', boss.superunique) : undefined;
+  if (boss && su && str(su, 'Class') !== boss.class) throw new Error(`${id}: superuniques.txt class is ${str(su, 'Class')}, not ${boss.class}`);
+  const base = boss?.class ?? id;
+  const row = findRow(tables.monstats, 'Id', base);
   const sfx = SUFFIX[difficulty]!;
   // A difficulty column the row leaves out falls back to Normal's (resistances excepted:
   // an empty resistance is 0, as in the game)
@@ -357,15 +402,43 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
   const lvlCol = (name: string) => (lvlRow[`${name}${sfx}`] !== undefined ? `${name}${sfx}` : name);
   const pct = (column: string, of: string) => Math.max(1, idiv(int(row, column) * int(lvlRow, of), 100)) * 256;
   const [minCol, maxCol] = HP_COLUMNS[difficulty]!;
-  const hpOf = (column: string, normal: string) => pct(row[column] !== undefined ? column : normal, lvlCol('HP'));
+  // A superunique takes monumod's unique HP bonus on its class's HP
+  const hpBonus = su ? monumodConstant(tables, 'Unique HP % Bonus') : 0;
+  const hpOf = (column: string, normal: string) =>
+    idiv(pct(row[column] !== undefined ? column : normal, lvlCol('HP')) * (100 + hpBonus), 100);
   const resist = {} as Record<Element, number>;
   for (const element of ELEMENTS) resist[element] = int(row, `${RESIST_COLUMNS[element]}${sfx}`);
   const resurrect = design.roster[id]?.resurrect;
+
+  const mods: MonsterMod[] = [];
+  for (const column of ['Mod1', 'Mod2', 'Mod3']) {
+    const modId = su ? int(su, column) : 0;
+    if (modId === 0) continue;
+    const name = str(findRow(tables.monumod, 'id', modId), 'uniquemod');
+    const mod = UNIQUE_MODS[name];
+    if (!mod) throw new Error(`${id}: superuniques.txt ${column} is monumod ${name}, which the sim does not know`);
+    mods.push(mod);
+  }
+  // The pack: a superunique's MinGrp-MaxGrp of its class's minion1 (or its own class), a
+  // monstats boss's PartyMin-PartyMax of its minion1
+  let minion: MonsterDef['minion'];
+  if (boss) {
+    const count = su ? midway(su, 'MinGrp', 'MaxGrp') : midway(row, 'PartyMin', 'PartyMax');
+    const monster = str(row, 'minion1') || (su ? base : '');
+    if (count > 0 && monster) minion = { monster, count };
+    if ((minion?.monster ?? undefined) !== boss.minion) {
+      throw new Error(`${id}: the tables give its pack as ${minion?.monster ?? 'none'}, monsters.json says ${boss.minion ?? 'none'}`);
+    }
+  }
   return {
     id: variantId(id, difficulty),
-    base: id,
+    base,
     difficulty,
-    name: str(row, 'NameStr') || id,
+    name: su ? str(su, 'Name') : str(row, 'NameStr') || id,
+    ...(su ? { artVariant: `su_${id}` } : {}),
+    flying: int(row, 'flying') === 1,
+    mods,
+    ...(minion ? { minion } : {}),
     monType: str(row, 'MonType'),
     level,
     minHp: hpOf(minCol!, 'minHP'),
@@ -387,6 +460,29 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
   };
 }
 
+/**
+ * A mod list as a monster carries it: each mod once, and an immune mod in place of the
+ * resistant mods it replaces (balance.json monsterMods replaces), never both.
+ */
+export function resolveMods(balance: BalanceJson, mods: MonsterMod[]): MonsterMod[] {
+  const unique = [...new Set(mods)];
+  const replaced = new Set(unique.flatMap((m) => balance.monsterMods[m].replaces ?? []));
+  return unique.filter((m) => !replaced.has(m));
+}
+
+/**
+ * The wave numbers the bosses stand on, in order: all but the last spread evenly over
+ * bossWaves first to last (rounded to the nearest wave), the last on the final wave.
+ */
+export function bossWaveNumbers(balance: BalanceJson, bosses: number): number[] {
+  const { first, last } = balance.waves.bossWaves;
+  const spread = bosses - 1;
+  const out: number[] = [];
+  for (let i = 0; i < spread; i++) out.push(spread === 1 ? first : first + idiv(i * (last - first) * 2 + (spread - 1), (spread - 1) * 2));
+  out.push(balance.waves.count);
+  return out;
+}
+
 /** Compounds a percent per step: permille[0] = 1000, permille[n] = permille[n-1] * pct / 100. */
 export function compound(pct: number, steps: number): number[] {
   const out = [1000];
@@ -395,10 +491,11 @@ export function compound(pct: number, steps: number): number[] {
 }
 
 /**
- * Wave n (1-based): odd waves are swarms, even waves tanks. Each mixes 2 to 4 monster
- * types from its pool (those unlocked by minWave), rotating through the pool so
- * consecutive waves differ. Champion packs, uniques and boss mods come from the
- * balance.json schedule; a boss's HP is a multiple of its wave's average monster HP.
+ * The act's schedule (monsters.json): the bosses on bossWaveNumbers, each with its D2 pack,
+ * and the normal waves in between, one monster each in the order the player meets them.
+ * A normal wave is a stream of its monster, packs for swarms and one at a time for tanks.
+ * Champion packs and uniques (the wave's own monster) and every special's mods come from the
+ * balance.json schedule, with the difficulty's additions and the immune-over-resistant rule.
  */
 export function generateWaves(
   balance: BalanceJson,
@@ -407,88 +504,82 @@ export function generateWaves(
   defs: Record<string, MonsterDef>,
   difficulty = 0,
 ): WaveDef[] {
+  const plan = balance.waves.count;
+  if (count > plan) throw new Error(`the Act 1 schedule has ${plan} waves, not ${count}`);
+  const bossAt = new Map(bossWaveNumbers(balance, monsters.bosses.length).map((n, i) => [n, monsters.bosses[i]!]));
+  if (monsters.waves.length !== plan - bossAt.size) {
+    throw new Error(`monsters.json has ${monsters.waves.length} normal waves; the schedule needs ${plan - bossAt.size}`);
+  }
   const hp = compound(balance.hpPctPerWave, count);
   const bounty = compound(balance.bountyPctPerWave, count);
   const pathUnits = createMap().length;
   const w = balance.waves;
+  const schedule = balance.modSchedule;
+  const added = schedule.added[DIFFICULTIES[difficulty]!] ?? {};
+  // A rank's scheduled mods on a wave: Normal's, the difficulty's on top, resolved
+  const modsOf = (rank: keyof ModScheduleJson, key: string, own: MonsterMod[] = []): MonsterMod[] =>
+    resolveMods(balance, [...own, ...(schedule[rank][key] ?? []), ...(added[rank]?.[key] ?? [])]);
   const waves: WaveDef[] = [];
+  let normalIndex = 0;
   for (let n = 1; n <= count; n++) {
-    const kind = n % 2 === 1 ? 'swarm' : 'tank';
-    const spec = w[kind];
-    const pool = monsters.pools[kind].filter((p) => p.minWave <= n).map((p) => variantId(p.id, difficulty));
-    const types = Math.min(pool.length, w.minTypes + (Math.floor(n / 2) % (w.maxTypes - w.minTypes + 1)));
-    const picked = Array.from({ length: types }, (_, i) => pool[(Math.floor(n / 2) + i) % pool.length]!);
-    // A stream that takes turns through the picked types: one monster at a time for tanks,
-    // packs of min to max for swarms with a gap between packs
-    const pack = spec.pack;
-    const stream = (size: number): WaveGroup[] => {
-      const out: WaveGroup[] = [];
-      const add = (monster: string, count: number, delayTicks: number) =>
-        out.push({ monster, count, spacingTicks: spec.spacingTicks, rank: 'normal', mods: [], ...(delayTicks > 0 ? { delayTicks } : {}) });
-      if (pack) {
-        for (let k = 0, left = size; left > 0; k++) {
-          const c = Math.min(left, pack.min + (k % (pack.max - pack.min + 1)));
-          add(picked[k % picked.length]!, c, k === 0 ? 0 : pack.gapTicks - spec.spacingTicks);
-          left -= c;
-        }
-      } else {
-        for (let i = 0; i < size; i++) add(picked[i % picked.length]!, 1, 0);
-      }
-      return out;
-    };
-    const span = (gs: WaveGroup[]) => gs.reduce((t, g) => t + (g.delayTicks ?? 0) + g.count * g.spacingTicks, 0) - spec.spacingTicks;
-    // How long the slowest monster actually in the stream takes to walk the whole path
-    const walk = (gs: WaveGroup[]) => idiv(pathUnits, Math.max(1, Math.min(...gs.map((g) => defs[g.monster]!.speed))));
-    let size = Math.min(spec.cap, spec.base + Math.floor(n / spec.addEvery));
-    let groups = stream(size);
-    while (size < spec.cap && span(groups) + walk(groups) < w.targetTicks) groups = stream(++size);
-    const counts = new Map<string, number>();
-    for (const g of groups) counts.set(g.monster, (counts.get(g.monster) ?? 0) + g.count);
-    // Champions, uniques and bosses arrive after a pause, like a pack of their own
-    const pause = (pack?.gapTicks ?? spec.spacingTicks * 2) - spec.spacingTicks;
-
     const key = String(n);
-    const lead = picked[0]!;
-    const schedule = balance.modSchedule;
-    const added = schedule.added[DIFFICULTIES[difficulty]!] ?? {};
-    // The difficulty's mods on top of Normal's, each mod once
-    const modsOf = (rank: keyof ModScheduleJson): MonsterMod[] | undefined => {
-      const base = schedule[rank][key];
-      const more = added[rank]?.[key];
-      return base || more ? [...new Set([...(base ?? []), ...(more ?? [])])] : undefined;
-    };
-    const uniqueMods = modsOf('uniques');
-    const championMods = modsOf('champions');
-    if (uniqueMods) groups.push({ monster: lead, count: 1, spacingTicks: spec.spacingTicks, delayTicks: pause, rank: 'unique', mods: uniqueMods });
-    if (championMods) {
-      groups.push({ monster: lead, count: w.championPackSize, spacingTicks: spec.spacingTicks, delayTicks: pause, rank: 'champion', mods: championMods });
-    }
+    const groups: WaveGroup[] = [];
+    const boss = bossAt.get(n);
+    const wave = boss ? undefined : monsters.waves[normalIndex++]!;
+    const kind: WaveDef['kind'] = boss ? 'boss' : wave!.kind;
+    const spec = w[boss ? 'swarm' : wave!.kind];
+    // Specials arrive after a pause, like a pack of their own
+    const pause = (spec.pack?.gapTicks ?? spec.spacingTicks * 2) - spec.spacingTicks;
 
-    const bossId = monsters.bosses[key];
-    const boss = bossId && variantId(bossId, difficulty);
-    if (boss && bossId) {
-      // The wall scales with the curve: a multiple of this wave's average monster HP
-      let total = 0;
-      let monstersInWave = 0;
-      for (const [id, c] of counts) {
-        const d = defs[id]!;
-        total += idiv((d.minHp + d.maxHp) * hp[n - 1]!, 2000) * c;
-        monstersInWave += c;
+    if (boss) {
+      // The boss's pack walks first, the boss behind it
+      const def = defs[variantId(boss.id, difficulty)]!;
+      if (def.minion) {
+        groups.push({ monster: variantId(def.minion.monster, difficulty), count: def.minion.count, spacingTicks: spec.spacingTicks, rank: 'normal', mods: [] });
       }
-      const multiplier = balance.bossHpMultiplier[bossId];
-      if (multiplier === undefined) throw new Error(`balance.json bossHpMultiplier has no ${bossId}`);
       groups.push({
-        monster: boss,
+        monster: def.id,
         count: 1,
         spacingTicks: spec.spacingTicks,
-        delayTicks: pause,
+        ...(groups.length > 0 ? { delayTicks: pause } : {}),
         rank: 'boss',
-        mods: modsOf('bosses') ?? [],
-        hp: Math.max(256, idiv(total, monstersInWave) * multiplier),
+        mods: modsOf('bosses', key, def.mods),
       });
+    } else {
+      const monster = variantId(wave!.monster, difficulty);
+      // A stream of the wave's monster: one at a time for tanks, packs of min to max for
+      // swarms with a gap between packs
+      const pack = spec.pack;
+      const stream = (size: number): WaveGroup[] => {
+        const out: WaveGroup[] = [];
+        const add = (c: number, delayTicks: number) =>
+          out.push({ monster, count: c, spacingTicks: spec.spacingTicks, rank: 'normal', mods: [], ...(delayTicks > 0 ? { delayTicks } : {}) });
+        if (pack) {
+          for (let k = 0, left = size; left > 0; k++) {
+            const c = Math.min(left, pack.min + (k % (pack.max - pack.min + 1)));
+            add(c, k === 0 ? 0 : pack.gapTicks - spec.spacingTicks);
+            left -= c;
+          }
+        } else {
+          for (let i = 0; i < size; i++) add(1, 0);
+        }
+        return out;
+      };
+      const span = (gs: WaveGroup[]) => gs.reduce((t, g) => t + (g.delayTicks ?? 0) + g.count * g.spacingTicks, 0) - spec.spacingTicks;
+      // How long the monster takes to walk the whole path
+      const walk = idiv(pathUnits, Math.max(1, defs[monster]!.speed));
+      let size = Math.min(spec.cap, spec.base + Math.floor(n / spec.addEvery));
+      let normal = stream(size);
+      while (size < spec.cap && span(normal) + walk < w.targetTicks) normal = stream(++size);
+      groups.push(...normal);
+      if (schedule.uniques[key] || added.uniques?.[key]) {
+        groups.push({ monster, count: 1, spacingTicks: spec.spacingTicks, delayTicks: pause, rank: 'unique', mods: modsOf('uniques', key) });
+      }
+      if (schedule.champions[key] || added.champions?.[key]) {
+        groups.push({ monster, count: w.championPackSize, spacingTicks: spec.spacingTicks, delayTicks: pause, rank: 'champion', mods: modsOf('champions', key) });
+      }
     }
-
-    waves.push({ kind, difficulty, number: n, hpPermille: hp[n - 1]!, bountyPermille: bounty[n - 1]!, groups });
+    waves.push({ kind, area: boss ? boss.area : wave!.area, difficulty, number: n, hpPermille: hp[n - 1]!, bountyPermille: bounty[n - 1]!, groups });
   }
   return waves;
 }
@@ -715,16 +806,16 @@ export function buildGameData(
   const m = design.monsters;
   const monsterIds = new Set([
     ...Object.keys(m.roster),
-    ...Object.values(m.pools).flatMap((pool) => pool.map((p) => p.id)),
-    ...Object.values(m.bosses),
+    ...m.waves.map((w) => w.monster),
+    ...m.bosses.flatMap((b) => [b.id, ...(b.minion ? [b.minion] : [])]),
   ]);
   const start = options.difficulty ?? 0;
   const last = options.loop ? DIFFICULTIES.length - 1 : start;
   const monsters: Record<string, MonsterDef> = {};
   const waves: WaveDef[] = [];
   const normal = [...monsterIds].map((id) => monsterDef(tables, m, id, design.balance.auraRangePerTile));
-  // Averaged over the wave pools: a boss's HP is a multiple of its wave's average anyway
-  const pooled = new Set(Object.values(m.pools).flatMap((pool) => pool.map((p) => p.id)));
+  // Averaged over the normal waves' monsters, so the bosses do not drag the scale
+  const pooled = new Set(m.waves.map((w) => w.monster));
   const average = (defs: MonsterDef[]) => defs.filter((d) => pooled.has(d.base)).reduce((n, d) => n + d.minHp + d.maxHp, 0);
   for (let d = start; d <= last; d++) {
     const defs = d === 0 ? normal : [...monsterIds].map((id) => monsterDef(tables, m, id, design.balance.auraRangePerTile, d));

@@ -473,7 +473,8 @@ export class GameScene extends Phaser.Scene {
       const { x: px, y: py } = project(m.x, m.y);
       let view = this.monsters.get(m.id);
       if (!view) {
-        const texture = monsterKey(baseMonsterId(m.def), m.rank);
+        const def = this.sim.data.monsters[m.def]!;
+        const texture = monsterKey(def.base, m.rank, def.artVariant);
         if (!this.textures.exists(texture)) continue;
         view = { sprite: this.sprite(texture, px, py), texture, def: m.def, x: m.x, y: m.y, facing: 's', mode: '' };
         this.monsters.set(m.id, view);
@@ -529,7 +530,7 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       fresh.splice(fresh.indexOf(corpse), 1);
-      this.sounds.death(baseMonsterId(view.def));
+      this.sounds.death(this.sim.data.monsters[view.def]?.base ?? baseMonsterId(view.def));
       this.sounds.gold();
       view.sprite.clearTint().setDepth(DEPTH.corpses);
       view.sprite.anims.resume();
@@ -789,7 +790,7 @@ export class GameScene extends Phaser.Scene {
       const { x: px, y: py } = project(u.x, u.y);
       let view = this.summons.get(u.id);
       if (!view) {
-        const texture = u.kind === 'revive' ? monsterKey(baseMonsterId(u.def), 'normal') : monsterKey(baseMonsterId(u.def), 'normal');
+        const texture = monsterKey(this.sim.data.monsters[u.def]?.base ?? u.def, 'normal');
         if (!this.textures.exists(texture)) continue;
         const sprite = this.sprite(texture, px, py);
         if (u.kind === 'revive') {

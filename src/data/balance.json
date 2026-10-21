@@ -1,8 +1,8 @@
 {
   "startingGold": 300,
   "lives": 20,
-  "leakCost": { "normal": 1, "champion": 2, "unique": 3 },
-  "bossLeakCost": { "bloodraven": 5, "andariel": "all" },
+  "leakCost": { "normal": 1, "champion": 2, "unique": 3, "boss": 5 },
+  "bossLeakCost": { "andariel": "all" },
   "buildCost": 150,
   "levelCostBase": [40, 80, 120],
   "levelCostPctPerLevel": 220,
@@ -10,8 +10,8 @@
   "evolveCost": 400,
   "sellRefundPct": 60,
   "bountyPerLevel": 2,
-  "rankBountyMultiplier": { "normal": 1, "champion": 3, "unique": 5 },
-  "bossBountyMultiplier": { "bloodraven": 20, "andariel": 50 },
+  "rankBountyMultiplier": { "normal": 1, "champion": 3, "unique": 5, "boss": 20 },
+  "bossBountyMultiplier": { "andariel": 50 },
   "bountyPctPerWave": 125,
   "hpPctPerWave": 124,
   "waveClearBonusPct": 0,
@@ -27,8 +27,7 @@
   "blockBreakTicks": 120,
   "waves": {
     "count": 30,
-    "minTypes": 2,
-    "maxTypes": 4,
+    "bossWaves": { "first": 4, "last": 27 },
     "championPackSize": 3,
     "targetTicks": 1180,
     "swarm": { "base": 7, "addEvery": 3, "cap": 24, "spacingTicks": 8, "pack": { "min": 3, "max": 4, "gapTicks": 80 } },
@@ -38,28 +37,22 @@
     "champions": { "5": ["extraFast"], "15": ["stoneSkin"], "25": ["magicResistant"] },
     "uniques": {
       "10": ["extraStrong", "stoneSkin"],
-      "20": ["stoneSkin", "magicResistant"],
-      "30": ["extraFast", "magicResistant"]
+      "20": ["stoneSkin", "magicResistant"]
     },
     "bosses": {
-      "10": ["extraFast"],
-      "20": ["extraFast", "magicResistant"],
       "30": ["magicResistant", "extraStrong"]
     },
     "added": {
       "nightmare": {
         "champions": { "5": ["poisonResistant"], "15": ["poisonResistant"], "25": ["poisonResistant"] },
-        "uniques": { "10": ["magicResistant"], "20": ["magicResistant"] },
-        "bosses": { "30": ["magicResistant", "poisonResistant"] }
+        "bosses": { "12": ["magicResistant"], "19": ["magicResistant"], "30": ["poisonResistant"] }
       },
       "hell": {
-        "champions": { "5": ["poisonImmune"], "15": ["poisonImmune"], "25": ["poisonImmune"] },
-        "uniques": { "10": ["magicImmune"], "20": ["magicImmune", "physicalImmune"] },
-        "bosses": { "30": ["magicImmune", "poisonImmune", "physicalImmune"] }
+        "champions": { "5": ["stoneSkin", "poisonImmune"], "15": ["stoneSkin", "poisonImmune"], "25": ["stoneSkin", "poisonImmune"] },
+        "bosses": { "12": ["magicImmune"], "19": ["magicImmune", "physicalImmune"], "30": ["magicImmune", "poisonImmune", "physicalImmune"] }
       }
     }
   },
-  "bossHpMultiplier": { "bloodraven": 15, "andariel": 40 },
   "tierLadder": { "dpsPct": 110, "caps": { "2": 24, "3": 30 }, "referenceSkill": "holy-bolt", "debuffTargetResist": 50 },
   "monsterMods": {
     "extraFast": { "speedPct": 50 },
@@ -72,10 +65,14 @@
       }
     },
     "magicResistant": { "resist": { "fire": 40, "cold": 40, "ltng": 40, "mag": 75 } },
-    "magicImmune": { "resist": { "mag": 100 } },
+    "magicImmune": { "resist": { "mag": 100 }, "replaces": ["magicResistant"] },
     "poisonResistant": { "resist": { "pois": 40 } },
-    "poisonImmune": { "resist": { "pois": 100 } },
-    "physicalImmune": { "resist": { "phys": 100 } }
+    "poisonImmune": { "resist": { "pois": 100 }, "replaces": ["poisonResistant"] },
+    "physicalImmune": { "resist": { "phys": 100 }, "replaces": ["stoneSkin"] },
+    "fireEnchanted": { "resist": { "fire": 75 } },
+    "coldEnchanted": { "resist": { "cold": 75 } },
+    "lightningEnchanted": { "resist": { "ltng": 75 } },
+    "cursed": {}
   },
   "skillOverrides": {
     "holy-bolt": { "fullDamageTo": "undead", "otherDamagePct": 40 }

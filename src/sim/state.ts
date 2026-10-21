@@ -21,7 +21,11 @@ export type MonsterMod =
   | 'magicImmune'
   | 'poisonResistant'
   | 'poisonImmune'
-  | 'physicalImmune';
+  | 'physicalImmune'
+  | 'fireEnchanted'
+  | 'coldEnchanted'
+  | 'lightningEnchanted'
+  | 'cursed';
 export const MONSTER_MODS: readonly MonsterMod[] = [
   'extraFast',
   'extraStrong',
@@ -31,6 +35,10 @@ export const MONSTER_MODS: readonly MonsterMod[] = [
   'poisonResistant',
   'poisonImmune',
   'physicalImmune',
+  'fireEnchanted',
+  'coldEnchanted',
+  'lightningEnchanted',
+  'cursed',
 ];
 
 export type Command =
@@ -196,8 +204,6 @@ export interface Spawn {
   wave: number;
   rank: Rank;
   mods: MonsterMod[];
-  /** Fixed HP (1/256) for bosses, 0 to roll from monstats. */
-  hp: number;
 }
 
 /** A monster that walked off the end of a zone that passes leaks on (team mode). */

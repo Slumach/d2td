@@ -10,6 +10,7 @@ import { step } from './sim.ts';
 import type { Element, Monster } from './state.ts';
 import { addMonster, freeze, placeTower, testSim, ticks } from './testkit.ts';
 import { auraMultiplier } from './dps.ts';
+import { resolveMods } from './data.ts';
 import { DESIGN } from '../data/design.ts';
 
 const DESIGN_TARGET = DESIGN.balance.tierLadder.debuffTargetResist;
@@ -143,25 +144,42 @@ describe('Hell walls', () => {
     }
   });
 
-  it('the Hell schedule: Magic Immune uniques on 10 and 20, Poison Immune champions, Andariel both', () => {
+  it("the walls land on the boss and champion waves: Hell's immunities, Nightmare's resistances", () => {
     const groups = (sim: ReturnType<typeof testSim>, n: number, rank: string) =>
       sim.data.waves[n - 1]!.groups.filter((g) => g.rank === rank).map((g) => g.mods);
     const h = hell();
-    for (const n of [10, 20]) expect(groups(h, n, 'unique')[0]).toContain('magicImmune');
-    expect(groups(h, 30, 'unique')[0]).not.toContain('magicImmune');
-    for (const n of [5, 15, 25]) expect(groups(h, n, 'champion')[0]).toContain('poisonImmune');
-    expect(groups(h, 30, 'boss')[0]).toEqual(expect.arrayContaining(['magicImmune', 'poisonImmune']));
-    // Normal's mods stay, each mod once
-    expect(groups(h, 5, 'champion')[0]).toEqual(['extraFast', 'poisonImmune']);
-    expect(groups(h, 20, 'unique')[0]).toEqual(['stoneSkin', 'magicResistant', 'magicImmune', 'physicalImmune']);
-    expect(groups(h, 30, 'boss')[0]).toContain('physicalImmune');
-    expect(groups(nightmare(), 20, 'unique')[0]).not.toContain('physicalImmune');
-    // Nightmare gets the resistant versions
+    // Every Hell champion pack: Stone Skin (lifting a champion to physical 100) and Poison Immune
+    for (const n of [5, 15, 25]) expect(groups(h, n, 'champion')[0]).toEqual(expect.arrayContaining(['stoneSkin', 'poisonImmune']));
+    expect(groups(h, 5, 'champion')[0]).toEqual(['extraFast', 'stoneSkin', 'poisonImmune']);
+    // The uniques keep Normal's mods
+    expect(groups(h, 10, 'unique')[0]).toEqual(['extraStrong', 'stoneSkin']);
+    expect(groups(h, 12, 'boss')[0]).toContain('magicImmune');
+    expect(groups(h, 19, 'boss')[0]).toEqual(expect.arrayContaining(['magicImmune', 'physicalImmune']));
+    // Andariel: Magic Immune in place of Magic Resistant, never both
+    expect(groups(h, 30, 'boss')[0]).toEqual(['extraStrong', 'magicImmune', 'poisonImmune', 'physicalImmune']);
     const n = nightmare();
     expect(groups(n, 5, 'champion')[0]).toEqual(['extraFast', 'poisonResistant']);
-    expect(groups(n, 10, 'unique')[0]).toEqual(['extraStrong', 'stoneSkin', 'magicResistant']);
+    expect(groups(n, 12, 'boss')[0]).toContain('magicResistant');
     expect(groups(n, 30, 'boss')[0]).toEqual(['magicResistant', 'extraStrong', 'poisonResistant']);
     expect(groups(testSim(fixtureGameData(30)), 5, 'champion')[0]).toEqual(['extraFast']);
+  });
+
+  it("Hell's Andariel is physical, magic and poison immune, with her raw fire, cold and lightning", () => {
+    const sim = hell();
+    const mods = sim.data.waves[29]!.groups.find((g) => g.rank === 'boss')!.mods;
+    const andariel = addMonster(sim, 'andariel@hell', 0, { rank: 'boss', mods });
+    for (const e of ['phys', 'mag', 'pois'] as const) expect(damageAgainst(sim, andariel, 1000, e, ALL)).toBe(0);
+    const raw = sim.data.monsters['andariel@hell']!.resist;
+    for (const e of ['fire', 'cold', 'ltng'] as const) expect(effectiveResist(sim, andariel, e)).toBe(raw[e]);
+  });
+
+  it('an immune mod replaces its resistant mod and never stacks with it', () => {
+    const sim = hell();
+    const both = addMonster(sim, 'quillrat1@hell', 0, { mods: resolveMods(DESIGN.balance, ['magicResistant', 'magicImmune']) });
+    expect(both.mods).toEqual(['magicImmune']);
+    expect(effectiveResist(sim, both, 'mag')).toBe(100);
+    expect(effectiveResist(sim, both, 'fire')).toBe(sim.data.monsters['quillrat1@hell']!.resist.fire);
+    expect(resolveMods(DESIGN.balance, ['stoneSkin', 'physicalImmune', 'poisonResistant', 'poisonImmune'])).toEqual(['physicalImmune', 'poisonImmune']);
   });
 
   it('the immune mods are immunities, the resistant one is not', () => {

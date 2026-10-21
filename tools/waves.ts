@@ -49,7 +49,10 @@ for (const n of waves) {
     tally.set(key, (tally.get(key) ?? 0) + g.count);
   }
   const normal = def.groups.filter((g) => g.rank === 'normal');
-  const shape = def.kind === 'swarm' ? `packs ${normal.map((g) => g.count).join('-')}` : `one every ${secs(normal[0]!.spacingTicks)} s`;
+  const shape =
+    def.kind === 'boss' ? (normal.length > 0 ? `a pack of ${normal[0]!.count}, then the boss` : 'the boss alone')
+    : def.kind === 'swarm' ? `packs ${normal.map((g) => g.count).join('-')}`
+    : `one every ${secs(normal[0]!.spacingTicks)} s`;
   const groups = `${[...tally].map(([k, c]) => `${c}x ${k}`).join(', ')}; ${shape}`;
   console.log(`Wave ${n} (${def.kind}): ${count} monsters; spawns over ${secs(lastSpawn - first)} s; first spawn to last exit ${secs(end - first)} s`);
   console.log(`  ${groups}`);

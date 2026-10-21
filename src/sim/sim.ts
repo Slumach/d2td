@@ -122,7 +122,7 @@ function callWave(sim: Sim): void {
   for (const group of waveDef.groups) {
     offset += group.delayTicks ?? 0;
     for (let i = 0; i < group.count; i++) {
-      s.spawns.push({ tick: s.tick + offset, def: group.monster, wave, rank: group.rank, mods: [...group.mods], hp: group.hp ?? 0 });
+      s.spawns.push({ tick: s.tick + offset, def: group.monster, wave, rank: group.rank, mods: [...group.mods] });
       offset += group.spacingTicks;
       count++;
     }

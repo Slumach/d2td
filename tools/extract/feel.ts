@@ -8,7 +8,7 @@
 // src/data/render/sounds.json says which events have sounds; every file name comes from the
 // tables, never typed in.
 
-import monstersJson from '../../src/data/monsters.json';
+import { MONSTER_ART } from '../../src/data/monsterArt.ts';
 import soundsJson from '../../src/data/render/sounds.json';
 import { DESIGN } from '../../src/data/design.ts';
 import { decodeDc6, decodeDc6Frame } from '../lib/dc6.ts';
@@ -106,7 +106,7 @@ export function soundJob(source: DataSource): SpriteJob {
     ui: { click: resolve(soundsJson.ui.click), hover: resolve(soundsJson.ui.hover), music: resolve(soundsJson.ui.music, 'global/music/')[0] ?? null },
     volumePct: soundsJson.volumePct,
   };
-  const ids = [...new Set([...Object.keys(monstersJson.roster), ...Object.values(monstersJson.bosses), ...sprites.summons.ids])];
+  const ids = [...new Set([...MONSTER_ART, ...sprites.summons.ids])];
   for (const id of ids) {
     const mon = monstats.find((r) => r['Id'] === id);
     const snd = mon && monsounds.find((r) => r['Id'] === column(mon, 'MonSound'));

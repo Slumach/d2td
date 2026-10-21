@@ -27,7 +27,7 @@ import { composite, isGlowEffect, layerAlpha, type CompositeLayer } from './comp
 import { column, readTable } from './paths.ts';
 import type { DataSource } from './source.ts';
 
-import monstersJson from '../../src/data/monsters.json';
+import { BOSS_ART, MONSTER_ART, SUPERUNIQUE_ART } from '../../src/data/monsterArt.ts';
 import sprites from '../../src/data/render/sprites.json';
 import { MISSILE_INDEX, artMissiles, artOverlays } from '../../src/render/art.ts';
 
@@ -302,9 +302,11 @@ function compositeMode(shared: Shared, spec: CompositeSpec, palette: Uint8Array)
 
 function monsterJobs(shared: Shared): SpriteJob[] {
   const { source, pl2 } = shared;
-  const bosses = new Set(Object.values(monstersJson.bosses));
+  const bosses = new Set(BOSS_ART);
   const summons = new Set(sprites.summons.ids);
-  const ids = [...new Set([...Object.keys(monstersJson.roster), ...bosses, ...summons])];
+  const ids = [...new Set([...MONSTER_ART, ...summons])];
+  // A superunique wears its class's art in its own palette: palshift.dat row Utrans
+  const superuniques = readTable(source, 'superuniques.txt');
   const jobs: SpriteJob[] = [];
   for (const id of ids) {
     const row = shared.monstats.find((r) => r['Id'] === id);
@@ -314,13 +316,16 @@ function monsterJobs(shared: Shared): SpriteJob[] {
     const weaponClass = column(ex, 'BaseW').toLowerCase();
     const folder = `monsters/${token}`;
     const modes = summons.has(id) ? sprites.summons.modes : sprites.monsterModes;
-    const specs = modes.map((mode) => ({ folder, token, mode, weaponClass, variant: (c: string) => firstVariant(ex, c) }));
+    // A mode the base weapon class lacks plays hand to hand (a Goatman's death is hth)
+    const cofFor = (mode: string, wc: string) => `global/${folder}/cof/${token}${mode}${wc}.cof`.toLowerCase();
+    const classFor = (mode: string) => (!source.exists(cofFor(mode, weaponClass)) && source.exists(cofFor(mode, 'hth')) ? 'hth' : weaponClass);
+    const specs = modes.map((mode) => ({ folder, token, mode, weaponClass: classFor(mode), variant: (c: string) => firstVariant(ex, c) }));
     const transLvl = Number(row['TransLvl'] || 0);
     const palshift = `global/${folder}/cof/palshift.dat`;
     const inputs = [...(transLvl > 0 ? [palshift] : [])];
     for (const spec of specs) {
       const found = compositeInputs(source, spec);
-      if (!found) inputs.push(`global/${folder}/cof/${token}${spec.mode}${weaponClass}.cof`.toLowerCase());
+      if (!found) inputs.push(cofFor(spec.mode, spec.weaponClass));
       else inputs.push(found.cofPath, ...Object.values(found.layers));
     }
     const variants: [string, ShiftSpec | undefined][] = bosses.has(id) || summons.has(id)
@@ -330,6 +335,13 @@ function monsterJobs(shared: Shared): SpriteJob[] {
           ['champion', sprites.colorShifts.champion],
           ['unique', sprites.colorShifts.unique],
         ];
+    const named = SUPERUNIQUE_ART.filter((su) => su.class === id).map((su) => {
+      const row = superuniques.find((r) => r['Superunique'] === su.superunique);
+      if (!row) throw new Error(`superuniques.txt has no ${su.superunique}`);
+      return { name: `su_${su.id}`, utrans: Number(row['Utrans'] || 0) };
+    });
+    if (named.length > 0) inputs.push('global/excel/superuniques.txt');
+    if (named.some((n) => n.utrans > 0) && !inputs.includes(palshift) && source.exists(palshift)) inputs.push(palshift);
     jobs.push({
       label: `monster ${id}`,
       inputs,
@@ -340,6 +352,13 @@ function monsterJobs(shared: Shared): SpriteJob[] {
           const palette = remapped(shared.palette, shift ? [...own, pl2Shift(pl2, shift)] : own);
           const modes = specs.map((s) => compositeMode(shared, s, palette));
           out.push(...atlasFrom(`monsters/${id}/${variant}`, modes, DIRECTION_NAMES_8, { monster: id, variant }));
+        }
+        for (const { name, utrans } of named) {
+          // Utrans picks a row of the class's palshift.dat in place of its own TransLvl row
+          const rows = utrans > 0 && source.exists(palshift) ? source.read(palshift) : undefined;
+          const shiftRow = rows && rows.length >= (utrans + 1) * 256 ? [rows.slice(utrans * 256, utrans * 256 + 256)] : own;
+          const modes = specs.map((s) => compositeMode(shared, s, remapped(shared.palette, shiftRow)));
+          out.push(...atlasFrom(`monsters/${id}/${name}`, modes, DIRECTION_NAMES_8, { monster: id, variant: name }));
         }
         return out;
       },

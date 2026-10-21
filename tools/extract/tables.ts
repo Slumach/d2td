@@ -6,7 +6,7 @@ import { readTable } from './paths.ts';
 import type { DataSource } from './source.ts';
 
 /** The tables the sim reads (assets-extracted/data/*.json). */
-export const TABLES = ['monstats', 'monlvl', 'monumod', 'monseq', 'skills', 'missiles', 'weapons'] as const;
+export const TABLES = ['monstats', 'monlvl', 'monumod', 'monseq', 'skills', 'missiles', 'weapons', 'superuniques'] as const;
 
 const INTEGER = /^-?\d+$/;
 

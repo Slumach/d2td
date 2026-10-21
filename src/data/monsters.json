@@ -1,33 +1,41 @@
 {
   "roster": {
-    "fallen1": { "role": "swarm" },
     "fallenshaman1": {
-      "role": "support",
       "resurrect": { "monType": "fallen", "chanceColumn": "aip1", "rangeColumn": "aip4", "sequence": "seq_shamanresurrect" }
-    },
-    "zombie1": { "role": "tank" },
-    "skeleton1": { "role": "undead" },
-    "quillrat1": { "role": "fast" },
-    "corruptrogue1": { "role": "standard" },
-    "fallen4": { "role": "fastSwarm" },
-    "brute1": { "role": "heavyTank" },
-    "bloodraven": { "role": "miniBoss" },
-    "andariel": { "role": "actBoss" }
+    }
   },
-  "pools": {
-    "swarm": [
-      { "id": "fallen1", "minWave": 1 },
-      { "id": "quillrat1", "minWave": 1 },
-      { "id": "fallenshaman1", "minWave": 3 },
-      { "id": "corruptrogue1", "minWave": 5 },
-      { "id": "fallen4", "minWave": 9 }
-    ],
-    "tank": [
-      { "id": "zombie1", "minWave": 1 },
-      { "id": "skeleton1", "minWave": 2 },
-      { "id": "corruptrogue1", "minWave": 4 },
-      { "id": "brute1", "minWave": 6 }
-    ]
-  },
-  "bosses": { "10": "bloodraven", "20": "bloodraven", "30": "andariel" }
+  "waves": [
+    { "monster": "fallen1", "kind": "swarm", "area": "Blood Moor" },
+    { "monster": "quillrat1", "kind": "swarm", "area": "Blood Moor" },
+    { "monster": "zombie1", "kind": "tank", "area": "Blood Moor" },
+    { "monster": "skeleton1", "kind": "tank", "area": "Burial Grounds" },
+    { "monster": "brute1", "kind": "tank", "area": "Cold Plains" },
+    { "monster": "corruptrogue1", "kind": "swarm", "area": "Cold Plains" },
+    { "monster": "cr_lancer1", "kind": "tank", "area": "Cold Plains" },
+    { "monster": "goatman1", "kind": "tank", "area": "Stony Field" },
+    { "monster": "foulcrow1", "kind": "swarm", "area": "Stony Field" },
+    { "monster": "corruptrogue2", "kind": "swarm", "area": "Dark Wood" },
+    { "monster": "quillrat2", "kind": "swarm", "area": "Dark Wood" },
+    { "monster": "sk_archer1", "kind": "tank", "area": "Dark Wood" },
+    { "monster": "goatman2", "kind": "tank", "area": "Black Marsh" },
+    { "monster": "foulcrow2", "kind": "swarm", "area": "Black Marsh" },
+    { "monster": "corruptrogue4", "kind": "swarm", "area": "Barracks" },
+    { "monster": "goatman5", "kind": "tank", "area": "Barracks" },
+    { "monster": "skmage_fire2", "kind": "tank", "area": "Jail" },
+    { "monster": "wraith2", "kind": "tank", "area": "Jail" },
+    { "monster": "skeleton2", "kind": "tank", "area": "Tristram" },
+    { "monster": "bighead2", "kind": "swarm", "area": "Cathedral" },
+    { "monster": "zombie3", "kind": "tank", "area": "Catacombs" },
+    { "monster": "vampire5", "kind": "tank", "area": "Catacombs" }
+  ],
+  "bosses": [
+    { "id": "bloodraven", "class": "bloodraven", "minion": "zombie2", "area": "Burial Grounds" },
+    { "id": "rakanishu", "superunique": "Rakanishu", "class": "fallen2", "minion": "fallen2", "area": "Stony Field" },
+    { "id": "treehead", "superunique": "Treehead WoodFist", "class": "brute2", "minion": "brute2", "area": "Dark Wood" },
+    { "id": "countess", "superunique": "The Countess", "class": "corruptrogue3", "minion": "corruptrogue3", "area": "Forgotten Tower" },
+    { "id": "griswold", "superunique": "Griswold", "class": "griswold", "area": "Tristram" },
+    { "id": "smith", "superunique": "The Smith", "class": "smith", "area": "Barracks" },
+    { "id": "boneash", "superunique": "Boneash", "class": "skmage_pois3", "area": "Cathedral" },
+    { "id": "andariel", "class": "andariel", "area": "Catacombs" }
+  ]
 }

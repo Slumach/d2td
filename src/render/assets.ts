@@ -3,7 +3,7 @@
 
 import Phaser from 'phaser';
 
-import monstersJson from '../data/monsters.json';
+import { BOSS_ART, SUPERUNIQUE_ART, WAVE_MONSTER_ART } from '../data/monsterArt.ts';
 import sprites from '../data/render/sprites.json';
 import { MISSILE_INDEX, artOverlays } from './art.ts';
 
@@ -38,13 +38,16 @@ export interface IconIndex {
 const ICON_FOLDERS = ['paladin', 'sorceress', 'necromancer'];
 const iconIndexKey = (folder: string) => `icons:${folder}`;
 
-export const BOSSES = new Set(Object.values(monstersJson.bosses));
 export const SUMMON_IDS = sprites.summons.ids;
-export const MONSTER_IDS = [...new Set([...Object.keys(monstersJson.roster), ...BOSSES])];
 
-export function monsterKey(id: string, rank: string): string {
-  const variant = BOSSES.has(id) || SUMMON_IDS.includes(id) || rank === 'normal' || rank === 'boss' ? 'normal' : rank;
-  return `mon:${id}:${variant}`;
+/**
+ * A monster's atlas: its monstats art (`base`) in its rank's palette, or a superunique's
+ * own palette. Only wave monsters have champion and unique palettes.
+ */
+export function monsterKey(base: string, rank: string, artVariant?: string): string {
+  if (artVariant) return `mon:${base}:${artVariant}`;
+  const variant = WAVE_MONSTER_ART.includes(base) && (rank === 'champion' || rank === 'unique') ? rank : 'normal';
+  return `mon:${base}:${variant}`;
 }
 
 interface HeroClass {
@@ -87,10 +90,11 @@ export function preloadAssets(scene: Phaser.Scene): void {
   const atlas = (key: string, json: string, dir: string) => {
     if (!scene.textures.exists(key)) scene.load.multiatlas(key, json, dir);
   };
-  for (const id of MONSTER_IDS) {
-    const variants = BOSSES.has(id) ? ['normal'] : ['normal', 'champion', 'unique'];
-    for (const v of variants) atlas(`mon:${id}:${v}`, `monsters/${id}/${v}.json`, `monsters/${id}/`);
+  for (const id of WAVE_MONSTER_ART) {
+    for (const v of ['normal', 'champion', 'unique']) atlas(`mon:${id}:${v}`, `monsters/${id}/${v}.json`, `monsters/${id}/`);
   }
+  for (const id of BOSS_ART) atlas(`mon:${id}:normal`, `monsters/${id}/normal.json`, `monsters/${id}/`);
+  for (const su of SUPERUNIQUE_ART) atlas(`mon:${su.class}:su_${su.id}`, `monsters/${su.class}/su_${su.id}.json`, `monsters/${su.class}/`);
   for (const id of SUMMON_IDS) atlas(`mon:${id}:normal`, `monsters/${id}/normal.json`, `monsters/${id}/`);
   for (const [cls, h] of Object.entries(HEROES)) {
     for (const line of Object.keys(h.lines)) {
