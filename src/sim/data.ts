@@ -92,8 +92,9 @@ interface ModScheduleJson {
 export interface BalanceJson {
   startingGold: number;
   lives: number;
-  leakCost: number;
-  bossLeakCost: number;
+  /** Lives a leaked monster costs by rank; a boss by id, where "all" ends the run. */
+  leakCost: Record<'normal' | 'champion' | 'unique', number>;
+  bossLeakCost: Record<string, number | 'all'>;
   buildCost: number;
   /** Cost of the first level-up at T1, T2, T3. */
   levelCostBase: number[];
@@ -127,6 +128,8 @@ export interface BalanceJson {
   corpseLifetimeTicks: number;
   monsterAttackTicks: number;
   blockRangeTenths: number;
+  /** A monster held this long by blockers breaks through, shoving the summon aside. */
+  blockBreakTicks: number;
   waves: {
     count: number;
     minTypes: number;
@@ -159,14 +162,24 @@ export interface BalanceJson {
    * Tier ladders: a tier must reach dpsPct of the tower it replaces; caps by tier. Auras
    * are valued by the multiplier they give a level-5 referenceSkill tower.
    */
-  tierLadder: { dpsPct: number; caps: Record<string, number>; referenceSkill: string };
+  tierLadder: { dpsPct: number; caps: Record<string, number>; referenceSkill: string; debuffTargetResist: number };
   /**
    * D2 hardcodes these mod effects, so they are design values; resistances add to the
    * monster's own. House rule: Magic Resistant also resists magic (D2's only covers fire,
    * cold and lightning), the wall for pure Holy builds. Magic Immune and Poison Immune are
-   * ours (Hell's walls): +100, so the monster is immune, not just resistant.
+   * ours (Hell's walls): +100, so the monster is immune, not just resistant. byDifficulty
+   * overrides a mod's resistances on Nightmare or Hell: maxResist is as far as the mod takes
+   * a monster, championResist is where it lifts a champion to.
    */
-  monsterMods: Record<MonsterMod, { speedPct?: number; damagePct?: number; resist?: Partial<Record<Element, number>> }>;
+  monsterMods: Record<
+    MonsterMod,
+    {
+      speedPct?: number;
+      damagePct?: number;
+      resist?: Partial<Record<Element, number>>;
+      byDifficulty?: Partial<Record<DifficultyName, { resist?: Partial<Record<Element, number>>; maxResist?: number; championResist?: number }>>;
+    }
+  >;
   skillOverrides: Record<string, Partial<HitFilter>>;
 }
 
@@ -259,8 +272,8 @@ export interface WaveDef {
 export interface Economy {
   startingGold: number;
   lives: number;
-  leakCost: number;
-  bossLeakCost: number;
+  leakCost: Record<'normal' | 'champion' | 'unique', number>;
+  bossLeakCost: Record<string, number | 'all'>;
   buildCost: number;
   /** levelCosts[tier - 1][n] is the gold to go from level n + 1 to n + 2 in that tier. */
   levelCosts: number[][];
@@ -278,17 +291,26 @@ export interface Economy {
   waveGapTicks: number;
 }
 
+/** A mod's resistances on one difficulty (see BalanceJson monsterMods). */
+export interface ModResist {
+  add: Partial<Record<Element, number>>;
+  maxResist?: number;
+  championResist?: number;
+}
+
 export interface Rules {
   chillPct: number;
   staticFloorPct: number[];
   corpseLifetimeTicks: number;
   monsterAttackTicks: number;
   blockRangeUnits: number;
+  blockBreakTicks: number;
   /** monumod.txt constants. */
   championHpPct: number;
   uniqueHpPct: number;
   championDamagePct: number;
-  mods: Record<MonsterMod, { speedPct: number; damagePct: number; resist: Partial<Record<Element, number>> }>;
+  /** Per mod: its speed and damage, and its resistances by difficulty. */
+  mods: Record<MonsterMod, { speedPct: number; damagePct: number; resist: ModResist[] }>;
 }
 
 export interface GameData {
@@ -497,7 +519,11 @@ export function rulesFrom(tables: Tables, balance: BalanceJson): Rules {
   const mods = {} as Rules['mods'];
   for (const mod of MONSTER_MODS) {
     const m = balance.monsterMods[mod];
-    mods[mod] = { speedPct: m.speedPct ?? 0, damagePct: m.damagePct ?? 0, resist: m.resist ?? {} };
+    const resist = DIFFICULTIES.map((d): ModResist => {
+      const over = m.byDifficulty?.[d];
+      return { add: over?.resist ?? m.resist ?? {}, maxResist: over?.maxResist, championResist: over?.championResist };
+    });
+    mods[mod] = { speedPct: m.speedPct ?? 0, damagePct: m.damagePct ?? 0, resist };
   }
   return {
     chillPct: balance.chillPct,
@@ -505,6 +531,7 @@ export function rulesFrom(tables: Tables, balance: BalanceJson): Rules {
     corpseLifetimeTicks: balance.corpseLifetimeTicks,
     monsterAttackTicks: balance.monsterAttackTicks,
     blockRangeUnits: idiv(balance.blockRangeTenths * UNITS_PER_TILE, 10),
+    blockBreakTicks: balance.blockBreakTicks,
     championHpPct: monumodConstant(tables, 'Champion HP % Bonus'),
     uniqueHpPct: monumodConstant(tables, 'Unique HP % Bonus'),
     championDamagePct: monumodConstant(tables, 'Champion Damage % Bonus'),
@@ -583,7 +610,7 @@ function buildLadders(
   weaponFor: (id: string) => string | undefined,
   checkTierBonus: boolean,
 ): Ladder[] {
-  const { dpsPct, caps, referenceSkill } = design.balance.tierLadder;
+  const { dpsPct, caps, referenceSkill, debuffTargetResist } = design.balance.tierLadder;
   const reference = skills[referenceSkill];
   if (!reference) throw new Error(`tierLadder referenceSkill ${referenceSkill} is not a T1 or non-class skill`);
   const top = MAX_TOWER_LEVEL - 1;
@@ -602,7 +629,8 @@ function buildLadders(
           const probe = resolveAt(Array(MAX_TOWER_LEVEL).fill(1));
           // Compare like with like: auras against auras, attacks against attacks
           const metric: Ladder['metric'] = isAura(probe) && before.every(isAura) ? 'aura' : 'dps';
-          const value = (s: SkillDef, lvl: number) => (metric === 'aura' ? auraMultiplier(s, lvl, reference) : standardDps(s, lvl));
+          const value = (s: SkillDef, lvl: number) =>
+            metric === 'aura' ? auraMultiplier(s, lvl, reference, debuffTargetResist) : standardDps(s, lvl);
           const previous = Math.max(...before.map((s) => value(s, top)));
           const floor = Math.ceil((previous * dpsPct) / 100);
 

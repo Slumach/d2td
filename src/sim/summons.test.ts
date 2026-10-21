@@ -33,7 +33,7 @@ describe('summons', () => {
     }
     // Two mages never stand on one spot
     expect(new Set(mages.map((m) => `${m.x},${m.y}`)).size).toBe(mages.length);
-    expect(blockerAhead(sim, 0, sim.map.length)).toBeUndefined();
+    expect(blockerAhead(sim, { dist: 0, rank: 'normal', brokeThrough: [] }, sim.map.length)).toBeUndefined();
     const m = addMonster(sim, 'brute1', BESIDE - 1500, { hp: 1_000_000 });
     freeze(m);
     ticks(sim, 60);
@@ -51,7 +51,7 @@ describe('summons', () => {
     const skill = sim.data.skills['revive'] as SummonDef;
     expect(ally).toMatchObject({ kind: 'revive', def: 'brute1', dist: body.dist });
     expect(ally.maxHp).toBe(Math.trunc((body.maxHp * skill.levels[4]!.hpPct) / 100));
-    expect(blockerAhead(sim, body.dist - 2000, body.dist)).toBe(ally);
+    expect(blockerAhead(sim, { dist: body.dist - 2000, rank: 'normal', brokeThrough: [] }, body.dist)).toBe(ally);
     ticks(sim, skill.durationTicks - 1);
     expect(sim.state.summons).toHaveLength(1);
     step(sim, []);

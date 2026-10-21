@@ -22,7 +22,8 @@ import { auraSources } from '../src/sim/auras.ts';
 import { EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, type GameData } from '../src/sim/data.ts';
 import { tileCenter, isPathTile } from '../src/sim/map.ts';
 import { activeSkill, canBuild, createSim, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
-import type { Command, Element, Sim, TimedCommand, Tower } from '../src/sim/state.ts';
+import { leakCost, withMods } from '../src/sim/combat.ts';
+import { ELEMENTS, type Command, type Element, type Rank, type Sim, type TimedCommand, type Tower } from '../src/sim/state.ts';
 
 export type Strategy = 'BOLT' | 'HOLY' | 'TWOLINE' | 'PALADIN' | 'SORC' | 'NECRO' | 'MIXED3';
 /** The Normal balance targets' bots; the class bots play the Hell gate. */
@@ -229,7 +230,7 @@ function comingFoes(sim: Sim): Foe[] {
       const each = g.hp ?? avg({ min: d.minHp, max: d.maxHp }) * (wave.hpPermille / 1000) * (1 + rankPct / 100);
       const key = `${g.monster}:${g.mods.join(',')}`;
       const foe = byKey.get(key) ?? { hp: 0, resist: { ...d.resist } };
-      if (!byKey.has(key)) for (const mod of g.mods) for (const [e, v] of Object.entries(rules.mods[mod].resist) as [Element, number][]) foe.resist[e] += v;
+      if (!byKey.has(key)) for (const e of ELEMENTS) foe.resist[e] = withMods(rules, d.resist[e], e, g.mods, g.rank, d.difficulty);
       foe.hp += each * g.count;
       byKey.set(key, foe);
     }
@@ -737,19 +738,18 @@ export interface WaveMargin {
 /** Watches state tick by tick to log margins, without touching the sim. */
 class MarginLog {
   readonly margins: WaveMargin[] = [];
-  private prev = new Map<number, { wave: number; dist: number; rank: string }>();
+  private prev = new Map<number, { wave: number; dist: number; rank: Rank; def: string }>();
   private lost = new Map<number, number>();
   private done = new Set<number>();
 
   observe(sim: Sim): void {
     const s = sim.state;
-    const now = new Map(s.monsters.map((m) => [m.id, { wave: m.wave, dist: m.dist, rank: m.rank }]));
-    const e = sim.data.economy;
+    const now = new Map(s.monsters.map((m) => [m.id, { wave: m.wave, dist: m.dist, rank: m.rank, def: m.def }]));
     for (const [id, m] of this.prev) {
       if (now.has(id)) continue;
       // Gone this tick: leaked if it was on the last stretch and lives dropped, else killed where it stood
       const leaked = m.dist + 400 >= sim.map.length;
-      if (leaked) this.lost.set(m.wave, (this.lost.get(m.wave) ?? 0) + (m.rank === 'boss' ? e.bossLeakCost : e.leakCost));
+      if (leaked) this.lost.set(m.wave, (this.lost.get(m.wave) ?? 0) + leakCost(sim, m));
       const w = s.waves[m.wave];
       if (w && w.remaining === 0 && !this.done.has(m.wave)) {
         this.done.add(m.wave);

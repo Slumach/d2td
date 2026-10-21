@@ -1,11 +1,14 @@
 // Monster spawning, abilities, movement and leaks.
 
 import { blockerAhead } from './archetypes/summon.ts';
-import { dealRaw, distSq, monsterFx, removeMonster } from './combat.ts';
+import { dealRaw, distSq, leakCost, monsterFx, removeMonster } from './combat.ts';
 import { idiv } from './fixed.ts';
 import { positionAt } from './map.ts';
 import { rollInt } from './rng.ts';
 import type { Monster, MonsterMod, PassedMonster, Rank, Sim } from './state.ts';
+
+/** How long a shoved summon shows it, for the renderer. */
+const SHOVE_TICKS = 10;
 
 /** HP bonus percent by rank, from monumod.txt. Bosses carry their HP in monstats. */
 function rankHpPct(sim: Sim, rank: Rank): number {
@@ -47,6 +50,9 @@ export function createMonster(sim: Sim, def: string, wave: number, rank: Rank, m
     abilityCooldown: d.aiDelayTicks,
     castTicks: 0,
     castCorpse: 0,
+    blockedBy: 0,
+    blockedTicks: 0,
+    brokeThrough: [],
   };
 }
 
@@ -135,9 +141,21 @@ export function updateMonsters(sim: Sim): void {
     if (resurrect(sim, m)) continue;
 
     const speed = speedOf(sim, m);
-    const blocker = blockerAhead(sim, m.dist, m.dist + speed);
-    if (blocker) {
+    const blocker = blockerAhead(sim, m, m.dist + speed);
+    if (blocker && m.blockedBy !== blocker.id) {
+      m.blockedBy = blocker.id;
+      m.blockedTicks = 0;
+    }
+    if (blocker && m.blockedTicks >= rules.blockBreakTicks) {
+      // Held long enough: it breaks through and shoves the summon aside, which survives
+      m.brokeThrough = [...m.brokeThrough.filter((id) => s.summons.some((u) => u.id === id)), blocker.id];
+      m.blockedBy = 0;
+      m.blockedTicks = 0;
+      blocker.shovedTicks = SHOVE_TICKS;
+      m.dist += speed;
+    } else if (blocker) {
       // Stop at the blocker and fight it
+      m.blockedTicks++;
       m.dist = Math.max(m.dist, blocker.dist - rules.blockRangeUnits);
       if (m.attackCooldown === 0) {
         const hit = rollInt(s.rng, m.minDamage, m.maxDamage);
@@ -145,6 +163,8 @@ export function updateMonsters(sim: Sim): void {
         m.attackCooldown = rules.monsterAttackTicks;
       }
     } else {
+      m.blockedBy = 0;
+      m.blockedTicks = 0;
       m.dist += speed;
     }
     const p = positionAt(sim.map, m.dist);
@@ -153,9 +173,8 @@ export function updateMonsters(sim: Sim): void {
   }
 
   for (const m of s.monsters.filter((x) => x.dist >= sim.map.length)) {
-    const e = sim.data.economy;
     if (sim.passLeaks) s.passed.push({ def: m.def, wave: m.wave, rank: m.rank, mods: [...m.mods], hp: m.hp, maxHp: m.maxHp });
-    else s.lives = Math.max(0, s.lives - (m.rank === 'boss' ? e.bossLeakCost : e.leakCost));
+    else s.lives = Math.max(0, s.lives - leakCost(sim, m));
     s.leaks++;
     removeMonster(sim, m);
   }

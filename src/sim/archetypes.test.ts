@@ -126,9 +126,8 @@ describe('archetypes', () => {
     placeTower(sim, 2, 3, 'vengeance', { tier: 3 });
     const m = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000, mods: ['stoneSkin'] });
     freeze(m);
-    sim.data.rules.mods.stoneSkin.resist.phys = 100;
+    sim.data.rules.mods.stoneSkin.resist[0]!.add = { phys: 100 };
     step(sim, []);
-    sim.data.rules.mods.stoneSkin.resist.phys = 50;
     expect(m.hp).toBeLessThan(1_000_000);
   });
 

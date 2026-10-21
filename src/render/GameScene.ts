@@ -10,6 +10,7 @@ import { menuMusic, preloadFrontend } from '../launcher/frontend.ts';
 import { MpSession } from '../launcher/session.ts';
 import { Lockstep } from '../net/lockstep.ts';
 import type { LobbyPlayer } from '../net/protocol.ts';
+import { leakCost } from '../sim/combat.ts';
 import { baseMonsterId, buildGameData, DIFFICULTY_NAMES, MAX_TOWER_LEVEL, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
 import { standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
@@ -87,6 +88,8 @@ const CHILL_TINT = 0xa8d4ff;
 const POISON_TINT = 0x9ae07a;
 /** Revived corpses fight for the player; a pale tint tells them from the wave. */
 const REVIVED_TINT = 0xd0ffd0;
+/** How far a shoved summon is pushed sideways at first, in screen pixels. */
+const SHOVE_PX = 14;
 /** Milliseconds per sim tick, for effects timed to the sim. */
 const TICK_MS = 1000 / TICKS_PER_SECOND;
 
@@ -819,7 +822,9 @@ export class GameScene extends Phaser.Scene {
       } else if (!rising && !view.sprite.anims.isPlaying) {
         this.playIfChanged(view.sprite, animKey(view.texture, 'NU', view.facing), false);
       }
-      view.sprite.setPosition(px, py).setDepth(DEPTH.units + py / 1000);
+      // A monster that broke through shoved it: it stumbles aside and back
+      const shove = u.shovedTicks > 0 ? Math.round((SHOVE_PX * u.shovedTicks) / 10) : 0;
+      view.sprite.setPosition(px + shove, py).setDepth(DEPTH.units + py / 1000);
     }
     for (const [id, view] of this.summons) {
       if (seen.has(id)) continue;
@@ -984,11 +989,20 @@ export class GameScene extends Phaser.Scene {
     if (!def) return undefined;
     const nice = (id: string) => (data.monsters[id]?.name ?? id).replace(/([a-z])([A-Z])/g, '$1 $2');
     const mod = (m: string) => m.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
+    // What letting a special through costs: lives each, or the whole run
+    const leak = (g: WaveDef['groups'][number]) => {
+      if (g.rank === 'boss' && data.economy.bossLeakCost[baseMonsterId(g.monster)] === 'all') return 'a leak ends the run';
+      const n = leakCost(this.sim, { rank: g.rank, def: g.monster });
+      return `a leak costs ${n} ${n === 1 ? 'life' : 'lives'}${g.count > 1 ? ' each' : ''}`;
+    };
     const normal = new Map<string, number>();
     const special: string[] = [];
     for (const g of def.groups) {
       if (g.rank === 'normal') normal.set(g.monster, (normal.get(g.monster) ?? 0) + g.count);
-      else special.push(`${g.rank === 'boss' ? 'Boss' : g.rank === 'unique' ? 'Unique' : `${g.count} champion`}: ${nice(g.monster)}${g.mods.length ? ` (${g.mods.map(mod).join(', ')})` : ''}`);
+      else {
+        const who = `${g.rank === 'boss' ? 'Boss' : g.rank === 'unique' ? 'Unique' : `${g.count} champion`}: ${nice(g.monster)}`;
+        special.push(`${who}${g.mods.length ? ` (${g.mods.map(mod).join(', ')})` : ''}`, `  ${leak(g)}`);
+      }
     }
     const lines = [...[...normal].map(([id, n]) => `${n} ${nice(id)}`), ...special, '', `Kills so far: ${this.sim.state.kills}`];
     return { title: `Next: ${DIFFICULTY_NAMES[def.difficulty]} wave ${def.number}`, body: lines.join('\n') };

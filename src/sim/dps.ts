@@ -7,7 +7,8 @@
 //   balance.json tierLadder.referenceSkill) against that same target, per mille:
 //     damage %             x (100 + damage) / 100
 //     attack speed %       the neighbour's interval shortened by that attack speed
-//     resistance cut       x (100 + cut) / 100, as taken against a 0% resist target
+//     resistance cut       against a target at balance.json debuffTargetResist (50%):
+//                          x (100 - (50 - cut)) / (100 - 50), resistance floored at -100
 //     slow %               x 100 / (100 - slow), extra time under fire
 //     added fire           x (hit + fire) / hit, against the neighbour's average hit
 // Curses count like debuff auras.
@@ -84,8 +85,12 @@ function averageHit(reference: SkillDef): number {
   return l.min !== undefined && l.max !== undefined ? Math.max(1, avg(l as DamageRange)) : 1;
 }
 
-/** The DPS multiplier (per mille) an aura gives the reference neighbour. */
-export function auraMultiplier(skill: SkillDef, lvl: number, reference: SkillDef): number {
+/**
+ * The DPS multiplier (per mille) an aura gives the reference neighbour. A resistance cut is
+ * worth what it does to a resistant target (`debuffResist` percent): against a plain
+ * monster a cut past its 0% looks smaller than it plays.
+ */
+export function auraMultiplier(skill: SkillDef, lvl: number, reference: SkillDef, debuffResist = 0): number {
   let m = PER;
   const times = (pct: number) => {
     m = idiv(m * (100 + pct), 100);
@@ -100,7 +105,8 @@ export function auraMultiplier(skill: SkillDef, lvl: number, reference: SkillDef
   } else if (skill.archetype === 'debuff') {
     const l = skill.levels[lvl]!;
     const cuts = Object.values(l.resistDown).map((v) => v ?? 0);
-    times(cuts.length > 0 ? Math.max(...cuts) : 0);
+    const after = Math.max(-100, debuffResist - (cuts.length > 0 ? Math.max(...cuts) : 0));
+    m = idiv(m * (100 - after), 100 - debuffResist);
     m = idiv(m * 100, 100 - Math.min(90, l.slowPct));
   } else if (skill.archetype === 'control') {
     const slow = Math.min(90, skill.levels[lvl]!.slowPct);
@@ -110,8 +116,8 @@ export function auraMultiplier(skill: SkillDef, lvl: number, reference: SkillDef
 }
 
 /** What a tier-up compares: DPS for attack skills, the neighbour multiplier for auras. */
-export function ladderMetric(skill: SkillDef, lvl: number, reference: SkillDef): number {
-  return isAura(skill) ? auraMultiplier(skill, lvl, reference) : standardDps(skill, lvl);
+export function ladderMetric(skill: SkillDef, lvl: number, reference: SkillDef, debuffResist = 0): number {
+  return isAura(skill) ? auraMultiplier(skill, lvl, reference, debuffResist) : standardDps(skill, lvl);
 }
 
 const scaled = (r: DamageRange, permille: number): DamageRange => ({ min: idiv(r.min * permille, PER), max: idiv(r.max * permille, PER) });

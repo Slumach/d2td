@@ -50,8 +50,8 @@ describe('damage and resistance', () => {
     const stone = addMonster(sim, 'zombie1', 0, { mods: ['stoneSkin'] });
     const magic = addMonster(sim, 'zombie1', 0, { mods: ['magicResistant'] });
     const mods = sim.data.rules.mods;
-    expect(effectiveResist(sim, stone, 'phys')).toBe(mods.stoneSkin.resist.phys);
-    expect(effectiveResist(sim, magic, 'fire')).toBe(mods.magicResistant.resist.fire);
+    expect(effectiveResist(sim, stone, 'phys')).toBe(mods.stoneSkin.resist[0]!.add.phys);
+    expect(effectiveResist(sim, magic, 'fire')).toBe(mods.magicResistant.resist[0]!.add.fire);
     // House rule: Magic Resistant also resists magic
     expect(effectiveResist(sim, magic, 'mag')).toBe(75);
     expect(effectiveResist(sim, stone, 'mag')).toBe(0);

@@ -46,7 +46,7 @@ describe('team match', () => {
     run(match, 2);
     z2!.state.monsters[0]!.dist = z2!.map.length - 1;
     run(match, 2);
-    expect(livesOf(match, 0)).toBe(data.economy.lives - data.economy.leakCost);
+    expect(livesOf(match, 0)).toBe(data.economy.lives - data.economy.leakCost.normal);
     expect(livesOf(match, 2)).toBe(livesOf(match, 0));
   });
 

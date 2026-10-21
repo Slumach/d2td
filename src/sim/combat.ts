@@ -3,7 +3,8 @@
 import type { HitFilter, MonsterAuraFx, SkillCommon, TowerBuff } from './archetypes/types.ts';
 import { idiv } from './fixed.ts';
 import { rollInt } from './rng.ts';
-import type { Element, Monster, Sim, Targeting, Tower } from './state.ts';
+import type { Rules } from './data.ts';
+import type { Element, Monster, MonsterMod, Rank, Sim, Targeting, Tower } from './state.ts';
 
 export interface Point {
   x: number;
@@ -26,11 +27,37 @@ export function monsterFx(sim: Sim, monster: Monster): MonsterAuraFx {
   return sim.fx.monsters[monster.id] ?? NO_FX;
 }
 
+/**
+ * A resistance with the mods on top, on one difficulty. A mod adds its amount, but never
+ * takes the monster past its maxResist (Stone Skin on Nightmare and Hell stops short of
+ * immune); on a champion, championResist lifts the resistance to at least that.
+ */
+export function withMods(rules: Rules, resist: number, element: Element, mods: readonly MonsterMod[], rank: Rank, difficulty: number): number {
+  for (const mod of mods) {
+    const r = rules.mods[mod].resist[difficulty]!;
+    const add = r.add[element] ?? 0;
+    if (add === 0) continue;
+    const before = resist;
+    resist += add;
+    if (r.maxResist !== undefined) resist = Math.min(resist, Math.max(before, r.maxResist));
+    if (r.championResist !== undefined && rank === 'champion') resist = Math.max(resist, r.championResist);
+  }
+  return resist;
+}
+
 /** Resistance before auras: monstats plus the monster's mods. */
 export function baseResist(sim: Sim, monster: Monster, element: Element): number {
-  let resist = sim.data.monsters[monster.def]!.resist[element];
-  for (const mod of monster.mods) resist += sim.data.rules.mods[mod].resist[element] ?? 0;
-  return resist;
+  const def = sim.data.monsters[monster.def]!;
+  return withMods(sim.data.rules, def.resist[element], element, monster.mods, monster.rank, def.difficulty);
+}
+
+/** Lives a leak of this monster costs; Andariel's ends the run (all of them). */
+export function leakCost(sim: Sim, m: Pick<Monster, 'rank' | 'def'>): number {
+  const e = sim.data.economy;
+  if (m.rank !== 'boss') return e.leakCost[m.rank];
+  const cost = e.bossLeakCost[sim.data.monsters[m.def]?.base ?? m.def];
+  if (cost === undefined) throw new Error(`balance.json bossLeakCost has no ${m.def}`);
+  return cost === 'all' ? e.lives : cost;
 }
 
 /**

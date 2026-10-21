@@ -1,8 +1,8 @@
 {
   "startingGold": 300,
   "lives": 20,
-  "leakCost": 1,
-  "bossLeakCost": 5,
+  "leakCost": { "normal": 1, "champion": 2, "unique": 3 },
+  "bossLeakCost": { "bloodraven": 5, "andariel": "all" },
   "buildCost": 150,
   "levelCostBase": [40, 80, 120],
   "levelCostPctPerLevel": 220,
@@ -24,6 +24,7 @@
   "corpseLifetimeTicks": 200,
   "monsterAttackTicks": 25,
   "blockRangeTenths": 6,
+  "blockBreakTicks": 120,
   "waves": {
     "count": 30,
     "minTypes": 2,
@@ -53,21 +54,28 @@
       },
       "hell": {
         "champions": { "5": ["poisonImmune"], "15": ["poisonImmune"], "25": ["poisonImmune"] },
-        "uniques": { "10": ["magicImmune"], "20": ["magicImmune"] },
-        "bosses": { "30": ["magicImmune", "poisonImmune"] }
+        "uniques": { "10": ["magicImmune"], "20": ["magicImmune", "physicalImmune"] },
+        "bosses": { "30": ["magicImmune", "poisonImmune", "physicalImmune"] }
       }
     }
   },
   "bossHpMultiplier": { "bloodraven": 15, "andariel": 40 },
-  "tierLadder": { "dpsPct": 110, "caps": { "2": 24, "3": 30 }, "referenceSkill": "holy-bolt" },
+  "tierLadder": { "dpsPct": 110, "caps": { "2": 24, "3": 30 }, "referenceSkill": "holy-bolt", "debuffTargetResist": 50 },
   "monsterMods": {
     "extraFast": { "speedPct": 50 },
     "extraStrong": { "damagePct": 100 },
-    "stoneSkin": { "resist": { "phys": 50 } },
+    "stoneSkin": {
+      "resist": { "phys": 50 },
+      "byDifficulty": {
+        "nightmare": { "resist": { "phys": 80 }, "maxResist": 99 },
+        "hell": { "resist": { "phys": 80 }, "maxResist": 99, "championResist": 100 }
+      }
+    },
     "magicResistant": { "resist": { "fire": 40, "cold": 40, "ltng": 40, "mag": 75 } },
     "magicImmune": { "resist": { "mag": 100 } },
     "poisonResistant": { "resist": { "pois": 40 } },
-    "poisonImmune": { "resist": { "pois": 100 } }
+    "poisonImmune": { "resist": { "pois": 100 } },
+    "physicalImmune": { "resist": { "phys": 100 } }
   },
   "skillOverrides": {
     "holy-bolt": { "fullDamageTo": "undead", "otherDamagePct": 40 }

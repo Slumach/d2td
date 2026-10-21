@@ -13,7 +13,15 @@ export type Targeting = 'first' | 'last' | 'strongest' | 'weakest' | 'closest';
 export const TARGETING_MODES: readonly Targeting[] = ['first', 'last', 'strongest', 'weakest', 'closest'];
 
 export type Rank = 'normal' | 'champion' | 'unique' | 'boss';
-export type MonsterMod = 'extraFast' | 'extraStrong' | 'stoneSkin' | 'magicResistant' | 'magicImmune' | 'poisonResistant' | 'poisonImmune';
+export type MonsterMod =
+  | 'extraFast'
+  | 'extraStrong'
+  | 'stoneSkin'
+  | 'magicResistant'
+  | 'magicImmune'
+  | 'poisonResistant'
+  | 'poisonImmune'
+  | 'physicalImmune';
 export const MONSTER_MODS: readonly MonsterMod[] = [
   'extraFast',
   'extraStrong',
@@ -22,6 +30,7 @@ export const MONSTER_MODS: readonly MonsterMod[] = [
   'magicImmune',
   'poisonResistant',
   'poisonImmune',
+  'physicalImmune',
 ];
 
 export type Command =
@@ -74,6 +83,10 @@ export interface Monster {
   /** A raiser mid-cast stands still; the corpse rises when this reaches 0. */
   castTicks: number;
   castCorpse: number;
+  /** The blocker holding it and for how long; the blockers it has broken through. */
+  blockedBy: number;
+  blockedTicks: number;
+  brokeThrough: number[];
 }
 
 /** A curse on a monster: the skill and tower level it was cast at, and how long it has left. */
@@ -161,6 +174,8 @@ export interface Summon {
   ticksLeft: number;
   /** The monster it last attacked, for the renderer. */
   targetId: number;
+  /** Counts down after a monster breaks through and shoves it aside, for the renderer. */
+  shovedTicks: number;
 }
 
 export interface Corpse {

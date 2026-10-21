@@ -9,6 +9,10 @@ import { speedOf } from './monsters.ts';
 import { step } from './sim.ts';
 import type { Element, Monster } from './state.ts';
 import { addMonster, freeze, placeTower, testSim, ticks } from './testkit.ts';
+import { auraMultiplier } from './dps.ts';
+import { DESIGN } from '../data/design.ts';
+
+const DESIGN_TARGET = DESIGN.balance.tierLadder.debuffTargetResist;
 
 // The tower stands at tile (2, 4); a monster at path distance 3000 is beside it.
 const BESIDE = 3000;
@@ -102,9 +106,9 @@ describe('Hell walls', () => {
     const lr = (sim.data.skills['lower-resist'] as DebuffDef).levels[4]!.resistDown;
     const amp = (sim.data.skills['amplify-damage'] as DebuffDef).levels[4]!.resistDown.phys!;
     const dec = (sim.data.skills['decrepify'] as DebuffDef).levels[4]!.resistDown.phys!;
-    // Fire 100 from the (H) column; stone skin twice is physical 100
+    // Fire 100 from the (H) column; Physical Immune is physical 100
     const fallen = addMonster(sim, 'fallen1@hell', 0, { hp: 1_000_000 });
-    const brute = addMonster(sim, 'brute1@hell', 0, { hp: 1_000_000, mods: ['stoneSkin', 'stoneSkin'] });
+    const brute = addMonster(sim, 'brute1@hell', 0, { hp: 1_000_000, mods: ['physicalImmune'] });
     const rat = addMonster(sim, 'quillrat1@hell', 0, { hp: 1_000_000 });
     for (const m of [fallen, brute, rat]) m.curses.push({ skill: 'lower-resist', lvl: 4, ticksLeft: 1000 });
     brute.curses.push({ skill: 'amplify-damage', lvl: 4, ticksLeft: 1000 });
@@ -149,7 +153,9 @@ describe('Hell walls', () => {
     expect(groups(h, 30, 'boss')[0]).toEqual(expect.arrayContaining(['magicImmune', 'poisonImmune']));
     // Normal's mods stay, each mod once
     expect(groups(h, 5, 'champion')[0]).toEqual(['extraFast', 'poisonImmune']);
-    expect(groups(h, 20, 'unique')[0]).toEqual(['stoneSkin', 'magicResistant', 'magicImmune']);
+    expect(groups(h, 20, 'unique')[0]).toEqual(['stoneSkin', 'magicResistant', 'magicImmune', 'physicalImmune']);
+    expect(groups(h, 30, 'boss')[0]).toContain('physicalImmune');
+    expect(groups(nightmare(), 20, 'unique')[0]).not.toContain('physicalImmune');
     // Nightmare gets the resistant versions
     const n = nightmare();
     expect(groups(n, 5, 'champion')[0]).toEqual(['extraFast', 'poisonResistant']);
@@ -167,6 +173,102 @@ describe('Hell walls', () => {
     expect(damageAgainst(sim, pi, 1000, 'pois', ALL)).toBe(0);
     expect(damageAgainst(sim, pr, 1000, 'pois', ALL)).toBeGreaterThan(0);
     expect(damageAgainst(sim, mi, 1000, 'pois', ALL)).toBe(1000);
+  });
+});
+
+describe('Hell walls, round two', () => {
+  const nightmare = () => testSim(fixtureGameData(30, { difficulty: 1 }));
+
+  it('Stone Skin: +50 on Normal, +80 on Nightmare and Hell short of immune, 100 on a Hell champion', () => {
+    const normal = testSim();
+    expect(effectiveResist(normal, addMonster(normal, 'brute1', 0, { mods: ['stoneSkin'] }), 'phys')).toBe(50);
+    const n = nightmare();
+    expect(effectiveResist(n, addMonster(n, 'brute1@nightmare', 0, { mods: ['stoneSkin'] }), 'phys')).toBe(80);
+    // Twice over still stops at 99: Nightmare's Stone Skin never makes an immune
+    expect(effectiveResist(n, addMonster(n, 'brute1@nightmare', 0, { mods: ['stoneSkin', 'stoneSkin'] }), 'phys')).toBe(99);
+    expect(effectiveResist(n, addMonster(n, 'brute1@nightmare', 0, { rank: 'champion', mods: ['stoneSkin'] }), 'phys')).toBe(80);
+    const h = hell();
+    expect(effectiveResist(h, addMonster(h, 'brute1@hell', 0, { rank: 'champion', mods: ['stoneSkin'] }), 'phys')).toBe(100);
+    expect(effectiveResist(h, addMonster(h, 'brute1@hell', 0, { rank: 'unique', mods: ['stoneSkin'] }), 'phys')).toBe(80);
+    // Physical Immune is immune whatever else the monster carries
+    const pi = addMonster(h, 'brute1@hell', 0, { rank: 'unique', mods: ['stoneSkin', 'physicalImmune'] });
+    expect(damageAgainst(h, pi, 1000, 'phys', ALL)).toBe(0);
+  });
+
+  it('leaks of specials cost more: champion 2, unique 3, Blood Raven 5, Andariel the run', () => {
+    const lost = (def: string, rank: 'normal' | 'champion' | 'unique' | 'boss') => {
+      const sim = testSim();
+      addMonster(sim, def, sim.map.length - 1, { rank });
+      step(sim, []);
+      return { lost: sim.data.economy.lives - sim.state.lives, status: sim.state.status };
+    };
+    expect(lost('zombie1', 'normal').lost).toBe(1);
+    expect(lost('zombie1', 'champion').lost).toBe(2);
+    expect(lost('zombie1', 'unique').lost).toBe(3);
+    expect(lost('bloodraven', 'boss').lost).toBe(5);
+    expect(lost('andariel', 'boss')).toEqual({ lost: testSim().data.economy.lives, status: 'lost' });
+  });
+});
+
+describe('blocking has a limit', () => {
+  /** A skeleton that cannot die standing on the path, with its tower gone so none respawn. */
+  const held = (def: string, rank: 'normal' | 'boss' = 'normal') => {
+    const sim = testSim();
+    const tower = placeTower(sim, 2, 4, 'raise-skeleton', { level: 5 });
+    step(sim, []);
+    const skeleton = sim.state.summons[0]!;
+    skeleton.hp = skeleton.maxHp = 1_000_000;
+    sim.state.summons = [skeleton];
+    sim.state.towers = sim.state.towers.filter((t) => t.id !== tower.id);
+    const m = addMonster(sim, def, Math.max(0, skeleton.dist - 4000), { rank, hp: 1_000_000 });
+    // Walk it up to the skeleton
+    for (let i = 0; i < 2000 && m.blockedTicks === 0 && m.dist < skeleton.dist; i++) step(sim, []);
+    return { sim, skeleton, m };
+  };
+
+  it('a held monster breaks through after blockBreakTicks (6 s), shoving the summon aside; the summon survives', () => {
+    const { sim, skeleton, m } = held('brute1');
+    expect(m.blockedBy).toBe(skeleton.id);
+    expect(sim.data.rules.blockBreakTicks).toBe(120);
+    const stoppedAt = m.dist;
+    ticks(sim, sim.data.rules.blockBreakTicks - 2);
+    // Still held, and the skeleton has been taking its hits
+    expect(m.dist).toBe(stoppedAt);
+    expect(skeleton.hp).toBeLessThan(1_000_000);
+    ticks(sim, 3);
+    expect(m.dist).toBeGreaterThan(stoppedAt);
+    expect(m.brokeThrough).toContain(skeleton.id);
+    expect(skeleton.shovedTicks).toBeGreaterThan(0);
+    expect(sim.state.summons).toContain(skeleton);
+    // It does not stop at that skeleton again
+    const hp = skeleton.hp;
+    ticks(sim, 40);
+    expect(m.dist).toBeGreaterThan(skeleton.dist);
+    expect(skeleton.hp).toBe(hp);
+  });
+
+  it('bosses are never blocked', () => {
+    const { sim, skeleton, m } = held('andariel', 'boss');
+    expect(m.blockedTicks).toBe(0);
+    ticks(sim, 200);
+    expect(m.dist).toBeGreaterThan(skeleton.dist);
+    expect(skeleton.hp).toBe(1_000_000);
+  });
+});
+
+describe('debuffs on the tier ladder', () => {
+  it('a resistance cut is valued against a 50% resistant target, still with no tier bonus', () => {
+    const sim = testSim();
+    const reference = sim.data.skills['holy-bolt']!;
+    const target = DESIGN_TARGET;
+    expect(target).toBe(50);
+    const lr = sim.data.skills['lower-resist'] as DebuffDef;
+    const cut = Math.max(...Object.values(lr.levels[4]!.resistDown).map((v) => v ?? 0));
+    const after = Math.max(-100, target - cut);
+    expect(auraMultiplier(lr, 4, reference, target)).toBe(Math.trunc((1000 * (100 - after)) / (100 - target)));
+    // Worth more than against a plain target, which is how a cut past 0% plays
+    expect(auraMultiplier(lr, 4, reference, target)).toBeGreaterThan(auraMultiplier(lr, 4, reference, 0));
+    expect(sim.data.ladders.find((l) => l.skill === 'lower-resist')!.tierBonus).toBe(1000);
   });
 });
 

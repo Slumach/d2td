@@ -1,6 +1,7 @@
 // Summon: raises units near the path. Raise Skeleton, Skeletal Mage, Revive.
 //   melee   stands on the path tile nearest the tower and blocks it: monsters stop and
-//           fight it (Kingdom Rush barracks)
+//           fight it (Kingdom Rush barracks). A monster held for blockBreakTicks breaks
+//           through, shoving the summon aside (it survives); bosses are never blocked.
 //   ranged  stands on the tower's side of the path and shoots; it never blocks and
 //           monsters never reach it
 //   revive  raises a fresh corpse in range (normal monsters only) as an ally that blocks
@@ -115,7 +116,7 @@ export const summon: ArchetypeModule<SummonDef> = {
     const mine = s.summons.filter((u) => u.towerId === tower.id);
     const level = skill.levels[lvl]!;
     if (mine.length >= level.count || tower.summonCooldown > 0) return false;
-    const unit = { towerId: tower.id, cooldown: 0, ticksLeft: 0, targetId: 0, element: 'phys' as Element, rangeUnits: 0, effectTicks: 0 };
+    const unit = { towerId: tower.id, cooldown: 0, ticksLeft: 0, targetId: 0, element: 'phys' as Element, rangeUnits: 0, effectTicks: 0, shovedTicks: 0 };
 
     if (skill.kind === 'revive') {
       const corpse = corpseToRevive(sim, tower, skill.rangeUnits);
@@ -193,6 +194,7 @@ export function updateSummons(sim: Sim): void {
   const s = sim.state;
   const reach = sim.data.rules.blockRangeUnits + REACH;
   for (const unit of s.summons) {
+    if (unit.shovedTicks > 0) unit.shovedTicks--;
     if (unit.kind === 'revive' && unit.ticksLeft > 0 && --unit.ticksLeft === 0) unit.hp = 0;
     if (unit.hp <= 0 || --unit.cooldown > 0) continue;
     const near = aliveWithin(sim, unit, unit.kind === 'ranged' ? unit.rangeUnits : reach);
@@ -213,12 +215,18 @@ export function updateSummons(sim: Sim): void {
   s.summons = s.summons.filter((u) => u.hp > 0);
 }
 
-/** The first living blocker ahead of `dist` that a monster walking to `next` would run into. */
-export function blockerAhead(sim: Sim, dist: number, next: number): Summon | undefined {
+/**
+ * The first living blocker ahead of a monster that it would run into walking to `next`.
+ * Bosses are never blocked, and a monster is not held again by a blocker it broke through.
+ */
+export function blockerAhead(sim: Sim, monster: Pick<Monster, 'dist' | 'rank' | 'brokeThrough'>, next: number): Summon | undefined {
+  if (monster.rank === 'boss') return undefined;
   const block = sim.data.rules.blockRangeUnits;
+  const dist = monster.dist;
   let best: Summon | undefined;
   for (const unit of sim.state.summons) {
     if (unit.kind === 'ranged' || unit.hp <= 0 || unit.dist <= dist - block || unit.dist - block > next) continue;
+    if (monster.brokeThrough.includes(unit.id)) continue;
     if (!best || unit.dist < best.dist) best = unit;
   }
   return best;

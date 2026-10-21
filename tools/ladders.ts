@@ -2,7 +2,8 @@
 // the value a tier-up is judged on, so a tier-up can be checked to be a strict upgrade.
 // Attack skills show standard-target DPS (plain monster: not undead, not a demon, no
 // resistances) in HP per second; auras show the multiplier they give a level-5 reference
-// tower (balance.json tierLadder.referenceSkill).
+// tower (balance.json tierLadder.referenceSkill), resistance cuts against a target at
+// tierLadder.debuffTargetResist.
 //
 //   npm run ladders             print
 //   npm run ladders -- --write  write computed tierBonus values into the skill JSON files
@@ -29,7 +30,7 @@ function show(metric: 'dps' | 'aura', v: number): string {
 
 export function ladderReport(data: GameData): string[] {
   const out: string[] = [];
-  const { dpsPct, referenceSkill } = DESIGN.balance.tierLadder;
+  const { dpsPct, referenceSkill, debuffTargetResist } = DESIGN.balance.tierLadder;
   const reference = data.skills[referenceSkill]!;
   for (const cls of Object.values(data.classes)) {
     for (const [lineId, line] of Object.entries(cls.lines)) {
@@ -40,7 +41,7 @@ export function ladderReport(data: GameData): string[] {
           const ladder = data.ladders.find((l) => l.cls === cls.id && l.line === lineId && l.skill === id);
           const metric = ladder?.metric ?? (data.ladders.find((l) => l.cls === cls.id && l.line === lineId)?.metric ?? 'dps');
           const cells = skill.skillLevels.map(
-            (lvl, i) => `L${i + 1} slvl ${String(lvl).padStart(2)} ${show(metric, ladderMetric(skill, i, reference)).padStart(6)}`,
+            (lvl, i) => `L${i + 1} slvl ${String(lvl).padStart(2)} ${show(metric, ladderMetric(skill, i, reference, debuffTargetResist)).padStart(6)}`,
           );
           let note = 'T1, levels from the skill JSON';
           if (ladder) {
