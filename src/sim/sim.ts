@@ -11,6 +11,7 @@ import type { GameData } from './data.ts';
 import { idiv } from './fixed.ts';
 import { createMap } from './map.ts';
 import { decayCorpses, spawnMonsters, updateMonsters } from './monsters.ts';
+export { injectMonster } from './monsters.ts';
 import { createRng } from './rng.ts';
 import type { Command, Sim, TimedCommand, Tower } from './state.ts';
 import { updateSummons } from './archetypes/summon.ts';
@@ -21,10 +22,16 @@ export { canBuild, evolutionFor, pendingChoices, sellValue, tierCost, towerAt, t
 export { activeSkill } from './auras.ts';
 export { damageAgainst, effectiveResist } from './combat.ts';
 
-export function createSim(data: GameData, seed: number): Sim {
+export interface SimOptions {
+  /** Team mode zones before the last: leaks are handed on instead of costing lives. */
+  passLeaks?: boolean;
+}
+
+export function createSim(data: GameData, seed: number, opts: SimOptions = {}): Sim {
   return {
     data,
     map: createMap(),
+    passLeaks: opts.passLeaks ?? false,
     fx: EMPTY_FIELD,
     state: {
       tick: 0,
@@ -43,6 +50,7 @@ export function createSim(data: GameData, seed: number): Sim {
       corpses: [],
       spawns: [],
       waves: [],
+      passed: [],
     },
   };
 }

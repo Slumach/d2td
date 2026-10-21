@@ -49,7 +49,12 @@ class Hasher {
 }
 
 export function stateHash(s: SimState): number {
+  return hashValue(s, 'state');
+}
+
+/** The same hash over any plain integer-and-string record, e.g. a whole match. */
+export function hashValue(v: unknown, path = 'value'): number {
   const h = new Hasher();
-  h.value(s, 'state');
+  h.value(v, path);
   return h.h;
 }

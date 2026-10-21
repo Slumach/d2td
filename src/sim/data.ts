@@ -78,6 +78,11 @@ export interface BalanceJson {
   hpPctPerWave: number;
   waveClearBonusPct: number;
   earlyCallBonusPct: number;
+  /**
+   * Multiplayer wave clock: waves start in every lane together, when every player has
+   * pressed Call Wave or when the clock runs out, whichever is first.
+   */
+  multiplayer: { firstWaveTicks: number; waveGapTicks: number };
   auraRangePerTile: number;
   corpseLifetimeTicks: number;
   monsterAttackTicks: number;
@@ -198,6 +203,9 @@ export interface Economy {
   bossBountyMultiplier: Record<string, number>;
   waveClearBonusPct: number;
   earlyCallBonusPct: number;
+  /** Ticks from the start of a multiplayer match to wave 1, and between later waves. */
+  firstWaveTicks: number;
+  waveGapTicks: number;
 }
 
 export interface Rules {
@@ -363,6 +371,8 @@ export function economyFrom(balance: BalanceJson): Economy {
     bossBountyMultiplier: balance.bossBountyMultiplier,
     waveClearBonusPct: balance.waveClearBonusPct,
     earlyCallBonusPct: balance.earlyCallBonusPct,
+    firstWaveTicks: balance.multiplayer.firstWaveTicks,
+    waveGapTicks: balance.multiplayer.waveGapTicks,
   };
 }
 

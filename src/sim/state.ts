@@ -147,6 +147,16 @@ export interface Spawn {
   hp: number;
 }
 
+/** A monster that walked off the end of a zone that passes leaks on (team mode). */
+export interface PassedMonster {
+  def: string;
+  wave: number;
+  rank: Rank;
+  mods: MonsterMod[];
+  hp: number;
+  maxHp: number;
+}
+
 export interface WaveProgress {
   /** Monsters queued or alive. */
   remaining: number;
@@ -175,6 +185,8 @@ export interface SimState {
   corpses: Corpse[];
   spawns: Spawn[];
   waves: WaveProgress[];
+  /** Leaks this tick from a zone that passes them on; the match moves them to the next zone. */
+  passed: PassedMonster[];
 }
 
 /** An aura source this tick, kept for the renderer's radius rings. */
@@ -197,6 +209,8 @@ export interface AuraField {
 export interface Sim {
   readonly data: GameData;
   readonly map: GameMap;
+  /** Team mode, every zone but the last: leaks go to `state.passed` and cost no lives. */
+  readonly passLeaks: boolean;
   state: SimState;
   fx: AuraField;
 }

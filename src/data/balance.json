@@ -16,6 +16,7 @@
   "hpPctPerWave": 120,
   "waveClearBonusPct": 0,
   "earlyCallBonusPct": 5,
+  "multiplayer": { "firstWaveTicks": 1200, "waveGapTicks": 700 },
   "auraRangePerTile": 8,
   "corpseLifetimeTicks": 200,
   "monsterAttackTicks": 25,

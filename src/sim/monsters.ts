@@ -5,7 +5,7 @@ import { distSq, monsterFx, removeMonster } from './combat.ts';
 import { idiv } from './fixed.ts';
 import { positionAt } from './map.ts';
 import { rollInt } from './rng.ts';
-import type { Monster, MonsterMod, Rank, Sim } from './state.ts';
+import type { Monster, MonsterMod, PassedMonster, Rank, Sim } from './state.ts';
 
 /** HP bonus percent by rank, from monumod.txt. Bosses carry their HP in monstats. */
 function rankHpPct(sim: Sim, rank: Rank): number {
@@ -127,10 +127,25 @@ export function updateMonsters(sim: Sim): void {
 
   for (const m of s.monsters.filter((x) => x.dist >= sim.map.length)) {
     const e = sim.data.economy;
-    s.lives = Math.max(0, s.lives - (m.rank === 'boss' ? e.bossLeakCost : e.leakCost));
+    if (sim.passLeaks) s.passed.push({ def: m.def, wave: m.wave, rank: m.rank, mods: [...m.mods], hp: m.hp, maxHp: m.maxHp });
+    else s.lives = Math.max(0, s.lives - (m.rank === 'boss' ? e.bossLeakCost : e.leakCost));
     s.leaks++;
     removeMonster(sim, m);
   }
+}
+
+/**
+ * A monster handed on from the previous zone enters at the start of the path, keeping its
+ * wave, rank, mods and the damage it took. It counts toward its wave here as it would
+ * have at home, so this zone's wave bonus waits for it too.
+ */
+export function injectMonster(sim: Sim, p: PassedMonster): void {
+  const s = sim.state;
+  while (s.waves.length <= p.wave) s.waves.push({ remaining: 0, bounty: 0, early: false });
+  s.waves[p.wave]!.remaining++;
+  const m = createMonster(sim, p.def, p.wave, p.rank, [...p.mods], 0, p.maxHp);
+  m.hp = p.hp;
+  s.monsters.push(m);
 }
 
 export function decayCorpses(sim: Sim): void {
