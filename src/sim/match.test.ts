@@ -68,7 +68,7 @@ describe('team match', () => {
     const match = createMatch(data, 1, 'team', 2);
     const ring = match.zones[0]!;
     run(match, data.economy.firstWaveTicks + 1);
-    expect(match.state.wavesCalled).toBe(1);
+    expect(ring.state.wave).toBe(1);
     const spawnAt = new Set(ring.state.spawns.map((s) => s.dist));
     expect([...spawnAt].sort((a, b) => a - b)).toEqual([ring.map.arcs[0]!.spawn, ring.map.arcs[1]!.spawn]);
 
@@ -88,20 +88,21 @@ describe('team match', () => {
 });
 
 describe('ffa match', () => {
-  it('starts each wave on every ring on the clock, or as soon as everyone is ready', () => {
+  it('runs each ring on its own wave timer: sending early starts only your own ring, for gold', () => {
     const match = createMatch(data, 1, 'ffa', 3);
     run(match, data.economy.firstWaveTicks);
-    expect(match.state.wavesCalled).toBe(0);
+    expect(match.zones.map((z) => z.state.wave)).toEqual([0, 0, 0]);
     run(match, 1);
-    expect(match.state.wavesCalled).toBe(1);
     expect(match.zones.map((z) => z.state.wave)).toEqual([1, 1, 1]);
 
-    // Two of three ready is not enough; the third makes it start now
-    stepMatch(match, [{ player: 0, command: { type: 'callWave' } }, { player: 1, command: { type: 'callWave' } }]);
-    expect(match.state.wavesCalled).toBe(1);
-    stepMatch(match, [{ player: 2, command: { type: 'callWave' } }]);
-    expect(match.state.wavesCalled).toBe(2);
-    expect(match.state.ready).toEqual([false, false, false]);
+    // Player 1 sends wave 2 early; the others wait for the timer
+    const before = match.zones[1]!.state.gold[0]!;
+    run(match, 100);
+    stepMatch(match, [{ player: 1, command: { type: 'callWave' } }]);
+    expect(match.zones.map((z) => z.state.wave)).toEqual([1, 2, 1]);
+    expect(match.zones[1]!.state.gold[0]).toBeGreaterThan(before);
+    run(match, data.economy.waveTicks - 101);
+    expect(match.zones.map((z) => z.state.wave)).toEqual([2, 2, 2]);
   });
 
   it('drops a player whose ring fills up, and the last ring standing wins', () => {
@@ -135,7 +136,7 @@ describe('lockstep', () => {
       stepMatch(a, now);
       if (a.state.tick % 100 === 0) hashes.push(matchHash(a));
     }
-    expect(a.state.wavesCalled).toBeGreaterThan(0);
+    expect(a.zones[0]!.state.wave).toBeGreaterThan(0);
 
     const b = createMatch(data, 42, 'ffa', 4);
     recorded.forEach((now) => {

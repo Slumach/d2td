@@ -26,8 +26,9 @@ export const CHECKSUM_FILE = 'checksums.json';
  * 4: D2R's HUD pieces, and the ground baked for the whole canvas.
  * 5: the Sorceress and Necromancer: heroes, summons, missiles, overlays, icons and sounds.
  * 6: the Act 1 schedule: every wave monster, boss and pack, superunique palettes, superuniques.txt.
+ * 7: Green TD pacing: Act 1's twelve superuniques ride inside waves; the old road's bake is gone.
  */
-export const EXTRACT_VERSION = 6;
+export const EXTRACT_VERSION = 7;
 /** What verifyGame reports when the extraction is from an older version of the game. */
 export const OUTDATED = 'version';
 

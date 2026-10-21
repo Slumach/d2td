@@ -13,9 +13,8 @@
   "bossBountyMultiplier": { "andariel": 50 },
   "bountyPctPerWave": 125,
   "hpPctPerWave": 124,
-  "waveClearBonusPct": 0,
-  "earlyCallBonusPct": 5,
-  "multiplayer": { "firstWaveTicks": 1200, "waveGapTicks": 700 },
+  "firstWaveTicks": 600,
+  "earlySendGoldPerSecond": 2,
   "auraRangePerTile": 8,
   "chillPct": 50,
   "staticFloorPct": [0, 33, 50],
@@ -26,29 +25,23 @@
   "blockBreakTicks": 120,
   "waves": {
     "count": 30,
-    "bossWaves": { "first": 4, "last": 27 },
+    "intervalTicks": 900,
+    "streamTicks": 900,
     "championPackSize": 3,
-    "targetTicks": 1180,
-    "swarm": { "base": 7, "addEvery": 3, "cap": 24, "spacingTicks": 8, "pack": { "min": 3, "max": 4, "gapTicks": 80 } },
-    "tank": { "base": 4, "addEvery": 3, "cap": 13, "spacingTicks": 25 }
+    "swarm": { "spacingTicks": 20 },
+    "tank": { "spacingTicks": 30 }
   },
   "modSchedule": {
     "champions": { "5": ["extraFast"], "15": ["stoneSkin"], "25": ["magicResistant"] },
-    "uniques": {
-      "10": ["extraStrong", "stoneSkin"],
-      "20": ["stoneSkin", "magicResistant"]
-    },
-    "bosses": {
-      "30": ["magicResistant", "extraStrong"]
-    },
+    "named": { "andariel": ["magicResistant", "extraStrong"] },
     "added": {
       "nightmare": {
         "champions": { "5": ["poisonResistant"], "15": ["poisonResistant"], "25": ["poisonResistant"] },
-        "bosses": { "12": ["magicResistant"], "19": ["magicResistant"], "30": ["poisonResistant"] }
+        "named": { "treehead": ["magicResistant"], "griswold": ["magicResistant"], "andariel": ["poisonResistant"] }
       },
       "hell": {
         "champions": { "5": ["stoneSkin", "poisonImmune"], "15": ["stoneSkin", "poisonImmune"], "25": ["stoneSkin", "poisonImmune"] },
-        "bosses": { "12": ["magicImmune"], "19": ["magicImmune", "physicalImmune"], "30": ["magicImmune", "poisonImmune", "physicalImmune"] }
+        "named": { "treehead": ["magicImmune"], "griswold": ["magicImmune", "physicalImmune"], "andariel": ["magicImmune", "poisonImmune", "physicalImmune"] }
       }
     }
   },
@@ -71,7 +64,8 @@
     "fireEnchanted": { "resist": { "fire": 75 } },
     "coldEnchanted": { "resist": { "cold": 75 } },
     "lightningEnchanted": { "resist": { "ltng": 75 } },
-    "cursed": {}
+    "cursed": {},
+    "spectralHit": {}
   },
   "skillOverrides": {
     "holy-bolt": { "fullDamageTo": "undead", "otherDamagePct": 40 }

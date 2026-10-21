@@ -177,9 +177,7 @@ export function killMonster(sim: Sim, monster: Monster): void {
   const s = sim.state;
   monster.hp = 0;
   const gold = bounty(sim, monster);
-  const killer = Math.min(monster.lastHit, s.gold.length - 1);
-  s.gold[killer]! += gold;
-  s.waves[monster.wave]!.bounty[killer]! += gold;
+  s.gold[Math.min(monster.lastHit, s.gold.length - 1)]! += gold;
   s.kills++;
   s.corpses.push({
     id: s.nextId++,
@@ -194,17 +192,11 @@ export function killMonster(sim: Sim, monster: Monster): void {
   removeMonster(sim, monster);
 }
 
-/** Removes a killed monster and pays the wave bonus, on each player's share of its bounty, once the wave is gone. */
+/** Takes a killed monster off the ring and off its wave's count. */
 export function removeMonster(sim: Sim, monster: Monster): void {
   const s = sim.state;
   s.monsters = s.monsters.filter((m) => m.id !== monster.id);
-  const wave = s.waves[monster.wave]!;
-  wave.remaining--;
-  if (wave.remaining === 0) {
-    const e = sim.data.economy;
-    const pct = e.waveClearBonusPct + (wave.early ? e.earlyCallBonusPct : 0);
-    wave.bounty.forEach((b, p) => (s.gold[p]! += idiv(b * pct, 100)));
-  }
+  s.waves[monster.wave]!.remaining--;
 }
 
 export function aliveWithin(sim: Sim, center: Point, radius: number): Monster[] {

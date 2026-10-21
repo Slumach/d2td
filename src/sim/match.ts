@@ -2,13 +2,13 @@
 // into a game. Every client runs the same match from the same seed and the same per-tick
 // command lists, so the match is deterministic exactly as each ring is.
 //
-//   solo  one ring, one player who owns all of it; Call Wave calls the wave at once
+//   solo  one ring, one player who owns all of it
 //   team  one shared ring, an arc per player: one alive count, kill gold to the killer
 //   ffa   a ring per player from the same seed; each ring keeps its own alive count, and
 //         the last ring standing wins
 //
-// In ffa and team, waves run on a match-wide clock: the next wave starts on every ring
-// together when every player still in has pressed Call Wave, or when the clock runs out.
+// Waves run on each ring's own timer (sim.ts). Send Next Wave starts a ring's next wave
+// early: on a team ring any player may press it, in FFA it is your own ring.
 
 import type { GameData } from './data.ts';
 import { hashValue } from './hash.ts';
@@ -32,12 +32,6 @@ export interface MatchState {
   tick: number;
   mode: MatchMode;
   status: 'playing' | 'over';
-  /** Waves started so far on the match clock (ffa and team). */
-  wavesCalled: number;
-  /** The tick the next wave starts if not everyone is ready first; -1 in solo. */
-  nextWaveTick: number;
-  /** Who has pressed Call Wave for the next wave, by player. */
-  ready: boolean[];
   /** Players who won, once the match is over. Empty means everyone lost. */
   winners: number[];
 }
@@ -60,15 +54,7 @@ export function createMatch(data: GameData, seed: number, mode: MatchMode, playe
     data,
     zones,
     players,
-    state: {
-      tick: 0,
-      mode,
-      status: 'playing',
-      wavesCalled: 0,
-      nextWaveTick: mode === 'solo' ? -1 : data.economy.firstWaveTicks,
-      ready: Array.from({ length: players }, () => false),
-      winners: [],
-    },
+    state: { tick: 0, mode, status: 'playing', winners: [] },
   };
 }
 
@@ -107,28 +93,12 @@ export function stepMatch(match: Match, commands: readonly PlayerCommand[]): voi
   const perZone: Command[][] = match.zones.map(() => []);
   for (const { player, command } of commands) {
     if (player < 0 || player >= match.players) continue;
-    if (command.type === 'callWave' && m.mode !== 'solo') m.ready[player] = true;
-    else perZone[ringOf(match, player)]!.push({ ...command, player: seatOf(match, player) });
+    perZone[ringOf(match, player)]!.push({ ...command, player: seatOf(match, player) });
   }
-  if (m.mode !== 'solo') clock(match, perZone);
 
   match.zones.forEach((zone, i) => step(zone, perZone[i]!));
   checkOver(match);
   m.tick++;
-}
-
-/** Starts the next wave when everyone in is ready or the clock runs out. */
-function clock(match: Match, perZone: Command[][]): void {
-  const m = match.state;
-  if (m.wavesCalled >= match.data.waves.length) return;
-  const waiting = playersIn(match);
-  const allReady = waiting.length > 0 && waiting.every((p) => m.ready[p]);
-  if (!allReady && m.tick < m.nextWaveTick) return;
-  const rings = [...new Set(waiting.map((p) => ringOf(match, p)))];
-  for (const ring of rings) perZone[ring]!.push({ type: 'callWave' });
-  m.wavesCalled++;
-  m.nextWaveTick = m.tick + match.data.economy.waveGapTicks;
-  m.ready = m.ready.map(() => false);
 }
 
 function checkOver(match: Match): void {

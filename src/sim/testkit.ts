@@ -55,7 +55,7 @@ export function addMonster(
   opts: { rank?: Rank; mods?: MonsterMod[]; hp?: number } = {},
 ): Monster {
   const s = sim.state;
-  if (s.waves.length === 0) s.waves.push({ remaining: 0, bounty: s.gold.map(() => 0), early: false });
+  if (s.waves.length === 0) s.waves.push({ remaining: 0 });
   const m = createMonster(sim, def, 0, opts.rank ?? 'normal', opts.mods ?? [], dist, opts.hp);
   s.monsters.push(m);
   s.waves[0]!.remaining++;

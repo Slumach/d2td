@@ -25,7 +25,8 @@ export type MonsterMod =
   | 'fireEnchanted'
   | 'coldEnchanted'
   | 'lightningEnchanted'
-  | 'cursed';
+  | 'cursed'
+  | 'spectralHit';
 export const MONSTER_MODS: readonly MonsterMod[] = [
   'extraFast',
   'extraStrong',
@@ -39,6 +40,7 @@ export const MONSTER_MODS: readonly MonsterMod[] = [
   'coldEnchanted',
   'lightningEnchanted',
   'cursed',
+  'spectralHit',
 ];
 
 /**
@@ -224,9 +226,6 @@ export interface Spawn {
 export interface WaveProgress {
   /** Monsters queued or alive. */
   remaining: number;
-  /** Bounty each player earned from this wave's kills; the clear bonus is a percentage of it. */
-  bounty: number[];
-  early: boolean;
 }
 
 export type Status = 'playing' | 'won' | 'lost';
@@ -238,8 +237,10 @@ export interface SimState {
   gold: number[];
   /** Weight of everything alive on the ring (rules.aliveWeight); the run is lost at rules.aliveLimit. */
   alive: number;
-  /** Waves called so far; the current wave number for the HUD. */
+  /** Waves started so far; the current wave number for the HUD. */
   wave: number;
+  /** The tick the next wave starts on its own: waves run on a fixed timer, dead or not. */
+  nextWaveTick: number;
   status: Status;
   kills: number;
   nextId: number;

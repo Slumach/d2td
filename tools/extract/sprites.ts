@@ -27,7 +27,7 @@ import { composite, isGlowEffect, layerAlpha, type CompositeLayer } from './comp
 import { column, readTable } from './paths.ts';
 import type { DataSource } from './source.ts';
 
-import { BOSS_ART, MONSTER_ART, SUPERUNIQUE_ART } from '../../src/data/monsterArt.ts';
+import { NAMED_ART, MONSTER_ART, SUPERUNIQUE_ART } from '../../src/data/monsterArt.ts';
 import sprites from '../../src/data/render/sprites.json';
 import { MISSILE_INDEX, artMissiles, artOverlays } from '../../src/render/art.ts';
 
@@ -302,7 +302,7 @@ function compositeMode(shared: Shared, spec: CompositeSpec, palette: Uint8Array)
 
 function monsterJobs(shared: Shared): SpriteJob[] {
   const { source, pl2 } = shared;
-  const bosses = new Set(BOSS_ART);
+  const bosses = new Set(NAMED_ART);
   const summons = new Set(sprites.summons.ids);
   const ids = [...new Set([...MONSTER_ART, ...summons])];
   // A superunique wears its class's art in its own palette: palshift.dat row Utrans

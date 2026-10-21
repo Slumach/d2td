@@ -10,7 +10,7 @@ import { step } from './sim.ts';
 import type { Element, Monster } from './state.ts';
 import { addMonster, freeze, placeTower, testSim, ticks } from './testkit.ts';
 import { auraMultiplier } from './dps.ts';
-import { resolveMods } from './data.ts';
+import { resolveMods, variantId } from './data.ts';
 import { DESIGN } from '../data/design.ts';
 
 const DESIGN_TARGET = DESIGN.balance.tierLadder.debuffTargetResist;
@@ -144,23 +144,23 @@ describe('Hell walls', () => {
     }
   });
 
-  it("the walls land on the boss and champion waves: Hell's immunities, Nightmare's resistances", () => {
+  it("the walls land on the named monsters and champion packs: Hell's immunities, Nightmare's resistances", () => {
+    const named = (sim: ReturnType<typeof testSim>, id: string) =>
+      sim.data.waves.flatMap((w) => w.groups).find((g) => g.monster === variantId(id, sim.data.difficulty))!.mods;
     const groups = (sim: ReturnType<typeof testSim>, n: number, rank: string) =>
       sim.data.waves[n - 1]!.groups.filter((g) => g.rank === rank).map((g) => g.mods);
     const h = hell();
     // Every Hell champion pack: Stone Skin (lifting a champion to physical 100) and Poison Immune
     for (const n of [5, 15, 25]) expect(groups(h, n, 'champion')[0]).toEqual(expect.arrayContaining(['stoneSkin', 'poisonImmune']));
     expect(groups(h, 5, 'champion')[0]).toEqual(['extraFast', 'stoneSkin', 'poisonImmune']);
-    // The uniques keep Normal's mods
-    expect(groups(h, 10, 'unique')[0]).toEqual(['extraStrong', 'stoneSkin']);
-    expect(groups(h, 12, 'boss')[0]).toContain('magicImmune');
-    expect(groups(h, 19, 'boss')[0]).toEqual(expect.arrayContaining(['magicImmune', 'physicalImmune']));
+    expect(named(h, 'treehead')).toContain('magicImmune');
+    expect(named(h, 'griswold')).toEqual(expect.arrayContaining(['magicImmune', 'physicalImmune']));
     // Andariel: Magic Immune in place of Magic Resistant, never both
-    expect(groups(h, 30, 'boss')[0]).toEqual(['extraStrong', 'magicImmune', 'poisonImmune', 'physicalImmune']);
+    expect(named(h, 'andariel')).toEqual(['extraStrong', 'magicImmune', 'poisonImmune', 'physicalImmune']);
     const n = nightmare();
     expect(groups(n, 5, 'champion')[0]).toEqual(['extraFast', 'poisonResistant']);
-    expect(groups(n, 12, 'boss')[0]).toContain('magicResistant');
-    expect(groups(n, 30, 'boss')[0]).toEqual(['magicResistant', 'extraStrong', 'poisonResistant']);
+    expect(named(n, 'treehead')).toContain('magicResistant');
+    expect(named(n, 'andariel')).toEqual(['magicResistant', 'extraStrong', 'poisonResistant']);
     expect(groups(testSim(fixtureGameData(30)), 5, 'champion')[0]).toEqual(['extraFast']);
   });
 

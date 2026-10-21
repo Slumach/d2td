@@ -77,7 +77,7 @@ const results = await new Promise<Result[]>((resolveAll) => {
           // Everyone stops at the same tick: the first multiple of 100 after the match ends
           if ((s.status === 'over' && s.tick % 100 === 0) || desync) {
             finished = true;
-            done.push({ slot: step.me, tick: s.tick, hash: matchHash(step.match), winners: s.winners, waves: s.wavesCalled });
+            done.push({ slot: step.me, tick: s.tick, hash: matchHash(step.match), winners: s.winners, waves: step.match.zones[0]!.state.wave });
             conn.close();
             if (done.length === count) resolveAll(done.sort((a, b) => a.slot - b.slot));
           }

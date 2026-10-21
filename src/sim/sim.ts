@@ -12,7 +12,7 @@ import { archetypeOf } from './archetypes/index.ts';
 import type { SkillDef, TowerBuff } from './archetypes/types.ts';
 import { activeSkill, computeAuras, EMPTY_FIELD } from './auras.ts';
 import type { GameData } from './data.ts';
-import { idiv } from './fixed.ts';
+import { TICKS_PER_SECOND, idiv } from './fixed.ts';
 import { ARC_COUNT, createMap } from './map.ts';
 import { decayCorpses, spawnMonsters, updateMonsters } from './monsters.ts';
 import { createRng } from './rng.ts';
@@ -49,6 +49,7 @@ export function createSim(data: GameData, seed: number, opts: SimOptions = {}): 
       gold: Array.from({ length: players }, () => data.economy.startingGold),
       alive: 0,
       wave: 0,
+      nextWaveTick: data.economy.firstWaveTicks,
       status: 'playing',
       kills: 0,
       nextId: 1,
@@ -68,6 +69,8 @@ export function step(sim: Sim, commands: readonly Command[]): void {
   const s = sim.state;
   if (s.status === 'playing') {
     for (const command of commands) applyCommand(sim, command);
+    // Waves run on a fixed timer, whether the last one is dead or not
+    if (s.tick >= s.nextWaveTick) startWave(sim);
     spawnMonsters(sim);
     sim.fx = computeAuras(sim);
     updateMonsters(sim);
@@ -103,7 +106,7 @@ function applyCommand(sim: Sim, command: Command): void {
   const player = command.player ?? 0;
   if (player < 0 || player >= sim.players) return;
   if (command.type === 'build') return build(sim, player, command.x, command.y, command.cls, command.skill);
-  if (command.type === 'callWave') return callWave(sim);
+  if (command.type === 'callWave') return sendEarly(sim);
   if (command.type === 'evolve') {
     const a = towerById(sim, command.towerA);
     const b = towerById(sim, command.towerB);
@@ -129,15 +132,37 @@ function applyCommand(sim: Sim, command: Command): void {
 }
 
 /**
- * The next wave enters the ring. On a shared ring every player's arc spawns the whole wave
- * at its spawn point; a single player owns every arc, so their wave is dealt out over the
- * four spawn points, a pack or a tank at a time.
+ * Send Next Wave: the next wave starts now instead of when the timer runs out, and every
+ * player on the ring is paid for the time it skipped (economy.earlySendGoldPerSecond,
+ * scaled by the wave's bounty multiplier).
  */
-function callWave(sim: Sim): void {
+function sendEarly(sim: Sim): void {
+  const s = sim.state;
+  if (!sim.data.waves[s.wave]) return;
+  const bonus = earlySendBonus(sim);
+  for (let p = 0; p < s.gold.length; p++) s.gold[p]! += bonus;
+  startWave(sim);
+}
+
+/** Gold Send Next Wave would pay each player right now. */
+export function earlySendBonus(sim: Sim): number {
   const s = sim.state;
   const waveDef = sim.data.waves[s.wave];
+  if (!waveDef) return 0;
+  const seconds = idiv(Math.max(0, s.nextWaveTick - s.tick), TICKS_PER_SECOND);
+  return idiv(seconds * sim.data.economy.earlySendGoldPerSecond * waveDef.bountyPermille, 1000);
+}
+
+/**
+ * The next wave enters the ring, and the timer restarts for the one after. On a shared
+ * ring every player's arc spawns the whole wave at its spawn point; a single player owns
+ * every arc, so their wave is dealt out over the four spawn points a group at a time.
+ */
+function startWave(sim: Sim): void {
+  const s = sim.state;
+  const waveDef = sim.data.waves[s.wave];
+  s.nextWaveTick = s.tick + sim.data.economy.waveTicks;
   if (!waveDef) return;
-  const early = s.monsters.length > 0 || s.spawns.length > 0;
   const wave = s.wave;
   let count = 0;
   for (let p = 0; p < sim.players; p++) {
@@ -154,7 +179,7 @@ function callWave(sim: Sim): void {
     });
   }
   s.spawns.sort((a, b) => a.tick - b.tick);
-  s.waves.push({ remaining: count, bounty: Array.from({ length: sim.players }, () => 0), early });
+  s.waves.push({ remaining: count });
   s.wave++;
 }
 

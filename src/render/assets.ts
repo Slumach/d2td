@@ -3,7 +3,7 @@
 
 import Phaser from 'phaser';
 
-import { BOSS_ART, SUPERUNIQUE_ART, WAVE_MONSTER_ART } from '../data/monsterArt.ts';
+import { NAMED_ART, SUPERUNIQUE_ART, WAVE_MONSTER_ART } from '../data/monsterArt.ts';
 import sprites from '../data/render/sprites.json';
 import { MISSILE_INDEX, artOverlays } from './art.ts';
 
@@ -82,7 +82,7 @@ export function preloadAssets(scene: Phaser.Scene): void {
   for (const id of WAVE_MONSTER_ART) {
     for (const v of ['normal', 'champion', 'unique']) atlas(`mon:${id}:${v}`, `monsters/${id}/${v}.json`, `monsters/${id}/`);
   }
-  for (const id of BOSS_ART) atlas(`mon:${id}:normal`, `monsters/${id}/normal.json`, `monsters/${id}/`);
+  for (const id of NAMED_ART) atlas(`mon:${id}:normal`, `monsters/${id}/normal.json`, `monsters/${id}/`);
   for (const su of SUPERUNIQUE_ART) atlas(`mon:${su.class}:su_${su.id}`, `monsters/${su.class}/su_${su.id}.json`, `monsters/${su.class}/`);
   for (const id of SUMMON_IDS) atlas(`mon:${id}:normal`, `monsters/${id}/normal.json`, `monsters/${id}/`);
   for (const [cls, h] of Object.entries(HEROES)) {

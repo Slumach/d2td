@@ -62,77 +62,56 @@ describe('data', () => {
     expect(compound(112, 3)).toEqual([1000, 1120, 1254]);
   });
 
-  it('lays out the Act 1 schedule: 8 bosses on 4, 8, 12, 16, 19, 23, 27 and 30, one monster a wave, none twice', () => {
+  it('lays out the schedule: one monster a wave for streamTicks, act bosses on their own waves', () => {
     const data = fixtureGameData(30);
     const waves = data.waves;
-    const bossWaves = waves.filter((w) => w.kind === 'boss').map((w) => w.number);
-    expect(bossWaves).toEqual([4, 8, 12, 16, 19, 23, 27, 30]);
-    expect(waves.filter((w) => w.kind === 'boss').map((w) => w.groups.find((g) => g.rank === 'boss')!.monster)).toEqual(
-      DESIGN.monsters.bosses.map((b) => b.id),
-    );
-    // Every normal wave is one monster, in the monsters.json order, never repeated
-    const normal = waves.filter((w) => w.kind !== 'boss').map((w) => [...new Set(w.groups.map((g) => g.monster))]);
-    for (const types of normal) expect(types).toHaveLength(1);
-    expect(normal.map((t) => t[0])).toEqual(DESIGN.monsters.waves.map((w) => w.monster));
-    const everyone = waves.flatMap((w) => [...new Set(w.groups.map((g) => g.monster))]);
-    expect(new Set(everyone).size).toBe(everyone.length);
-    // The formula is the floor; a short wave grows toward its target duration, never past the cap
-    const b = DESIGN.balance;
-    waves.forEach((w) => {
-      if (w.kind === 'boss') return;
-      const spec = b.waves[w.kind];
-      const count = w.groups.filter((g) => g.rank === 'normal').reduce((n, g) => n + g.count, 0);
-      expect(count).toBeGreaterThanOrEqual(Math.min(spec.cap, spec.base + Math.floor(w.number / spec.addEvery)));
-      expect(count).toBeLessThanOrEqual(spec.cap);
-    });
-  });
-
-  it('streams tanks one at a time and sends swarms in packs with gaps', () => {
     const b = DESIGN.balance.waves;
-    const waves = fixtureGameData(30).waves;
-    const normal = (n: number) => waves[n - 1]!.groups.filter((g) => g.rank === 'normal');
-    expect(waves[2]!.kind).toBe('tank');
-    for (const g of normal(3)) expect(g.count).toBe(1);
-    expect(waves[0]!.kind).toBe('swarm');
-    const packs = normal(1);
-    for (const g of packs.slice(0, -1)) {
-      expect(g.count).toBeGreaterThanOrEqual(b.swarm.pack!.min);
-      expect(g.count).toBeLessThanOrEqual(b.swarm.pack!.max);
-    }
-    expect(packs[0]!.delayTicks).toBeUndefined();
-    for (const g of packs.slice(1)) expect(g.delayTicks).toBe(b.swarm.pack!.gapTicks - b.swarm.spacingTicks);
+    expect(waves.filter((w) => w.kind === 'boss').map((w) => w.groups.find((g) => g.rank === 'boss')!.monster)).toEqual(['bloodraven', 'andariel']);
+    waves.forEach((w, i) => {
+      const entry = DESIGN.monsters.waves[i]!;
+      if (w.kind === 'boss' || !('monster' in entry)) return;
+      // One monster type in the stream (its first and last groups), a monster every spacingTicks for streamTicks
+      const first = w.groups[0]!;
+      const last = w.groups.at(-1)!;
+      expect([first.monster, last.monster]).toEqual([entry.monster, entry.monster]);
+      const spacing = b[w.kind].spacingTicks;
+      expect(first.count + (w.groups.length > 1 ? last.count : 0)).toBe(Math.trunc(b.streamTicks / spacing));
+      for (const g of w.groups) expect(g.spacingTicks).toBe(spacing);
+      expect(spacing).toBeGreaterThanOrEqual(20);
+      expect(spacing).toBeLessThanOrEqual(30);
+    });
+    // The Fallen Shaman keeps a wave of its own
+    expect(waves.some((w) => w.kind !== 'boss' && w.groups[0]!.monster === 'fallenshaman1')).toBe(true);
   });
 
-  it('a boss wave is the boss behind its D2 pack, with its superuniques.txt mods', () => {
+  it('a superunique walks in the middle of its wave as the unique, with its pack and its superuniques.txt mods', () => {
     const data = fixtureGameData(30);
-    const wave = (n: number) => data.waves[n - 1]!.groups;
-    // Blood Raven: monstats minion1 and PartyMin-PartyMax, midway
-    expect(wave(4).map((g) => [g.monster, g.rank, g.count])).toEqual([['zombie2', 'normal', 3], ['bloodraven', 'boss', 1]]);
-    // Rakanishu: the superunique's MinGrp-MaxGrp of his class, and his table mods
-    expect(wave(8).map((g) => [g.monster, g.count])).toEqual([['fallen2', 4], ['rakanishu', 1]]);
-    expect(wave(8)[1]!.mods).toEqual(['lightningEnchanted']);
+    const n = DESIGN.monsters.waves.findIndex((w) => 'superunique' in w && w.superunique === 'rakanishu') + 1;
+    const groups = data.waves[n - 1]!.groups;
+    const at = groups.findIndex((g) => g.monster === 'rakanishu');
+    expect(groups[at]).toMatchObject({ rank: 'unique', count: 1, mods: ['lightningEnchanted'] });
+    // Its pack walks just before it, the wave's stream on either side
+    expect(groups[at - 1]).toMatchObject({ monster: 'fallen2', rank: 'normal', count: 4 });
+    expect(groups[0]!.monster).toBe('fallen2');
+    expect(groups.at(-1)!.monster).toBe('fallen2');
     expect(data.monsters['rakanishu']).toMatchObject({ base: 'fallen2', name: 'Rakanishu', artVariant: 'su_rakanishu' });
-    // Griswold has no pack
-    expect(wave(19).map((g) => g.monster)).toEqual(['griswold']);
-    // A superunique takes monumod's unique HP bonus on its class's HP
-    const bonus = 100 + 200;
-    expect(data.monsters['rakanishu']!.maxHp).toBe(Math.trunc((data.monsters['fallen2']!.maxHp * bonus) / 100));
+    // An act boss's wave is its pack, then the boss
+    const raven = data.waves.find((w) => w.kind === 'boss')!.groups;
+    expect(raven.map((g) => [g.monster, g.rank, g.count])).toEqual([['zombie2', 'normal', 3], ['bloodraven', 'boss', 1]]);
     expect(data.monsters['foulcrow1']!.flying).toBe(true);
   });
 
-  it('places champions and uniques by the fixed schedule, as the wave\'s own monster', () => {
+  it('places champion packs by the fixed schedule, as the wave\'s own monster', () => {
     const waves = fixtureGameData(30).waves;
     const ranked = (n: number, rank: string) => waves[n - 1]!.groups.filter((g) => g.rank === rank);
     const s = DESIGN.balance.modSchedule;
     const specials = (rank: string) => waves.map((_, i) => i + 1).filter((n) => ranked(n, rank).length > 0);
     expect(specials('champion')).toEqual([5, 15, 25]);
-    expect(specials('unique')).toEqual([10, 20]);
     expect(ranked(5, 'champion')).toEqual([expect.objectContaining({ count: DESIGN.balance.waves.championPackSize, mods: s.champions['5'] })]);
-    for (const n of [5, 10, 15, 20, 25]) {
-      const own = waves[n - 1]!.groups.find((g) => g.rank === 'normal')!.monster;
-      for (const g of waves[n - 1]!.groups) expect(g.monster).toBe(own);
+    for (const n of [5, 15, 25]) {
+      const own = waves[n - 1]!.groups[0]!.monster;
+      expect(ranked(n, 'champion')[0]!.monster).toBe(own);
     }
-    expect(ranked(20, 'unique')[0]!.mods).toEqual(['stoneSkin', 'magicResistant']);
     expect(ranked(30, 'boss')[0]).toMatchObject({ monster: 'andariel', mods: ['magicResistant', 'extraStrong'] });
   });
 
@@ -140,18 +119,18 @@ describe('data', () => {
     const modsOn = (seed: number, wave: number) => {
       const sim = createSim(fixtureGameData(30), seed);
       sim.state.wave = wave - 1;
-      sim.state.waves = Array.from({ length: wave - 1 }, () => ({ remaining: 0, bounty: [0], early: false }));
+      sim.state.waves = Array.from({ length: wave - 1 }, () => ({ remaining: 0 }));
       step(sim, [{ type: 'callWave' }]);
       return sim.state.spawns.filter((sp) => sp.rank !== 'normal').map((sp) => `${sp.rank}:${sp.mods.join('+')}`);
     };
-    for (const wave of [5, 8, 10, 20, 30]) expect(modsOn(1, wave)).toEqual(modsOn(99, wave));
+    for (const wave of [5, 10, 14, 30]) expect(modsOn(1, wave)).toEqual(modsOn(99, wave));
   });
 
   it("a boss rolls its own monstats HP on the wave's curve, like any monster", () => {
     const data = fixtureGameData(30);
     const sim = createSim(data, 1);
     sim.state.wave = 29;
-    sim.state.waves = Array.from({ length: 29 }, () => ({ remaining: 0, bounty: [0], early: false }));
+    sim.state.waves = Array.from({ length: 29 }, () => ({ remaining: 0 }));
     step(sim, [{ type: 'callWave' }]);
     sim.state.spawns = sim.state.spawns.map((sp) => ({ ...sp, tick: sim.state.tick }));
     step(sim, []);
@@ -327,12 +306,12 @@ describe('difficulty', () => {
   it.skipIf(!hasTables())("scales each difficulty's wave monsters to Normal's average HP", () => {
     const data = buildGameData(loadTables(), DESIGN, 30, { loop: true });
     const avg = (d: number) => {
-      const pooled = new Set(DESIGN.monsters.waves.map((w) => w.monster));
+      const pooled = new Set(DESIGN.monsters.waves.flatMap((w) => ('monster' in w ? [w.monster] : [])));
       const defs = Object.values(data.monsters).filter((m) => m.difficulty === d && pooled.has(m.base));
       return defs.reduce((n, m) => n + m.minHp + m.maxHp, 0) / defs.length;
     };
-    // Within rounding: no monster drops below 1 HP
-    for (const d of [1, 2]) expect(Math.abs(avg(d) / avg(0) - 1)).toBeLessThan(0.1);
+    // Within rounding: no monster drops below 1 HP, and the smallest round up a lot
+    for (const d of [1, 2]) expect(Math.abs(avg(d) / avg(0) - 1)).toBeLessThan(0.15);
     // The columns still say who is tough: a Hell zombie outlasts a Hell fallen
     expect(data.monsters['zombie1@hell']!.maxHp).toBeGreaterThan(data.monsters['fallen1@hell']!.maxHp);
   });

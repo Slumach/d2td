@@ -36,7 +36,7 @@ export const FIXTURE_TABLES: Tables = {
   monstats: [
     // Hell columns on a few rows give the difficulty tests immunities to find
     monster('fallen1', 'fallen', { Velocity: 5, demon: 1, 'ResFi(H)': 100 }),
-    monster('fallenshaman1', 'fallen', { Level: 2, demon: 1, ResFi: 20, aidel: 15, aip1: 50, aip4: 24 }),
+    monster('fallenshaman1', 'fallen', { Level: 2, demon: 1, ResFi: 20, aidel: 15, aip1: 50, aip4: 24, minion1: 'fallen1' }),
     monster('zombie1', 'zombie', { Velocity: 2, lUndead: 1, ResPo: 50, 'ResCo(H)': 120 }),
     monster('skeleton1', 'skeleton', { Level: 2, lUndead: 1, 'ResLi(H)': 100 }),
     monster('quillrat1', 'quillrat', { Velocity: 4 }),
@@ -65,6 +65,8 @@ export const FIXTURE_TABLES: Tables = {
     monster('zombie3', 'zombie', { Level: 10, Velocity: 2, lUndead: 1 }),
     monster('vampire5', 'vampire', { Level: 10, hUndead: 1, ResCo: 50 }),
     monster('zombie2', 'zombie', { Level: 2, Velocity: 2, lUndead: 1 }),
+    monster('cr_archer1', 'corruptrogue', { Level: 3, demon: 1 }),
+    monster('quillrat4', 'quillrat', { Level: 7, Velocity: 4 }),
     monster('fallen2', 'fallen', { Level: 4, Velocity: 5, demon: 1, minion1: 'fallen2' }),
     monster('brute2', 'brute', { Level: 4, minHP: 220, maxHP: 260 }),
     monster('corruptrogue3', 'corruptrogue', { Level: 6, Velocity: 6, demon: 1 }),
@@ -76,7 +78,7 @@ export const FIXTURE_TABLES: Tables = {
   ],
   monlvl: Array.from({ length: 41 }, (_, Level) => ({ Level, HP: 5 + Level * 4, DM: 2 + Level, 'DM(H)': 4 + Level * 2 })),
   monumod: [
-    ...[['strong', 5], ['fast', 6], ['curse', 7], ['resist', 8], ['fire', 9], ['lightning', 17], ['cold', 18]].map(([uniquemod, id]) => ({ uniquemod: uniquemod!, id: id! })),
+    ...[['strong', 5], ['fast', 6], ['curse', 7], ['resist', 8], ['fire', 9], ['lightning', 17], ['cold', 18], ['spectralhit', 27]].map(([uniquemod, id]) => ({ uniquemod: uniquemod!, id: id! })),
     { '*constant desc': 'Champion HP % Bonus', constants: 100 },
     { '*constant desc': 'Unique HP % Bonus', constants: 200 },
     { '*constant desc': 'Champion Damage % Bonus', constants: 50 },
@@ -84,6 +86,12 @@ export const FIXTURE_TABLES: Tables = {
   monseq: Array.from({ length: 15 }, (_, frame) => ({ sequence: 'seq_shamanresurrect', mode: 'A2', frame })),
   weapons: [{ name: 'Crystal Sword', mindam: 4, maxdam: 12 }],
   superuniques: [
+    { Superunique: 'Corpsefire', Name: 'Corpsefire', Class: 'zombie1', Mod1: 27, MinGrp: 2, MaxGrp: 2 },
+    { Superunique: 'Bishibosh', Name: 'Bishibosh', Class: 'fallenshaman1', Mod1: 8, MinGrp: 1, MaxGrp: 3 },
+    { Superunique: 'Bonebreak', Name: 'Bonebreak', Class: 'skeleton1', Mod1: 5, MinGrp: 2, MaxGrp: 2 },
+    { Superunique: 'Coldcrow', Name: 'Coldcrow', Class: 'cr_archer1', Mod1: 18, MinGrp: 3, MaxGrp: 3 },
+    { Superunique: 'Flamespike the Crawler', Name: 'Flamespike the Crawler', Class: 'quillrat4', Mod1: 9, MinGrp: 4, MaxGrp: 4 },
+    { Superunique: 'Pitspawn Fouldog', Name: 'Pitspawn Fouldog', Class: 'bighead2', Mod1: 7, MinGrp: 2, MaxGrp: 2 },
     { Superunique: 'Rakanishu', Name: 'Rakanishu', Class: 'fallen2', Mod1: 17, MinGrp: 3, MaxGrp: 5 },
     { Superunique: 'Treehead WoodFist', Name: 'Treehead WoodFist', Class: 'brute2', Mod1: 5, MinGrp: 2, MaxGrp: 2 },
     { Superunique: 'The Countess', Name: 'The Countess', Class: 'corruptrogue3', Mod1: 9, MinGrp: 1, MaxGrp: 3 },

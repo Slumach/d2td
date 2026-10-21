@@ -146,7 +146,7 @@ export class D2Hud {
     this.waveText.on('pointerover', () => this.nextWave && waveTip.show(this.nextWave.title, this.nextWave.body));
     this.waveText.on('pointerout', () => waveTip.hide());
 
-    stoneButton(scene, GAME_WIDTH - 158, 44, 'Call Wave', onCallWave, { width: 280 });
+    stoneButton(scene, GAME_WIDTH - 158, 44, 'Send Wave', onCallWave, { width: 280 });
   }
 
   /** Screen position of a point on the panel art. */

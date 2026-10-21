@@ -16,11 +16,12 @@ import type { LobbyPlayer } from '../net/protocol.ts';
 import { baseMonsterId, buildGameData, DIFFICULTY_NAMES, MAX_TOWER_LEVEL, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
 import { standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
-import { aliveOf, arcOwner, playersIn, ringOf, seatOf, type MatchMode } from '../sim/match.ts';
+import { aliveOf, arcOwner, ringOf, seatOf, type MatchMode } from '../sim/match.ts';
 import { ARC_COUNT, arcAt, isBlocked, isPathTile, positionAt } from '../sim/map.ts';
 import {
   activeSkill,
   canBuild,
+  earlySendBonus,
   evolutionFor,
   pendingChoices,
   sellValue,
@@ -302,7 +303,7 @@ export class GameScene extends Phaser.Scene {
     const text = { fontFamily: FONT, fontSize: '24px', color: '#e8e0c0' };
     const online = this.driver.online;
     this.hud = this.add.text(16, online ? 8 : 18, '', text).setDepth(3000);
-    this.hud2 = this.add.text(16, 38, '', { ...text, fontSize: '17px', color: '#b8b090' }).setDepth(3000).setVisible(online);
+    this.hud2 = this.add.text(16, 38, '', { ...text, fontSize: '17px', color: '#b8b090' }).setDepth(3000);
     this.notice = this.add.text(GAME_WIDTH / 2, HUD_HEIGHT + 16, '', { ...text, fontSize: '20px', backgroundColor: '#000000a0', padding: { x: 12, y: 6 } }).setOrigin(0.5, 0).setDepth(5500).setVisible(false);
     this.info = this.add.text(16, PANEL_TOP + 8, '', { ...text, fontSize: '20px' }).setDepth(3000);
     this.tooltip = createTooltip(this, 16, PANEL_TOP - 8);
@@ -312,7 +313,7 @@ export class GameScene extends Phaser.Scene {
       this.hud2.setPosition(16, 12).setShadow(1, 1, '#000000', 2);
       this.info.setPosition(GAME_WIDTH / 2, 816).setOrigin(0.5).setFontSize(15).setColor('#c8bc98').setShadow(1, 1, '#000000', 2);
     } else {
-      buttonRow(this, GAME_WIDTH - 180, 12, [{ label: 'Call Wave', onClick: () => this.issue({ type: 'callWave' }), colour: '#6a3020' }], 200);
+      buttonRow(this, GAME_WIDTH - 180, 12, [{ label: 'Send Next Wave', onClick: () => this.issue({ type: 'callWave' }), colour: '#6a3020' }], 200);
     }
     this.endOverlay = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, '', { ...text, fontSize: '48px', align: 'center', backgroundColor: '#000000c0', padding: { x: 40, y: 24 } })
@@ -1001,6 +1002,7 @@ export class GameScene extends Phaser.Scene {
     if (this.driver?.online) return this.drawOnlineHud();
     this.drawAlive(state.alive);
     this.hud.setText(`Gold ${this.gold}   Wave ${state.wave}/${data.waves.length}   Kills ${state.kills}`);
+    this.hud2.setText(this.waveTimer());
     this.d2?.update({ gold: this.gold, alive: state.alive, aliveLimit: data.rules.aliveLimit, wave: this.waveLabel(state.wave), nextWave: this.nextWaveTip(state.wave) });
     if (state.status !== 'playing' && !this.endOverlay.visible) {
       const why = state.status === 'won' ? 'Victory' : `Defeat: ${data.rules.aliveLimit} alive on the ring`;
@@ -1016,15 +1018,12 @@ export class GameScene extends Phaser.Scene {
     const waves = match.data.waves.length;
     const watching = !this.onOwnRing ? `   (watching ${this.nameOf(this.view)})` : '';
     this.drawAlive(s.alive);
-    this.hud.setText(`Gold ${this.onOwnRing ? this.gold : '-'}   Alive ${s.alive}   Wave ${m.wavesCalled}/${waves}   Kills ${s.kills}${watching}`);
-    this.d2?.update({ gold: this.onOwnRing ? this.gold : 0, alive: s.alive, aliveLimit: match.data.rules.aliveLimit, wave: this.waveLabel(m.wavesCalled), nextWave: this.nextWaveTip(m.wavesCalled) });
+    this.hud.setText(`Gold ${this.onOwnRing ? this.gold : '-'}   Alive ${s.alive}   Wave ${s.wave}/${waves}   Kills ${s.kills}${watching}`);
+    this.d2?.update({ gold: this.onOwnRing ? this.gold : 0, alive: s.alive, aliveLimit: match.data.rules.aliveLimit, wave: this.waveLabel(s.wave), nextWave: this.nextWaveTip(s.wave) });
 
     const parts: string[] = [];
-    if (m.status === 'playing' && m.wavesCalled < waves) {
-      const waiting = playersIn(match);
-      const ready = waiting.filter((p) => m.ready[p]).length;
-      parts.push(`Next wave in ${Math.max(0, Math.ceil((m.nextWaveTick - m.tick) / TICKS_PER_SECOND))} s, ${ready}/${waiting.length} ready`);
-    }
+    const timer = this.waveTimer();
+    if (timer) parts.push(timer);
     const names = Array.from({ length: match.players }, (_, p) => {
       const tag = m.mode === 'ffa' ? (match.zones[p]!.state.status === 'lost' ? ' out' : ` ${aliveOf(match, p)}`) : '';
       const here = m.mode === 'ffa' ? p === this.view : p === driver.me;
@@ -1040,8 +1039,17 @@ export class GameScene extends Phaser.Scene {
         m.mode === 'team'
           ? won ? 'Your team held!' : 'Your team fell'
           : won ? 'You win!' : m.winners.length > 0 ? `${m.winners.map((w) => this.nameOf(w)).join(' and ')} won` : 'Nobody survived';
-      this.endOverlay.setText(`${title}\nwave ${m.wavesCalled}\nclick to return to the menu`).setFontSize(48).setVisible(true);
+      this.endOverlay.setText(`${title}\nwave ${s.wave}\nclick to return to the menu`).setFontSize(48).setVisible(true);
     }
+  }
+
+  /** "Next wave in 23 s, send now for 46 gold": the ring's wave timer and what sending early pays. */
+  private waveTimer(): string {
+    const sim = this.sim;
+    const s = sim.state;
+    if (s.status !== 'playing' || s.wave >= sim.data.waves.length) return '';
+    const secs = Math.max(0, Math.ceil((s.nextWaveTick - s.tick) / TICKS_PER_SECOND));
+    return `Next wave in ${secs} s, send now for ${earlySendBonus(sim)} gold`;
   }
 
   /** "Nightmare 4/30": the difficulty of the last wave called and its number in it. */
