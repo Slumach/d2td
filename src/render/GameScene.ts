@@ -15,6 +15,7 @@ import { Lockstep } from '../net/lockstep.ts';
 import type { LobbyPlayer } from '../net/protocol.ts';
 import { actJustStarted, takeCheckpoint, type Checkpoint } from '../sim/checkpoint.ts';
 import { baseMonsterId, baseSkillId, buildGameData, MAX_TIER, MAX_TOWER_LEVEL, stageName, waveLabel as labelOf, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
+import { effectsOn, projected, reachOf, terms } from './aurainfo.ts';
 import { GroundDrops } from './drops.ts';
 import { standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
@@ -435,6 +436,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---- input and commands ----
+
+  /** The tower whose auras are shown: the selected tower, or the one under the pointer. */
+  private highlightedTower(): number | undefined {
+    if (this.selection?.kind === 'tower') return this.selection.id;
+    const h = this.hover;
+    return h ? this.sim.state.towers.find((t) => t.tileX === h.x && t.tileY === h.y)?.id : undefined;
+  }
 
   private tileAt(p: Phaser.Input.Pointer): { x: number; y: number } | undefined {
     if (this.d2 ? this.d2.covers(p.x, p.y) : p.y < HUD_HEIGHT || p.y >= PANEL_TOP) return undefined;
@@ -865,6 +873,21 @@ export class GameScene extends Phaser.Scene {
       const at = project(t.x, t.y);
       this.fx.ride(key, SKILL_ART['enchant']?.overlay, at, DEPTH.units + at.y / 1000 + 0.0005);
     }
+    // The selected or hovered aura tower: D2's aura glow on every tower its auras reach
+    const lit = this.highlightedTower();
+    const source = lit !== undefined ? towerById(this.sim, lit) : undefined;
+    if (source) {
+      for (const aura of projected(this.sim, source)) {
+        const overlay = SKILL_ART[aura.skill]?.overlay;
+        if (!overlay || (aura.damagePct === 0 && aura.attackSpeedPct === 0 && aura.fireMax === 0)) continue;
+        for (const { tower } of reachOf(this.sim, source, aura)) {
+          const key = `ta${tower.id}.${aura.skill}`;
+          riders.add(key);
+          const at = project(tower.x, tower.y);
+          this.fx.ride(key, overlay, at, DEPTH.units + at.y / 1000 + 0.0006);
+        }
+      }
+    }
     this.fx.keepRiders(riders);
   }
 
@@ -1224,6 +1247,7 @@ export class GameScene extends Phaser.Scene {
     const g = this.overlayGfx.clear();
     const rings = this.ringGfx.clear();
     const selected = this.selection?.kind === 'tower' ? this.selection.id : undefined;
+    const highlight = this.highlightedTower();
 
     // Base rings in the tower's line colour; evolved towers ring purple
     for (const t of state.towers) {
@@ -1233,11 +1257,11 @@ export class GameScene extends Phaser.Scene {
       rings.lineStyle(t.id === selected ? 3 : 2, colour, t.id === selected ? 1 : 0.8).strokeEllipse(cx, cy, ISO_W * 0.7, ISO_H * 0.7);
     }
 
-    // Aura rings: faint for every emitter, bright for the selected tower
+    // Aura rings: faint for every emitter, bright for the selected or hovered tower
     for (const e of fx.emitters) {
       const t = towerById(this.sim, e.towerId);
       if (!t) continue;
-      g.lineStyle(e.towerId === selected ? 2 : 1, 0x80b0ff, e.towerId === selected ? 0.8 : 0.15);
+      g.lineStyle(e.towerId === highlight ? 2 : 1, 0x80b0ff, e.towerId === highlight ? 0.8 : 0.15);
       const c = project(t.x, t.y);
       const r = ellipseOf(e.radiusUnits);
       g.strokeEllipse(c.x, c.y, r.w, r.h);
@@ -1564,19 +1588,45 @@ export class GameScene extends Phaser.Scene {
         ? `${className}, evolved with ${this.skillName(tower.partnerSkill)} built in`
         : `${className}, ${line?.name ?? 'no line yet'}   Tier ${tower.tier}   Level ${tower.level}`,
     );
+    const auras = effectsOn(sim, tower);
+    const auraName = (e: { skill: string; item: boolean }) => `${this.skillName(e.skill)}${e.item ? ' (item)' : ''}`;
     if (active) {
       const buff = sim.fx.towers[tower.id];
       const base = standardDps(active.skill, active.lvl);
-      // 1/256 HP per 1000 ticks, at 20 ticks a second, lifted by the auras this tower stands in
-      const dps = Math.round((((base * TICKS_PER_SECOND) / 1000 / 256) * (100 + (buff?.damagePct ?? 0)) * (100 + (buff?.attackSpeedPct ?? 0))) / 10000);
-      lines.push(base > 0 ? `Damage per second ${dps}` : this.roleOf(active.skill, active.lvl));
+      // 1/256 HP per 1000 ticks, at 20 ticks a second; the auras this tower stands in broken out
+      const perSecond = (damagePct: number, speedPct: number) => Math.round((((base * TICKS_PER_SECOND) / 1000 / 256) * (100 + damagePct) * (100 + speedPct)) / 10000);
+      const dps = perSecond(buff?.damagePct ?? 0, buff?.attackSpeedPct ?? 0);
+      const own = perSecond(0, 0);
+      const dmg = auras.filter((e) => e.damagePct > 0).map((e) => `+${e.damagePct}% ${auraName(e)}`);
+      const spd = auras.filter((e) => e.attackSpeedPct > 0).map((e) => `+${e.attackSpeedPct}% ${auraName(e)}`);
+      if (base > 0) {
+        lines.push(dmg.length || spd.length ? `Damage per second ${dps} (${own} ${[...dmg, ...spd.map((s) => `${s} speed`)].join(', ')})` : `Damage per second ${dps}`);
+      } else {
+        lines.push(this.roleOf(active.skill, active.lvl));
+        if (dmg.length || spd.length) lines.push(`Under ${[...dmg, ...spd.map((s) => `${s} speed`)].join(', ')}`);
+      }
     }
-    const under = [...new Set(sim.fx.emitters.filter((em) => {
+    // An aura tower: what it projects, and who it reaches with what
+    for (const aura of projected(sim, tower)) {
+      const what = terms(aura);
+      if (!what) continue;
+      lines.push(`${auraName(aura)}: ${what}`);
+      if (aura.damagePct || aura.attackSpeedPct || aura.fireMax) {
+        const reach = reachOf(sim, tower, aura).filter((r) => r.tower.id !== tower.id);
+        const names = reach.map((r) => {
+          const a = activeSkill(sim, r.tower);
+          return `${a ? this.skillName(baseSkillId(a.skill.id)) : 'tower'}${r.counts ? '' : ' (under a stronger one)'}`;
+        });
+        lines.push(names.length ? `Reaches ${names.join(', ')}` : 'Reaches no other tower');
+      }
+    }
+    const under = auras.filter((e) => e.towerId !== tower.id).map(auraName);
+    const curses = [...new Set(sim.fx.emitters.filter((em) => {
       if (em.towerId === tower.id) return false;
       const src = towerById(sim, em.towerId);
       return src !== undefined && (src.x - tower.x) ** 2 + (src.y - tower.y) ** 2 <= em.radiusUnits * em.radiusUnits;
-    }).map((em) => this.skillName(baseSkillId(em.skill))))];
-    if (under.length) lines.push(`Under ${under.join(', ')}`);
+    }).map((em) => this.skillName(baseSkillId(em.skill))))].filter((n) => !under.includes(n) && !auras.some((e) => auraName(e) === n));
+    if (curses.length) lines.push(`In range of ${curses.join(', ')}`);
     const level = active ? upgradeCost(sim, tower) : undefined;
     const tier = tierCost(sim, tower);
     if (level !== undefined) lines.push(`Next: level ${tower.level + 1} for ${level} gold`);

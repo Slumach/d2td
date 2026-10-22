@@ -70,6 +70,11 @@
     "decrepify": { "cast": "cursecast", "area": "cursedecrepify", "overlay": "cursedecrepify" },
     "lower-resist": { "cast": "cursecast", "area": "curselowerresist", "overlay": "curselowerresist" },
     "enchant": { "overlay": "enchant" },
+    "might": { "overlay": "aura_might_front" },
+    "concentration": { "overlay": "concentrationfront" },
+    "fanaticism": { "overlay": "fanaticismfront" },
+    "conviction": { "overlay": "convictionback" },
+    "holy-freeze": { "overlay": "holyfreeze" },
     "zeal-hit": { "impact": ["blood1"] },
     "vengeance-hit": { "impact": ["fireexplode", "iceexplode", "lightninghit"] }
   },
