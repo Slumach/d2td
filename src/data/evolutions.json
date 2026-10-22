@@ -186,5 +186,38 @@
       "skill": "find-item",
       "minTier": 3
     }
+  },
+  "fire-druid": {
+    "name": "Fire Druid",
+    "attack": {
+      "skill": "volcano",
+      "minTier": 3
+    },
+    "partner": {
+      "skill": "grizzly",
+      "minTier": 3
+    }
+  },
+  "wind-druid": {
+    "name": "Wind Druid",
+    "attack": {
+      "skill": "hurricane",
+      "minTier": 3
+    },
+    "partner": {
+      "skill": "tornado",
+      "minTier": 2
+    }
+  },
+  "summoner-druid": {
+    "name": "Summoner Druid",
+    "attack": {
+      "skill": "grizzly",
+      "minTier": 3
+    },
+    "partner": {
+      "skill": "dire-wolf",
+      "minTier": 2
+    }
   }
 }

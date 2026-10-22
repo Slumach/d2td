@@ -1,0 +1,14 @@
+{
+  "id": "grizzly",
+  "skill": "Summon Grizzly",
+  "displayName": "Grizzly",
+  "archetype": "summon",
+  "damageType": "phys",
+  "rangeTenths": 30,
+  "rateTicks": 20,
+  "summon": {
+    "countCalc": "petmax",
+    "damagePctCalc": "calc1",
+    "respawnTicks": 160
+  }
+}

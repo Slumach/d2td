@@ -1,0 +1,18 @@
+{
+  "id": "firestorm",
+  "skill": "Firestorm",
+  "archetype": "projectile",
+  "damageType": "fire",
+  "skillLevels": [
+    1,
+    5,
+    10,
+    15,
+    20
+  ],
+  "rangeTenths": 40,
+  "rateTicks": 20,
+  "projectile": {
+    "countCalc": "calc1"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "hurricane",
+  "skill": "Hurricane",
+  "archetype": "control",
+  "damageType": "cold",
+  "tierBonus": 1397,
+  "control": {
+    "mode": "aura",
+    "radiusCalc": "aurarangecalc",
+    "pulseTicks": 20
+  }
+}

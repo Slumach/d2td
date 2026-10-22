@@ -27,10 +27,10 @@ import { freeSpot } from '../src/sim/items/loot.ts';
 import { lootPool, outfit, type LootSet } from './outfit.ts';
 import { ELEMENTS, type Command, type Element, type Sim, type TimedCommand, type Tower } from '../src/sim/state.ts';
 
-export type Strategy = 'BOLT' | 'HOLY' | 'TWOLINE' | 'PALADIN' | 'SORC' | 'NECRO' | 'MIXED3' | 'AMAZON' | 'BARB';
+export type Strategy = 'BOLT' | 'HOLY' | 'TWOLINE' | 'PALADIN' | 'SORC' | 'NECRO' | 'MIXED3' | 'AMAZON' | 'BARB' | 'DRUID';
 /** The Normal balance targets' bots; the class bots play the Hell gate. */
 export const STRATEGIES: Strategy[] = ['BOLT', 'HOLY', 'TWOLINE', 'PALADIN'];
-export const HELL_STRATEGIES: Strategy[] = ['PALADIN', 'SORC', 'NECRO', 'MIXED3', 'AMAZON', 'BARB'];
+export const HELL_STRATEGIES: Strategy[] = ['PALADIN', 'SORC', 'NECRO', 'MIXED3', 'AMAZON', 'BARB', 'DRUID'];
 
 /** The class and line whose T1 options include a skill. */
 function lineOf(sim: Sim, skill: string): { cls: string; line: string } {
@@ -748,6 +748,7 @@ CONFIGS.SORC = { strategy: 'SORC', builds: SORC_BUILDS, tiers: true, evolve: tru
 CONFIGS.NECRO = { strategy: 'NECRO', builds: NECRO_BUILDS, tiers: true, evolve: true, elements: true };
 CONFIGS.AMAZON = { strategy: 'AMAZON', builds: ['magic-arrow', 'poison-javelin', 'critical-strike'], tiers: true, evolve: true, elements: true };
 CONFIGS.BARB = { strategy: 'BARB', builds: ['bash', 'double-swing', 'battle-cry'], tiers: true, evolve: true, elements: true };
+CONFIGS.DRUID = { strategy: 'DRUID', builds: ['firestorm', 'arctic-blast', 'raven'], tiers: true, evolve: true, elements: true };
 CONFIGS.MIXED3 = {
   strategy: 'MIXED3',
   builds: ['sacrifice', 'holy-bolt', 'might', ...SORC_BUILDS, ...NECRO_BUILDS],

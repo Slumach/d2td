@@ -7,6 +7,7 @@ import type { BalanceJson, ClassJson, DesignData, EvolutionJson, MonstersJson } 
 import balance from './balance.json';
 import amazon from './classes/amazon.json';
 import barbarian from './classes/barbarian.json';
+import druid from './classes/druid.json';
 import necromancer from './classes/necromancer.json';
 import paladin from './classes/paladin.json';
 import sorceress from './classes/sorceress.json';
@@ -21,6 +22,15 @@ import criticalStrike from './skills/critical-strike.json';
 import doubleSwing from './skills/double-swing.json';
 import findItem from './skills/find-item.json';
 import frenzy from './skills/frenzy.json';
+import arcticBlast from './skills/arctic-blast.json';
+import direWolf from './skills/dire-wolf.json';
+import firestorm from './skills/firestorm.json';
+import fissure from './skills/fissure.json';
+import grizzly from './skills/grizzly.json';
+import hurricane from './skills/hurricane.json';
+import raven from './skills/raven.json';
+import tornado from './skills/tornado.json';
+import volcano from './skills/volcano.json';
 import warCry from './skills/war-cry.json';
 import whirlwind from './skills/whirlwind.json';
 import decoy from './skills/decoy.json';
@@ -87,6 +97,16 @@ export const SKILL_JSON = [
   battleCry,
   warCry,
   findItem,
+  // Druid
+  firestorm,
+  fissure,
+  volcano,
+  arcticBlast,
+  tornado,
+  hurricane,
+  raven,
+  direWolf,
+  grizzly,
   // Paladin
   sacrifice,
   zeal,
@@ -129,7 +149,7 @@ export const SKILL_JSON = [
 
 export const DESIGN: DesignData = {
   skills: SKILL_JSON,
-  classes: [paladin as ClassJson, sorceress as ClassJson, necromancer as ClassJson, amazon as ClassJson, barbarian as ClassJson],
+  classes: [paladin as ClassJson, sorceress as ClassJson, necromancer as ClassJson, amazon as ClassJson, barbarian as ClassJson, druid as ClassJson],
   evolutions: evolutions as Record<string, EvolutionJson>,
   monsters: monsters as MonstersJson,
   balance: balance as unknown as BalanceJson,

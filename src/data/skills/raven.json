@@ -1,0 +1,19 @@
+{
+  "id": "raven",
+  "skill": "Raven",
+  "archetype": "summon",
+  "damageType": "phys",
+  "skillLevels": [
+    1,
+    5,
+    10,
+    15,
+    20
+  ],
+  "rangeTenths": 30,
+  "rateTicks": 20,
+  "summon": {
+    "countCalc": "petmax",
+    "respawnTicks": 100
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "arctic-blast",
+  "skill": "Arctic Blast",
+  "archetype": "pierce",
+  "damageType": "cold",
+  "skillLevels": [
+    1,
+    5,
+    10,
+    15,
+    20
+  ],
+  "rangeTenths": 25,
+  "rateTicks": 10,
+  "pierce": {
+    "mode": "pierce",
+    "pierceCount": 0
+  }
+}

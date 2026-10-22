@@ -1,0 +1,13 @@
+{
+  "id": "fissure",
+  "skill": "Eruption",
+  "displayName": "Fissure",
+  "archetype": "zone",
+  "damageType": "fire",
+  "rangeTenths": 45,
+  "rateTicks": 40,
+  "zone": {
+    "radiusTenths": 25,
+    "tickTicks": 10
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "volcano",
+  "skill": "Volcano",
+  "archetype": "zone",
+  "damageType": "fire",
+  "tierBonus": 2603,
+  "rangeTenths": 45,
+  "rateTicks": 60,
+  "zone": {
+    "radiusCalc": "aurarangecalc",
+    "tickTicks": 10
+  }
+}

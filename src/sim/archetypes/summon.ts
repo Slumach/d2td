@@ -21,7 +21,7 @@ import { ahead, nearestPathDist, positionAt, wrap } from '../map.ts';
 import { rollInt } from '../rng.ts';
 import type { Corpse, Element, Monster, Sim, Summon, Tower } from '../state.ts';
 import { findRow, int, str } from '../tables.ts';
-import { calcAt, common, damageAt, elementalAtLevel, etype, fields, filterFrom, lengthAt, perLevel, tenthsToUnits } from './common.ts';
+import { calcAt, common, damageAt, elementalAtLevel, etype, fields, filterFrom, lengthAt, perLevel, physicalAtLevel, tenthsToUnits } from './common.ts';
 import type { ArchetypeModule, SummonDef } from './types.ts';
 
 interface SummonJson {
@@ -90,7 +90,7 @@ export const summon: ArchetypeModule<SummonDef> = {
       shotRangeUnits: tenthsToUnits(f.shotRangeTenths ?? 0),
       levels: perLevel(json, (level) => {
         const bonus = f.damagePctCalc ? calcAt(ctx.skillRow, f.damagePctCalc, level) : 0;
-        const added = elementalAtLevel(ctx.skillRow, 'min', level, 'skill');
+        const added = elementalAtLevel(ctx.skillRow, 'max', level, 'skill') > 0 ? elementalAtLevel(ctx.skillRow, 'min', level, 'skill') : physicalAtLevel(ctx.skillRow, 'min', level, 'skill');
         const dmg = (col: string) => (stats ? withBonus((int(stats, col) + added) * 256, bonus) : 0);
         const boltLevel = Math.max(1, f.boltLevelCalc ? calcAt(ctx.skillRow, f.boltLevelCalc, level) : level);
         const hpPct = f.hpPctCalc ? calcAt(ctx.skillRow, f.hpPctCalc, level) : kind === 'revive' ? 100 : 0;

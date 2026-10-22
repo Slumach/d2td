@@ -1,0 +1,14 @@
+{
+  "id": "dire-wolf",
+  "skill": "Summon Fenris",
+  "displayName": "Dire Wolf",
+  "archetype": "summon",
+  "damageType": "phys",
+  "rangeTenths": 30,
+  "rateTicks": 20,
+  "summon": {
+    "countCalc": "petmax",
+    "hpPctCalc": "calc1",
+    "respawnTicks": 120
+  }
+}

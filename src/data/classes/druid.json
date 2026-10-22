@@ -1,0 +1,49 @@
+{
+  "id": "druid",
+  "name": "Druid",
+  "weapon": "Club",
+  "lines": {
+    "fire": {
+      "name": "Fire",
+      "tiers": [
+        [
+          "firestorm"
+        ],
+        [
+          "fissure"
+        ],
+        [
+          "volcano"
+        ]
+      ]
+    },
+    "wind": {
+      "name": "Wind",
+      "tiers": [
+        [
+          "arctic-blast"
+        ],
+        [
+          "tornado"
+        ],
+        [
+          "hurricane"
+        ]
+      ]
+    },
+    "summoning": {
+      "name": "Summoning",
+      "tiers": [
+        [
+          "raven"
+        ],
+        [
+          "dire-wolf"
+        ],
+        [
+          "grizzly"
+        ]
+      ]
+    }
+  }
+}
