@@ -89,6 +89,12 @@ export function startGame(opts: StartOptions = {}): Phaser.Game {
   // The dev server exposes the game for the screenshot scripts' probes
   if (import.meta.env.DEV) (window as unknown as { __game?: Phaser.Game }).__game = game;
   game.sound.volume = (opts.volume ?? 80) / 100;
+  // Phaser pauses every playing sound on blur and resumes them all together on focus, so an
+  // alt-tab came back with a burst of every hit and drop that was mid-play: a volume spike.
+  // Sounds play on through a blur, muted, and the volume setting is never touched.
+  game.sound.pauseOnBlur = false;
+  window.addEventListener('blur', () => (game.sound.mute = true));
+  window.addEventListener('focus', () => (game.sound.mute = false));
   window.addEventListener('resize', () => game.scale.setZoom(place(opts.parent ?? 'game', width, height)));
   if (opts.autoplay && !opts.m0) {
     game.events.once(Phaser.Core.Events.READY, () => {
