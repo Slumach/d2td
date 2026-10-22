@@ -1,0 +1,13 @@
+{
+  "id": "lightning-fury",
+  "skill": "Lightning Fury",
+  "archetype": "splash",
+  "damageType": "ltng",
+  "tierBonus": 13268,
+  "rangeTenths": 60,
+  "rateTicks": 25,
+  "splash": {
+    "delivery": "missile",
+    "radiusCalc": "aurarangecalc"
+  }
+}

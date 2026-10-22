@@ -1,0 +1,17 @@
+{
+  "id": "critical-strike",
+  "skill": "Critical Strike",
+  "archetype": "buffAura",
+  "damageType": "none",
+  "skillLevels": [
+    1,
+    5,
+    10,
+    15,
+    20
+  ],
+  "buffAura": {
+    "passive": true,
+    "radiusTenths": 30
+  }
+}

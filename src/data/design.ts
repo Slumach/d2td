@@ -5,12 +5,22 @@
 import type { SkillJson } from '../sim/archetypes/types.ts';
 import type { BalanceJson, ClassJson, DesignData, EvolutionJson, MonstersJson } from '../sim/data.ts';
 import balance from './balance.json';
+import amazon from './classes/amazon.json';
 import necromancer from './classes/necromancer.json';
 import paladin from './classes/paladin.json';
 import sorceress from './classes/sorceress.json';
 import evolutions from './evolutions.json';
 import monsters from './monsters.json';
 import amplifyDamage from './skills/amplify-damage.json';
+import criticalStrike from './skills/critical-strike.json';
+import decoy from './skills/decoy.json';
+import lightningFury from './skills/lightning-fury.json';
+import magicArrow from './skills/magic-arrow.json';
+import multipleShot from './skills/multiple-shot.json';
+import pierceSkill from './skills/pierce.json';
+import plagueJavelin from './skills/plague-javelin.json';
+import poisonJavelin from './skills/poison-javelin.json';
+import strafe from './skills/strafe.json';
 import blessedHammer from './skills/blessed-hammer.json';
 import blizzard from './skills/blizzard.json';
 import boneSpear from './skills/bone-spear.json';
@@ -47,6 +57,16 @@ import vengeance from './skills/vengeance.json';
 import zeal from './skills/zeal.json';
 
 export const SKILL_JSON = [
+  // Amazon
+  magicArrow,
+  multipleShot,
+  strafe,
+  poisonJavelin,
+  lightningFury,
+  plagueJavelin,
+  criticalStrike,
+  pierceSkill,
+  decoy,
   // Paladin
   sacrifice,
   zeal,
@@ -89,7 +109,7 @@ export const SKILL_JSON = [
 
 export const DESIGN: DesignData = {
   skills: SKILL_JSON,
-  classes: [paladin as ClassJson, sorceress as ClassJson, necromancer as ClassJson],
+  classes: [paladin as ClassJson, sorceress as ClassJson, necromancer as ClassJson, amazon as ClassJson],
   evolutions: evolutions as Record<string, EvolutionJson>,
   monsters: monsters as MonstersJson,
   balance: balance as unknown as BalanceJson,

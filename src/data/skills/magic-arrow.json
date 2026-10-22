@@ -1,0 +1,18 @@
+{
+  "id": "magic-arrow",
+  "skill": "Magic Arrow",
+  "archetype": "projectile",
+  "damageType": "mag",
+  "skillLevels": [
+    1,
+    5,
+    10,
+    15,
+    20
+  ],
+  "rangeTenths": 70,
+  "rateTicks": 15,
+  "projectile": {
+    "weapon": true
+  }
+}

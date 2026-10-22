@@ -1,0 +1,12 @@
+{
+  "id": "multiple-shot",
+  "skill": "Multiple Shot",
+  "archetype": "projectile",
+  "damageType": "phys",
+  "rangeTenths": 70,
+  "rateTicks": 20,
+  "projectile": {
+    "weapon": true,
+    "countCalc": "calc1"
+  }
+}

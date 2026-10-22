@@ -1,0 +1,49 @@
+{
+  "id": "amazon",
+  "name": "Amazon",
+  "weapon": "Long Bow",
+  "lines": {
+    "bow": {
+      "name": "Bow",
+      "tiers": [
+        [
+          "magic-arrow"
+        ],
+        [
+          "multiple-shot"
+        ],
+        [
+          "strafe"
+        ]
+      ]
+    },
+    "javelin": {
+      "name": "Javelin",
+      "tiers": [
+        [
+          "poison-javelin"
+        ],
+        [
+          "lightning-fury"
+        ],
+        [
+          "plague-javelin"
+        ]
+      ]
+    },
+    "passive": {
+      "name": "Passive",
+      "tiers": [
+        [
+          "critical-strike"
+        ],
+        [
+          "pierce"
+        ],
+        [
+          "decoy"
+        ]
+      ]
+    }
+  }
+}

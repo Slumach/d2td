@@ -206,7 +206,7 @@ class Parser {
     if (name === 'exms' || name === 'exma') return ctx.elementalMax ?? 0;
     if (name === 'toht') return 0;
 
-    const parMatch = /^par([1-8])$/.exec(name);
+    const parMatch = /^par([1-9])$/.exec(name);
     if (parMatch) return par(Number(parMatch[1]));
 
     const helper = /^(ln|dm)(12|34|56|78)$/.exec(name);

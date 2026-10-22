@@ -1,0 +1,10 @@
+{
+  "id": "pierce",
+  "skill": "Pierce",
+  "archetype": "buffAura",
+  "damageType": "none",
+  "buffAura": {
+    "passive": true,
+    "radiusTenths": 30
+  }
+}

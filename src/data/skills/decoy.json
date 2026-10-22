@@ -1,0 +1,14 @@
+{
+  "id": "decoy",
+  "skill": "Dopplezon",
+  "displayName": "Decoy",
+  "archetype": "summon",
+  "damageType": "phys",
+  "rangeTenths": 30,
+  "rateTicks": 20,
+  "summon": {
+    "countCalc": "petmax",
+    "hpPctCalc": "calc1",
+    "respawnTicks": 100
+  }
+}

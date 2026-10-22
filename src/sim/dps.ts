@@ -99,6 +99,8 @@ export function auraMultiplier(skill: SkillDef, lvl: number, reference: SkillDef
   if (skill.archetype === 'buffAura') {
     const l = skill.levels[lvl]!;
     times(l.damagePct);
+    // Pierce: a bolt that flies on hits one more monster that often, on a crowd
+    times(Math.min(100, l.piercePct ?? 0));
     m = idiv(m * interval(reference, top), interval(reference, top, l.attackSpeedPct));
     const hit = averageHit(reference);
     m = idiv(m * (hit + avg({ min: l.fireMin, max: l.fireMax })), hit);
@@ -150,6 +152,7 @@ export function withTierBonus(skill: SkillDef, permille: number): SkillDef {
           ...l,
           damagePct: scalePct(l.damagePct, permille),
           attackSpeedPct: scalePct(l.attackSpeedPct, permille),
+          piercePct: Math.min(100, scalePct(l.piercePct ?? 0, permille)),
           fireMin: scalePct(l.fireMin, permille),
           fireMax: scalePct(l.fireMax, permille),
         })),

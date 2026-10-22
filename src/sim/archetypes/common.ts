@@ -96,7 +96,7 @@ export function damageAt(row: TableRow, level: number, table: 'skill' | 'missile
 }
 
 export function params(row: TableRow): number[] {
-  return Array.from({ length: 8 }, (_, i) => int(row, `Param${i + 1}`));
+  return Array.from({ length: 9 }, (_, i) => int(row, `Param${i + 1}`));
 }
 
 /** Evaluates the calc in a skills.txt column (calc1, aurarangecalc, petmax...) at a level. */

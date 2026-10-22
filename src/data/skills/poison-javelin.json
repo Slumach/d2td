@@ -1,0 +1,16 @@
+{
+  "id": "poison-javelin",
+  "skill": "Poison Javelin",
+  "archetype": "projectile",
+  "damageType": "pois",
+  "skillLevels": [
+    1,
+    5,
+    10,
+    15,
+    20
+  ],
+  "rangeTenths": 60,
+  "rateTicks": 20,
+  "projectile": {}
+}

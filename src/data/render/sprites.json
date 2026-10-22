@@ -1,6 +1,6 @@
 {
   "monsterModes": ["WL", "A1", "DT", "DD"],
-  "summons": { "ids": ["necroskeleton", "necromage"], "modes": ["NU", "WL", "A1", "DT", "S1"] },
+  "summons": { "ids": ["necroskeleton", "necromage", "dopplezon"], "modes": ["NU", "WL", "A1", "DT", "S1"] },
   "objects": { "redportal": { "token": "PP", "modes": ["OP", "ON"], "variant": "lit" } },
   "heroes": {
     "paladin": {
@@ -20,6 +20,15 @@
         "cold": { "weapon": "Long Staff" },
         "lightning": { "weapon": "Eagle Orb" },
         "support": {}
+      }
+    },
+    "amazon": {
+      "token": "AM",
+      "attackMode": "A1",
+      "lines": {
+        "bow": { "weapon": "Long Bow" },
+        "javelin": { "weapon": "Javelin", "shield": "Buckler" },
+        "passive": {}
       }
     },
     "necromancer": {
@@ -70,6 +79,12 @@
     "decrepify": { "cast": "cursecast", "area": "cursedecrepify", "overlay": "cursedecrepify" },
     "lower-resist": { "cast": "cursecast", "area": "curselowerresist", "overlay": "curselowerresist" },
     "enchant": { "overlay": "enchant" },
+    "magic-arrow": { "fly": "magicarrow" },
+    "multiple-shot": { "fly": "multipleshotarrow" },
+    "strafe": { "fly": "strafearrow" },
+    "poison-javelin": { "fly": "poisonjav" },
+    "lightning-fury": { "fly": "lightningfury", "impact": ["furylightning"] },
+    "plague-javelin": { "fly": "plaguejavelin", "impact": ["plaguejavcloud"] },
     "might": { "overlay": "aura_might_front" },
     "concentration": { "overlay": "concentrationfront" },
     "fanaticism": { "overlay": "fanaticismfront" },
@@ -80,7 +95,7 @@
   },
   "summonBolts": { "pois": "necromage1", "cold": "necromage2", "fire": "necromage3", "ltng": "necromage4" },
   "statusOverlays": { "frozen": "frozenarmor", "poison": "poisonhit" },
-  "iconClasses": ["pal", "sor", "nec"],
+  "iconClasses": ["pal", "sor", "nec", "ama"],
   "palettes": ["act1/pal.dat", "act1/pal.pl2"],
   "strings": ["skills.json"]
 }
