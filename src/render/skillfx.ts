@@ -1,8 +1,9 @@
 // Skill effects that the sim has no object for, drawn from the extraction's missile and
 // overlay art: one-shot impacts and casts, shots that fly from one point to another and
 // burst into their missiles.txt explosion, overlays riding on units (curses, Enchant,
-// frozen), and drawn lightning and rings where D2 itself draws them by code (Lightning's
-// CelFile is null). Everything here is render-only and may use Math.random.
+// frozen) or played once on a caster, and lightning as D2 draws it: its LightningStrike cel
+// laid along the bolt's path (Lightning's own CelFile is null; D2's client strings strikes
+// along it). Everything here is render-only and may use Math.random.
 
 import Phaser from 'phaser';
 
@@ -95,33 +96,39 @@ export class SkillFx {
     this.scene.tweens.add({ targets: s, x: to.x, y: to.y, duration: ms, ease: 'Quad.easeIn', onComplete: () => (s.destroy(), onLand()) });
   }
 
-  /** Jagged lightning through `points`, fading over `ms`. */
-  lightning(points: Point[], ms = 180, colour = 0xb8d8ff): void {
-    if (points.length < 2) return;
-    // Fixed jitter per bolt so it flickers by fading, not by jumping about
-    const path: Point[] = [points[0]!];
+  /**
+   * Lightning as D2 draws it: the missile's own cel (LightningStrike for Lightning, Chain
+   * Lightning and the sentries) played every `step` pixels along `points`, each facing the
+   * way its segment runs and starting a little later the further along it is, so the bolt
+   * runs out from where it was cast.
+   */
+  strikeTrail(missile: string, points: Point[], step = 26, msPerPx = 0.5): void {
+    let travelled = 0;
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1]!;
       const b = points[i]!;
-      const steps = Math.max(2, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 18));
-      for (let k = 1; k <= steps; k++) {
-        const t = k / steps;
-        const j = k === steps ? 0 : 9;
-        path.push({ x: a.x + (b.x - a.x) * t + (Math.random() - 0.5) * j * 2, y: a.y + (b.y - a.y) * t + (Math.random() - 0.5) * j });
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      const angle = ((Math.round((Math.atan2(b.y - a.y, b.x - a.x) / (Math.PI * 2)) * 64 + 16) % 64) + 64) % 64;
+      const n = Math.max(1, Math.round(len / step));
+      for (let k = 0; k < n; k++) {
+        const t = (k + 0.5) / n;
+        const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+        const delay = (travelled + len * t) * msPerPx;
+        if (delay <= 0) this.play(missile, p.x, p.y, angle);
+        else this.scene.time.delayedCall(delay, () => this.play(missile, p.x, p.y, angle));
       }
+      travelled += len;
     }
-    this.flash(ms, (g, life) => {
-      g.lineStyle(5, colour, 0.25 * life).strokePoints(path, false);
-      g.lineStyle(2, 0xffffff, 0.9 * life).strokePoints(path, false);
-    });
   }
 
-  /** An expanding ellipse at a screen point (Static Field's burst). */
-  ring(at: Point, rx: number, ry: number, ms = 300, colour = 0x9cc8ff): void {
-    this.flash(ms, (g, life) => {
-      const grow = 1.15 - life * 0.75;
-      g.lineStyle(3, colour, 0.8 * life).strokeEllipse(at.x, at.y, rx * 2 * grow, ry * 2 * grow);
-    });
+  /** An overlay.txt effect played once on a caster (skills.txt castoverlay). */
+  overlayOnce(id: string, at: Point, depth: number): void {
+    const texture = overlayKey(id);
+    const s = this.spriteOf(texture, at.x, at.y);
+    if (!s) return;
+    s.setDepth(depth);
+    s.play({ key: animKey(texture, 'MS', '0'), repeat: 0 });
+    s.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => s.destroy());
   }
 
   private flash(ms: number, draw: Flash['draw']): void {

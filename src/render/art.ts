@@ -19,6 +19,10 @@ export interface SkillArt {
   cast?: string;
   area?: string;
   overlay?: string;
+  /** skills.txt castoverlay: the overlay.txt effect played on the caster as it casts. */
+  castOverlay?: string;
+  /** A missile thrown from the strike's spot to each monster within the skill's sub radius (Fist of the Heavens' holy bolts). */
+  burst?: string;
 }
 
 export const SKILL_ART = sprites.skillArt as Record<string, SkillArt>;
@@ -28,7 +32,7 @@ export const STATUS_OVERLAYS = sprites.statusOverlays as { frozen: string; poiso
 /** The extraction lists every missile it wrote here, explosions included. */
 export const MISSILE_INDEX = 'missiles/index.json';
 
-const ROLES = ['fly', 'fall', 'zone', 'shards', 'ring', 'arc', 'bolt', 'corpse', 'raise', 'cast', 'area'] as const;
+const ROLES = ['fly', 'fall', 'zone', 'shards', 'ring', 'arc', 'bolt', 'corpse', 'raise', 'cast', 'area', 'burst'] as const;
 
 /** Every missiles.txt row a skill's art or a summon's shot names. */
 export function artMissiles(): string[] {
@@ -43,6 +47,6 @@ export function artMissiles(): string[] {
 
 /** Every overlay.txt row the art names: curses and Enchant on what they touch, and status looks. */
 export function artOverlays(): string[] {
-  const fromSkills = Object.values(SKILL_ART).flatMap((a) => (a.overlay ? [a.overlay] : []));
+  const fromSkills = Object.values(SKILL_ART).flatMap((a) => [a.overlay, a.castOverlay].filter((o): o is string => o !== undefined));
   return [...new Set([...fromSkills, ...Object.values(STATUS_OVERLAYS)])];
 }

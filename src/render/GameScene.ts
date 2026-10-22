@@ -163,6 +163,8 @@ interface TowerView {
 }
 
 interface MissileView {
+  /** A Lightning bolt: where its strikes have been laid to so far. */
+  boltAt?: { x: number; y: number };
   /** Missiles with no flying art (zones, novas, lightning) have no sprite. */
   sprite: Phaser.GameObjects.Sprite | undefined;
   x: number;
@@ -1014,6 +1016,7 @@ export class GameScene extends Phaser.Scene {
     if (!skill || !art) return;
     const at = project(t.x, t.y);
     if (art.cast) this.effect(art.cast, at.x, at.y);
+    if (art.castOverlay) this.fx.overlayOnce(art.castOverlay, at, DEPTH.units + at.y / 1000 + 0.0007);
     if (skill.archetype === 'pierce' && skill.mode === 'chain' && art.arc) {
       // The sim jumps from the target to the nearest monster not hit yet; draw the same
       const { hops, jumpUnits } = (skill as PierceDef).levels[lvl]!;
@@ -1024,18 +1027,23 @@ export class GameScene extends Phaser.Scene {
         hit.push(current.id);
         const p = this.chest(current);
         points.push(p);
-        this.effect(art.arc, p.x, p.y + 30);
         current = this.nearestMonster(current, jumpUnits, hit);
       }
-      this.fx.lightning(points);
+      // D2's chain: its LightningStrike cel along every jump
+      this.fx.strikeTrail(art.arc, points);
     } else if (skill.archetype === 'debuff' && skill.mode === 'pulse') {
       const radius = (skill as DebuffDef).levels[lvl]!.radiusUnits;
       const r = ellipseOf(radius);
-      this.fx.ring(at, r.w / 2, r.h / 2);
+      // The field's edge in D2's lightning art, then a strike on everything it took from
+      if (art.arc) {
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          this.effect(art.arc, at.x + (Math.cos(a) * r.w) / 2, at.y + (Math.sin(a) * r.h) / 2 + 30);
+        }
+      }
       const struck = this.sim.state.monsters.filter((m) => m.hp > 0 && (m.x - t.x) ** 2 + (m.y - t.y) ** 2 <= radius * radius).slice(0, 6);
       for (const m of struck) {
         const p = this.chest(m);
-        this.fx.lightning([{ x: at.x, y: at.y - 50 }, p], 140);
         if (art.arc) this.effect(art.arc, p.x, p.y + 30);
       }
     }
@@ -1107,8 +1115,16 @@ export class GameScene extends Phaser.Scene {
         this.fx.shoot(art.shards, { x: px, y: py - 20 }, to, 260, Math.round(((a / (Math.PI * 2)) * 64 + 16) % 64 + 64) % 64);
       }
       if (art.bolt) {
-        const from = project(m.ox, m.oy);
-        this.fx.lightning([{ x: from.x, y: from.y - 50 }, { x: px, y: py - 30 }], 90);
+        // The bolt grows along its line as the missile flies: D2's strikes laid on each new stretch
+        const from = view.boltAt ?? (() => {
+          const o = project(m.ox, m.oy);
+          return { x: o.x, y: o.y - 50 };
+        })();
+        const to = { x: px, y: py - 30 };
+        if (Math.hypot(to.x - from.x, to.y - from.y) >= 20) {
+          this.fx.strikeTrail(art.bolt, [from, to], 26, 0);
+          view.boltAt = to;
+        } else view.boltAt = from;
       }
       if (view.sprite) {
         const texture = view.sprite.texture.key;
@@ -1129,6 +1145,17 @@ export class GameScene extends Phaser.Scene {
       const ex = view.art ? this.fx.explosionOf(view.art) : undefined;
       if (ex) this.effect(ex, at.x, at.y - 15);
       for (const a of art?.impact ?? []) this.effect(a, at.x, at.y - 10);
+      // Fist of the Heavens: its holy bolts fly from the strike to the monsters around it
+      const skill = this.sim.data.skills[view.skill];
+      if (art?.burst && skill?.archetype === 'splash') {
+        const reach = skill.levels[skill.levels.length - 1]!.subRadiusUnits || skill.radiusUnits;
+        const around = this.sim.state.monsters.filter((mm) => mm.hp > 0 && (mm.x - view.x) ** 2 + (mm.y - view.y) ** 2 <= reach * reach).slice(0, 8);
+        for (const mm of around) {
+          const to = this.chest(mm);
+          const v = screenVector(mm.x - view.x, mm.y - view.y);
+          this.fx.shoot(art.burst, { x: at.x, y: at.y - 30 }, to, 260, angle64(v.x, v.y));
+        }
+      }
       view.sprite?.destroy();
       this.missiles.delete(id);
     }
