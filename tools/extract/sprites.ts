@@ -569,9 +569,12 @@ function missileJobs(shared: Shared): SpriteJob[] {
   };
   const named = artMissiles();
   const ids = [...new Set([...named, ...named.map((id) => explosionOf(rowOf(id))).filter(Boolean)])];
+  // The index has no game inputs: its rev is its own list, so a new missile re-writes it
+  // (a fixed key kept the first index ever written, and missiles added later never loaded)
   const index: SpriteJob = {
     label: 'missile index',
     inputs: [],
+    rev: [...ids].sort().join(',').split('').reduce((h, c) => (Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0), 2166136261),
     run: () => [{ path: MISSILE_INDEX, bytes: new TextEncoder().encode(JSON.stringify({ missiles: ids }, null, 2)) }],
   };
   return [index, ...ids.map((id) => {

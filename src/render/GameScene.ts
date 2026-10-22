@@ -1047,6 +1047,14 @@ export class GameScene extends Phaser.Scene {
       }
       // D2's chain: its LightningStrike cel along every jump
       this.fx.strikeTrail(art.arc, points);
+    } else if (skill.archetype === 'control' && skill.mode === 'aura' && art.swirl?.length) {
+      // Hurricane: its client missiles swirl round the tower, D2's swoosh, rocks and trees
+      const r = ellipseOf(skill.levels[lvl]!.radiusUnits);
+      const ms = Math.max(400, skill.pulseTicks * TICK_MS);
+      for (let i = 0; i < 6; i++) {
+        const k = 0.45 + Math.random() * 0.55;
+        this.fx.orbit(art.swirl[i % art.swirl.length]!, { x: at.x, y: at.y - 30 }, (r.w / 2) * k, (r.h / 2) * k, ms, Math.random() * Math.PI * 2);
+      }
     } else if (skill.archetype === 'debuff' && skill.mode === 'pulse') {
       const radius = (skill as DebuffDef).levels[lvl]!.radiusUnits;
       const r = ellipseOf(radius);

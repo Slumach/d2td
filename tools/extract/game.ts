@@ -38,7 +38,7 @@ export const CHECKSUM_FILE = 'checksums.json';
  * 13: Act 4: its monsters and maps.
  * 14: Act 5: its monsters and maps.
  */
-export const EXTRACT_VERSION = 24;
+export const EXTRACT_VERSION = 26;
 /** What verifyGame reports when the extraction is from an older version of the game. */
 export const OUTDATED = 'version';
 

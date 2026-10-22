@@ -121,6 +121,28 @@ export class SkillFx {
     }
   }
 
+  /**
+   * A missile looping its animation while it circles `center` on an ellipse of radii `rx`
+   * and `ry` for `ms`, from `start` radians round three quarters of a turn (Hurricane).
+   */
+  orbit(missile: string, center: Point, rx: number, ry: number, ms: number, start: number): void {
+    const texture = missileKey(missile);
+    const s = this.spriteOf(texture, center.x + Math.cos(start) * rx, center.y + Math.sin(start) * ry);
+    if (!s) return;
+    const meta = metaOf(this.scene, texture);
+    s.play({ key: animKey(texture, 'MS', String(spriteDirection(0, meta.dccDirections ?? 1))), repeat: -1 });
+    this.scene.tweens.addCounter({
+      from: start,
+      to: start + Math.PI * 1.5,
+      duration: ms,
+      onUpdate: (tw) => {
+        const a = tw.getValue() ?? start;
+        s.setPosition(Math.round(center.x + Math.cos(a) * rx), Math.round(center.y + Math.sin(a) * ry));
+      },
+      onComplete: () => s.destroy(),
+    });
+  }
+
   /** An overlay.txt effect played once on a caster (skills.txt castoverlay). */
   overlayOnce(id: string, at: Point, depth: number): void {
     const texture = overlayKey(id);

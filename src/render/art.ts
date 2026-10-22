@@ -23,6 +23,8 @@ export interface SkillArt {
   castOverlay?: string;
   /** A missile thrown from the strike's spot to each monster within the skill's sub radius (Fist of the Heavens' holy bolts). */
   burst?: string;
+  /** Client missiles that swirl round the tower each time a control aura pulses (Hurricane's swoosh, rocks and trees). */
+  swirl?: string[];
 }
 
 export const SKILL_ART = sprites.skillArt as Record<string, SkillArt>;
@@ -39,7 +41,7 @@ export function artMissiles(): string[] {
   const ids: string[] = [];
   for (const art of Object.values(SKILL_ART)) {
     for (const role of ROLES) if (art[role]) ids.push(art[role]);
-    ids.push(...(art.impact ?? []));
+    ids.push(...(art.impact ?? []), ...(art.swirl ?? []));
   }
   ids.push(...Object.values(SUMMON_BOLTS));
   return [...new Set(ids)];

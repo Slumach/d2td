@@ -81,6 +81,8 @@
   },
   "comment": "What each skill looks like, by missiles.txt row. fly: the missile in flight (its ExplosionMissile plays where it lands). impact: more art where it lands. fall: drops onto a strike's target before it lands (Meteor). zone: shards falling inside a ground zone (Blizzard). shards: sprayed around a flying missile (Frozen Orb). ring: thrown outward by a nova (Poison Nova). arc: drawn lightning, with this art on each monster it hits. bolt: drawn lightning along a line missile. corpse: on the corpse a corpse skill consumes. raise: where a revive rises. cast: at the tower. area: on the cursed spot. overlay: an overlay.txt effect on what the skill touches.",
   "skillArt": {
+    "hurricane": { "swirl": ["hurricaneswoosh", "hurricanerock", "hurricanetree"] },
+    "cloak-of-shadows": { "overlay": "cloaked" },
     "frenzy": { "castOverlay": "frenzy" },
     "berserk": { "castOverlay": "berserkfront" },
     "battle-orders": { "overlay": "battleorders" },
