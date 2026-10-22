@@ -1,3 +1,10 @@
+0.3.5
+
+- Towers wear what you give them: a worn weapon shows in the tower's hands in its own stance (a bow on a Paladin draws like a bowman), and a shield on its arm. The look is made from your D2R install the first time a tower wears that pair.
+- The Amazon's bow line holds its bow.
+- Rune tooltips: a runeword reads green when you hold every rune for it; otherwise the runes still missing are listed in grey.
+- Setup re-extracts the hero art on the first start after the update.
+
 0.3.4
 
 - Prices: every tower costs the same 600 to build, however many you own. The top of a line is dearer and much stronger: T3 starts at three times what the T2 it replaces could do, an evolution is worth four times its two parents, and evolved towers and T3 lines keep levelling at a price that grows 15% a level.
