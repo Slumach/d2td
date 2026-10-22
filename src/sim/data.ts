@@ -474,6 +474,13 @@ export interface VendorCap {
 }
 
 export interface DropRules {
+  /**
+   * The share of D2R's drops that fall, percent: each item a treasure class rolls is kept
+   * with this chance before its quality roll, so every rarity keeps D2R's own ratio to the
+   * rest. Gems and runes keep their own share (gemRunePct) so the rune supply stands.
+   */
+  dropPct: number;
+  gemRunePct: number;
   /** Weight of rune entries in a treasure class, percent of D2R's (125: a quarter more runes). */
   runeMultiplierPct: number;
   /** Each endless Tier multiplies the drop rate by this percent more, compounding (shrinks NoDrop). */

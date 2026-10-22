@@ -76,6 +76,11 @@ describe('quality', () => {
   it('rolls whole items with unique ids', () => {
     const items = rollKillDrops(data, createRng(3), { tc: 'Test Negative', ctx: ctx(), hammerPpm: 0, uid: 'k' });
     expect(items.map((i) => i.uid)).toEqual(['k.0', 'k.1', 'k.2']);
+    // The keep share thins items and gems separately: with items at 0 only the gem falls, and at 100 everything
+    const thinned = rollKillDrops(data, createRng(3), { tc: 'Test Negative', ctx: ctx(), keep: { itemPct: 0, gemRunePct: 100 }, hammerPpm: 0, uid: 'k' });
+    expect(thinned.map((i) => i.code)).toEqual(['gsr', 'gsr', 'r01']);
+    const none = rollKillDrops(data, createRng(3), { tc: 'Test Equip', ctx: ctx(), keep: { itemPct: 0, gemRunePct: 100 }, hammerPpm: 0, uid: 'k' });
+    expect(none).toEqual([]);
     const hammer = rollKillDrops(data, createRng(3), { tc: 'Test Nothing', ctx: ctx(), hammerPpm: 1_000_000, uid: 'h' });
     expect(hammer.map((i) => i.code)).toEqual(['xsh']);
   });

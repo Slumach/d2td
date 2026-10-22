@@ -50,6 +50,7 @@ for (let run = 0; run < runs; run++) {
         const drops = rollKillDrops(items, rng, {
           tc,
           ctx: { mlvl: def.level, magicFind: mf, runePct: data.drops.runeMultiplierPct, noDropPct: Math.trunc(10_000 / scale) },
+          keep: { itemPct: data.drops.dropPct, gemRunePct: data.drops.gemRunePct },
           hammerPpm: Math.trunc((data.drops.smithsHammerPpm * scale) / 100),
           uid: String(uid++),
         });
@@ -67,7 +68,51 @@ for (let run = 0; run < runs; run++) {
 }
 
 const runeName = (code: string) => items.bases[code]?.name ?? code;
-console.log(`${runs} runs, magic find ${mf}, endless Tier ${tier} scaling (${scale}% drop rate), rune multiplier ${data.drops.runeMultiplierPct}%\n`);
+console.log(`${runs} runs, magic find ${mf}, endless Tier ${tier} scaling (${scale}% drop rate), rune multiplier ${data.drops.runeMultiplierPct}%, ${data.drops.dropPct}% of D2R's items and ${data.drops.gemRunePct}% of its gems and runes fall\n`);
+
+// Expected drops a wave at three stages: every monster of each wave killed once, averaged over trials
+{
+  data.extendWaves?.(106);
+  const stages: [string, (w: (typeof data.waves)[number]) => boolean, number][] = [
+    ['Normal Act 1', (w) => w.difficulty === 0 && w.act === 1 && !w.tier, 0],
+    ['Hell Act 1', (w) => w.difficulty === 2 && w.act === 1 && !w.tier, 0],
+    ['Endless Tier 3', (w) => w.tier === 3, 3],
+  ];
+  const trials = 40;
+  for (const [name, inStage, t] of stages) {
+    const waves = data.waves.filter(inStage);
+    const tierScale = compoundPct(100 + data.drops.tierDropPct, t);
+    let n = 0;
+    let gemsRunes = 0;
+    let magicUp = 0;
+    for (const wave of waves) {
+      for (let trial = 0; trial < trials; trial++) {
+        for (const g of wave.groups) {
+          const def = data.monsters[g.monster]!;
+          const tc = g.rank === 'champion' ? def.treasure[1] : g.rank === 'unique' ? def.treasure[2] : def.treasure[0];
+          if (!tc) continue;
+          for (let k = 0; k < g.count; k++) {
+            for (const it of rollKillDrops(items, rng, {
+              tc,
+              ctx: { mlvl: def.level, magicFind: mf, runePct: data.drops.runeMultiplierPct, noDropPct: Math.trunc(10_000 / tierScale) },
+              keep: { itemPct: data.drops.dropPct, gemRunePct: data.drops.gemRunePct },
+              hammerPpm: 0,
+              uid: 'w',
+            })) {
+              n++;
+              const base = items.bases[it.code]!;
+              if (base.isGem || base.isRune) gemsRunes++;
+              else if (it.quality === 'magic' || it.quality === 'rare' || it.quality === 'set' || it.quality === 'unique') magicUp++;
+            }
+          }
+        }
+      }
+    }
+    const perWave = (v: number) => (v / trials / Math.max(1, waves.length)).toFixed(1);
+    console.log(`${name}: ${perWave(n)} items a wave (${perWave(magicUp)} magic or better, ${perWave(gemsRunes)} gems and runes) over ${waves.length} waves`);
+  }
+  console.log('');
+}
 for (const [d, t] of tallies.entries()) {
   const per = (n: number) => (n / runs).toFixed(1);
   const q = ['normal', 'superior', 'magic', 'rare', 'set', 'unique'].map((k) => `${k} ${per(t.quality[k] ?? 0)}`).join(', ');

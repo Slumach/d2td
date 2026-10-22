@@ -52,6 +52,7 @@ export function campaignLoot(data: GameData, upTo: number, clears = 1, magicFind
             ...rollKillDrops(data.items, rng, {
               tc,
               ctx: { mlvl: def.level, magicFind, runePct: data.drops.runeMultiplierPct, noDropPct: 100 },
+              keep: { itemPct: data.drops.dropPct, gemRunePct: data.drops.gemRunePct },
               hammerPpm: 0,
               uid: `loot${n++}`,
             }),

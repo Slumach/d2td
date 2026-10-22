@@ -139,16 +139,26 @@ export function rollQuality(data: ItemData, rng: Rng, base: ItemBase, ilvl: numb
 export interface KillDrops {
   tc: string;
   ctx: DropContext;
+  /**
+   * The share of what the treasure class rolls that actually falls, percent, for items and
+   * for gems and runes (balance.json drops.dropPct and gemRunePct); rolled per item before
+   * its quality, so rarities keep D2R's ratios. Absent, everything falls.
+   */
+  keep?: { itemPct: number; gemRunePct: number };
   /** Smith's Hammer's own chance per kill, in parts per million (already Tier scaled). */
   hammerPpm: number;
   /** Prefix for the items' uids: unique in the run. */
   uid: string;
 }
 
-/** Every item a kill drops: its treasure class, rolled to items, then Smith's Hammer's own roll. */
+/** Every item a kill drops: its treasure class, rolled to items, thinned by the keep share, then Smith's Hammer's own roll. */
 export function rollKillDrops(data: ItemData, rng: Rng, k: KillDrops): Item[] {
   const items: Item[] = [];
   for (const { base, quality } of rollTreasure(data, rng, k.tc, k.ctx)) {
+    if (k.keep) {
+      const pct = base.isGem || base.isRune ? k.keep.gemRunePct : k.keep.itemPct;
+      if (pct < 100 && rollInt(rng, 0, 99) >= pct) continue;
+    }
     const q = rollQuality(data, rng, base, k.ctx.mlvl, k.ctx.magicFind, quality);
     items.push(rollItem(data, rng, { uid: `${k.uid}.${items.length}`, code: base.code, ilvl: k.ctx.mlvl, quality: q }));
   }

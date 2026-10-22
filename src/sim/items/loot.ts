@@ -102,6 +102,7 @@ export function dropLoot(sim: Sim, monster: Monster): void {
       runePct: d.runeMultiplierPct * (monster.runeBoost ?? 1),
       noDropPct: Math.max(1, Math.trunc((100 * 100) / scale)),
     },
+    keep: { itemPct: d.dropPct, gemRunePct: d.gemRunePct },
     hammerPpm: Math.trunc((d.smithsHammerPpm * scale) / 100),
     uid: `${s.tick}.${monster.id}`,
   });
