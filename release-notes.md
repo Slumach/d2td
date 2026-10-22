@@ -1,3 +1,10 @@
+0.3.2
+
+- The Barbarian's War Cries are a support line: Battle Cry weakens the monsters in reach (less damage, lower defence), War Cry stuns, Shout protects the summons of nearby towers and Battle Orders makes nearby towers hit harder. Find Item is a first-tier pick that re-finds a corpse's gold and drop. His melee reaches the diagonal path tiles too.
+- The Assassin's Lightning Sentry and Death Sentry are traps set on the path, firing from where they stand; Phoenix Strike casts its meteor, chain lightning and ice charges in turn.
+- Lightning, Chain Lightning and Static Field use D2's own lightning art instead of drawn lines; spells play their D2 cast overlays; Fist of the Heavens throws its holy bolts at the monsters around the strike.
+- The act bosses play their full D2 death animations, Diablo's and Baal's included.
+
 0.3.1
 
 - Evolutions are a real jump: an evolved tower fires both its lines and is worth about 2.5 times the two towers it replaced (a maxed Blizzard evolved into a Blizzballer at the same damage before).
