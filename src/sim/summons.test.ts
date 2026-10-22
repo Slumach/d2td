@@ -6,7 +6,7 @@ import { distSq } from './combat.ts';
 import { positionAt } from './map.ts';
 import { step } from './sim.ts';
 import type { Corpse, Sim } from './state.ts';
-import { addMonster, freeze, placeTower, testSim, ticks, ungated } from './testkit.ts';
+import { addMonster, freeze, placeTower, testSim, ticks } from './testkit.ts';
 
 // The tower stands at tile (2, 4); a monster at path distance 3000 is beside it.
 const BESIDE = 3000;
@@ -113,7 +113,7 @@ describe('corpses', () => {
 
 describe('Sorceress and Necromancer evolutions', () => {
   it('an evolved tower casts its partner skill too: the Summoner curses while it raises', () => {
-    const sim = ungated(testSim());
+    const sim = testSim();
     sim.state.gold[0] = 10_000;
     const revive = placeTower(sim, 6, 5, 'revive', { tier: 3, level: 5 });
     const amp = placeTower(sim, 7, 5, 'amplify-damage', { level: 5 });

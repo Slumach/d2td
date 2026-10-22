@@ -63,12 +63,6 @@ export function addMonster(
   return m;
 }
 
-/** Opens every tier gate, for tests of what towers do once they may tier up and evolve. */
-export function ungated(sim: Sim): Sim {
-  sim.data.tierGates = {};
-  return sim;
-}
-
 export function ticks(sim: Sim, n: number, commands: Command[] = []): void {
   for (let i = 0; i < n; i++) step(sim, i === 0 ? commands : []);
 }

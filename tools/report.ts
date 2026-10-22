@@ -6,9 +6,11 @@
 //   npm run report -- --seeds 1,2,3 --bots PALADIN,MIXED3
 //   npm run report -- --csv out.csv                         alive weight every second, per run
 //   npm run report -- --jobs 4                              runs at once (each in its own process)
+//   npm run report -- --set tierCosts=400,3000 --set evolveCost=12000   try prices without editing balance.json
 //
 // For each bot, over the seeds:
 //   the wave each run dies on (or that it cleared the campaign)
+//   the wave it first bought each tier and each evolution, and gold earned by each act
 //   alive weight over time: at each wave's start and its peak while that wave was the newest
 //   where its towers stood at the end: in a U-bend pocket, round the outside of the U-bend,
 //   on the run into a handoff corner, or along a long straight (by the nearest path leg)
@@ -80,6 +82,11 @@ export interface RingRun {
   peak: number[];
   /** Alive weight once a second, for --csv. */
   perSecond: number[];
+  /** The wave the first tower of each tier appeared (4 is an evolution), and each recipe. */
+  tiersOn: Record<number, number>;
+  evolvedOn: Record<string, number>;
+  /** Gold earned (bounties and send bonuses) before each wave started, index 0 is wave 1. */
+  incomeAtStart: number[];
   /** Towers standing at the end, by spot, and how many of them touch the path. */
   towers: Record<Spot, number>;
   touching: number;
@@ -89,14 +96,22 @@ export function playRing(data: GameData, strategy: Strategy, seed: number): Ring
   const atStart: number[] = [];
   const peak: number[] = [];
   const perSecond: number[] = [];
+  const incomeAtStart: number[] = [];
+  let income = 0;
+  let prevGold = data.economy.startingGold;
   let last: Sim | undefined;
   const r = runBot(data, strategy, seed, (sim) => {
     last = sim;
     const s = sim.state;
+    // Gold only rises by income (a purchase and a kill on one tick undercounts a little)
+    const gold = s.gold[0] ?? 0;
+    if (gold > prevGold) income += gold - prevGold;
+    prevGold = gold;
     // s.wave is the number of waves started; a new one just went out
     while (atStart.length < s.wave) {
       atStart.push(s.alive);
       peak.push(s.alive);
+      incomeAtStart.push(income);
     }
     if (s.wave > 0) peak[s.wave - 1] = Math.max(peak[s.wave - 1]!, s.alive);
     if (s.tick % 20 === 0) perSecond.push(s.alive);
@@ -108,13 +123,14 @@ export function playRing(data: GameData, strategy: Strategy, seed: number): Ring
     towers[spot]++;
     if (distance <= 1) touching++;
   }
-  return { strategy, seed, won: r.won, stalled: last?.state.status === 'playing', wave: r.wave, atStart, peak, perSecond, towers, touching };
+  return { strategy, seed, won: r.won, stalled: last?.state.status === 'playing', wave: r.wave, atStart, peak, perSecond, tiersOn: r.tiersOn, evolvedOn: r.evolvedOn, incomeAtStart, towers, touching };
 }
 
 /** One run in a child process (a big tower-spam run takes minutes), its result as JSON on stdout. */
-function playInChild(strategy: Strategy, seed: number): Promise<RingRun> {
+function playInChild(strategy: Strategy, seed: number, sets: string[]): Promise<RingRun> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url), '--one', `${strategy}:${seed}`], { stdio: ['ignore', 'pipe', 'inherit'] });
+    const args = [...process.execArgv, fileURLToPath(import.meta.url), '--one', `${strategy}:${seed}`, ...sets.flatMap((s) => ['--set', s])];
+    const child = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'inherit'] });
     let json = '';
     child.stdout.on('data', (d: Buffer) => (json += d.toString()));
     child.on('error', reject);
@@ -129,15 +145,24 @@ async function main(): Promise<void> {
       bots: { type: 'string' },
       csv: { type: 'string' },
       one: { type: 'string' },
+      set: { type: 'string', multiple: true, default: [] },
       jobs: { type: 'string' },
     },
   });
-  const data = buildGameData(loadTables(), DESIGN);
+  // --set key=value overrides a balance.json number or number list for this run
+  const balance = { ...DESIGN.balance } as Record<string, unknown>;
+  for (const s of args.set) {
+    const [key, value] = s.split('=') as [string, string];
+    if (!(key in balance)) throw new Error(`--set ${key}: no such balance.json field`);
+    balance[key] = value.includes(',') ? value.split(',').map(Number) : Number(value);
+  }
+  const data = buildGameData(loadTables(), { ...DESIGN, balance: balance as unknown as typeof DESIGN.balance });
   if (args.one) {
     const [strategy, seed] = args.one.split(':');
     process.stdout.write(JSON.stringify(playRing(data, strategy as Strategy, Number(seed))));
     return;
   }
+  if (args.set.length) console.log(`balance overrides: ${args.set.join('  ')}`);
   const seeds = args.seeds.split(',').map(Number);
   const bots = args.bots ? (args.bots.split(',') as Strategy[]) : [...new Set([...STRATEGIES, ...HELL_STRATEGIES])];
   const total = data.waves.length;
@@ -146,7 +171,7 @@ async function main(): Promise<void> {
   const started = Date.now();
   const worker = async () => {
     for (let job = queue.shift(); job; job = queue.shift()) {
-      const run = await playInChild(job.strategy, job.seed);
+      const run = await playInChild(job.strategy, job.seed, args.set);
       runs.push(run);
       console.error(`${job.strategy} seed ${job.seed}: ${run.won ? 'cleared' : `${run.stalled ? 'stalled at' : 'died on'} wave ${run.wave}`} (${((Date.now() - started) / 1000).toFixed(0)} s)`);
     }
@@ -168,6 +193,34 @@ async function main(): Promise<void> {
     const mine = runs.filter((r) => r.strategy === strategy);
     const ends = mine.map((r) => (r.won ? 'cleared' : `${r.stalled ? 'stalled at' : 'died on'} w${r.wave} ${stage(r.wave)}`));
     console.log(`  ${strategy.padEnd(8)} ${ends.join('  |  ')}`);
+  }
+
+  console.log('');
+  console.log('First purchase of each tier, by seed (T4 is the first evolution); the stage is the median');
+  for (const strategy of bots) {
+    const mine = runs.filter((r) => r.strategy === strategy);
+    const cells = [2, 3, 4].map((tier) => {
+      const waves = mine.map((r) => r.tiersOn[tier]);
+      if (waves.every((w) => w === undefined)) return `T${tier} never`.padEnd(42);
+      const bought = waves.filter((w): w is number => w !== undefined);
+      const med = median(bought);
+      return `T${tier} w${waves.map((w) => w ?? '-').join('/')} ${stage(med)}`.padEnd(42);
+    });
+    const recipes = [...new Set(mine.flatMap((r) => Object.keys(r.evolvedOn)))].map((id) => `${id} w${mine.map((r) => r.evolvedOn[id] ?? '-').join('/')}`);
+    console.log(`  ${strategy.padEnd(8)} ${cells.join('')}${recipes.join('  ')}`);
+  }
+
+  console.log('');
+  console.log('Gold earned before each act started, median over seeds (the price curve is set against this)');
+  const actStarts = data.waves.map((w, i) => (w.actWave === 1 ? i : -1)).filter((i) => i >= 0);
+  console.log(`  ${'bot'.padEnd(8)} ${actStarts.map((i) => `${stageName(data.waves[i]!.difficulty, data.waves[i]!.act).replace('Normal ', 'N').replace('Nightmare ', 'NM').replace('Hell ', 'H').replace('Act ', '')}`.padStart(7)).join('')}`);
+  for (const strategy of bots) {
+    const mine = runs.filter((r) => r.strategy === strategy);
+    const cells = actStarts.map((i) => {
+      const have = mine.filter((r) => r.incomeAtStart.length > i);
+      return (have.length ? String(median(have.map((r) => r.incomeAtStart[i]!))) : '').padStart(7);
+    });
+    console.log(`  ${strategy.padEnd(8)} ${cells.join('')}`);
   }
 
   console.log('');

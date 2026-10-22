@@ -53,7 +53,7 @@ A tower is a class, a line, a tier and a level. The line is chosen once, the tie
 
 **Build.** Place a class tower on a buildable tile for its base cost. It is inert until you pick one of three T1 skills. That pick fixes its line for good.
 
-**Tiers.** T1, T2, T3 up the line, one skill per tier. Within a tier the tower has skill levels 1 to 5, bought with gold. Level 5 unlocks the next tier, once the campaign has reached that tier's stage: T2 from Normal Act 2, T3 from Nightmare Act 1, T4 evolutions from Hell Act 3, T5 from Hell Act 5 (balance.json tierGates; a tier opens once the first wave of its stage has started). Locked buttons say where they unlock. Levels 1 to 5 map to skills.txt levels 1, 5, 10, 15 and 20 for damage, duration and radius, which gives authentic scaling for free.
+**Tiers.** T1, T2, T3 up the line, one skill per tier. Within a tier the tower has skill levels 1 to 5, bought with gold. Level 5 unlocks the next tier. Nothing gates a tier by stage: any tier or evolution can be bought at any time, and the price curve (balance.json tierCosts, evolveCost, levelCostBase) is tuned so a solo player on natural income first reaches T2 around Normal Act 2, T3 around Nightmare Act 1, T4 evolutions around Hell Act 3 and T5 around Hell Act 5. A player catching teammates' leaks at a handoff corner gets there earlier, which is intended. Levels 1 to 5 map to skills.txt levels 1, 5, 10, 15 and 20 for damage, duration and radius, which gives authentic scaling for free.
 
 **Evolution (T4).** A recipe names two towers and the minimum tier of each. Both must be adjacent (8 neighbours) and at that tier. Evolving consumes both and places the evolved tower on the attack tower's tile. The freed tile is part of the payoff. The evolved tower keeps its attack skill at T3-equivalent power, carries its partner's aura or skill as a built-in bonus, and still projects that aura at half radius for neighbours.
 
@@ -201,13 +201,15 @@ The ring report (tools/report.ts, `npm run report`) has every bot play all 75 wa
 | --- | --- |
 | Build a class tower | 150 |
 | T1 skill pick | free |
-| Skill level +1 | Geometric from a base of 40 at T1, 80 at T2, 120 at T3; the per-level multiplier is harness-tuned (see src/data/balance.json) |
+| Skill level +1 | Geometric from a base of 40 at T1, 160 at T2, 200 at T3; the per-level multiplier is harness-tuned (see src/data/balance.json) |
 | Upgrade to T2 | 250 |
-| Upgrade to T3 | 500 |
-| Evolve to T4 | 400 |
+| Upgrade to T3 | 5000 |
+| Evolve to T4 | 6000 |
 | Sell | 60% of everything spent on the tower |
 
 A Hammerdin therefore costs both parents built, levelled and tiered, plus the evolution fee (totals follow from the multipliers; see src/data/balance.json), and two tiles before it costs one.
+
+The curve was set against the ring report (Oct 2026, `npm run report`, tier-buying bots on three seeds): a bot's cumulative income is about 630 gold entering Normal Act 2, 33,000 entering Nightmare, 140,000 entering Hell and 200,000 entering Hell Act 3. With these prices the bots first buy T2 on waves 7 to 14 (Normal Act 2 to 3), T3 on waves 22 to 43 (median 29, Nightmare Act 1) and their first evolution on waves 37 to 65 (median 63, Hell Act 3). The bots buy by power per gold, so the spread is theirs, not the curve's: the Necromancer bot rates its Explosionmancer highly and evolves in Nightmare, and the Paladin bot never rates the Hammerdin above a new tower.
 
 ## Visuals and asset pipeline
 

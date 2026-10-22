@@ -27,8 +27,6 @@ import {
   pendingChoices,
   sellValue,
   tierCost,
-  tierGate,
-  tierPrice,
   towerAt,
   towerById,
   upgradeCost,
@@ -1372,10 +1370,8 @@ export class GameScene extends Phaser.Scene {
     if (under.length) lines.push(`Under ${under.join(', ')}`);
     const level = active ? upgradeCost(sim, tower) : undefined;
     const tier = tierCost(sim, tower);
-    const lock = tierPrice(sim, tower) !== undefined ? tierGate(sim, tower.tier + 1) : undefined;
     if (level !== undefined) lines.push(`Next: level ${tower.level + 1} for ${level} gold`);
     else if (tier !== undefined) lines.push(`Next: tier ${tower.tier + 1} for ${tier} gold`);
-    else if (lock) lines.push(`T${tower.tier + 1} unlocks in ${stageName(lock.difficulty, lock.act)}`);
     lines.push(`Targeting ${tower.targeting}`);
 
     const buttons: PanelButton[] = [];
@@ -1389,15 +1385,11 @@ export class GameScene extends Phaser.Scene {
         if (options.length > 1) commands.push({ type: 'pickBranch', towerId: tower.id, skill });
         buttons.push({ label: options.length > 1 ? `Tier up: ${this.skillName(skill)}` : `Tier up ${tier}g`, enabled: this.gold >= tier, onClick: () => this.issue(...commands) });
       }
-    } else if (lock) {
-      buttons.push({ label: `T${tower.tier + 1} unlocks in ${stageName(lock.difficulty, lock.act)}`, enabled: false, onClick: () => undefined });
     }
-    const evolveLock = tierGate(sim, MAX_TIER + 1);
     for (const other of sim.state.towers) {
       const match = evolutionFor(sim, tower, other);
       if (!match) continue;
-      if (evolveLock) buttons.push({ label: `${match.recipe.name} unlocks in ${stageName(evolveLock.difficulty, evolveLock.act)}`, enabled: false, onClick: () => undefined });
-      else buttons.push({ label: `Evolve ${match.recipe.name}`, enabled: this.gold >= e.evolveCost, onClick: () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }) });
+      buttons.push({ label: `Evolve ${match.recipe.name}`, enabled: this.gold >= e.evolveCost, onClick: () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }) });
     }
     const next = TARGETING_MODES[(TARGETING_MODES.indexOf(tower.targeting) + 1) % TARGETING_MODES.length]!;
     buttons.push({ label: 'Targeting', enabled: true, onClick: () => this.issue({ type: 'setTargeting', towerId: tower.id, mode: next }) });
@@ -1446,20 +1438,12 @@ export class GameScene extends Phaser.Scene {
         if (options.length > 1) commands.push({ type: 'pickBranch', towerId: tower.id, skill });
         specs.push(this.skillButton(skill, `T${tower.tier + 1}: ${this.skillName(skill)} (${tier}g)`, () => this.issue(...commands), this.gold >= tier));
       }
-    } else if (tierPrice(sim, tower) !== undefined && tierGate(sim, tower.tier + 1)) {
-      const lock = tierGate(sim, tower.tier + 1)!;
-      specs.push({ label: `T${tower.tier + 1} unlocks in ${stageName(lock.difficulty, lock.act)}`, enabled: false, onClick: () => undefined });
     } else if (!tower.evolved && line && tower.level < MAX_TOWER_LEVEL && tower.tier < line.tiers.length) {
       specs.push({ label: `T${tower.tier + 1} unlocks at level ${MAX_TOWER_LEVEL}`, enabled: false, onClick: () => undefined });
     }
-    const evolveLock = tierGate(sim, MAX_TIER + 1);
     for (const other of sim.state.towers) {
       const match = evolutionFor(sim, tower, other);
       if (!match) continue;
-      if (evolveLock) {
-        specs.push({ label: `${match.recipe.name} unlocks in ${stageName(evolveLock.difficulty, evolveLock.act)}`, enabled: false, onClick: () => undefined });
-        continue;
-      }
       specs.push({
         ...this.skillButton(match.recipe.attack.skill, `Evolve ${match.recipe.name} (${e.evolveCost}g)`, () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }), this.gold >= e.evolveCost),
         colour: '#5a2a70',

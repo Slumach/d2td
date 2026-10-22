@@ -5,3 +5,4 @@ assets-extracted/
 *.tsbuildinfo
 dist-electron/
 release/
+references/

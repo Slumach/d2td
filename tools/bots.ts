@@ -21,7 +21,7 @@ import type { HitFilter, SkillDef } from '../src/sim/archetypes/types.ts';
 import { auraSources } from '../src/sim/auras.ts';
 import { EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, type GameData } from '../src/sim/data.ts';
 import { tileCenter, isPathTile } from '../src/sim/map.ts';
-import { activeSkill, canBuild, createSim, evolutionFor, pendingChoices, step, tierCost, tierGate, upgradeCost } from '../src/sim/sim.ts';
+import { activeSkill, canBuild, createSim, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
 import { withMods } from '../src/sim/combat.ts';
 import { ELEMENTS, type Command, type Element, type Sim, type TimedCommand, type Tower } from '../src/sim/state.ts';
 
@@ -492,7 +492,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
   }
 
   // Evolutions: any adjacent pair that makes a recipe, judged as the merged tower, once they open
-  if (config.evolve && !tierGate(sim, MAX_TIER + 1)) {
+  if (config.evolve) {
     for (let i = 0; i < towers.length; i++) {
       for (let j = i + 1; j < towers.length; j++) {
         const match = evolutionFor(sim, towers[i]!, towers[j]!);
@@ -521,8 +521,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
     const line = sim.data.classes[t.cls]?.lines[t.line];
     const tierPrice = sim.data.economy.tierCosts[t.tier - 1];
     const established = towers.length >= LOOKAHEAD_MIN_TOWERS;
-    const open = !tierGate(sim, t.tier + 1);
-    if (config.tiers && established && open && line && tierPrice !== undefined && t.tier < line.tiers.length && t.picks.length >= t.tier) {
+    if (config.tiers && established && line && tierPrice !== undefined && t.tier < line.tiers.length && t.picks.length >= t.tier) {
       let remaining = tierPrice;
       for (let lv = t.level; lv < MAX_TOWER_LEVEL; lv++) remaining += sim.data.economy.levelCosts[t.tier - 1]![lv - 1]!;
       const opts = line.tiers[t.tier] ?? [];
@@ -629,8 +628,6 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
           continue;
         }
         if (t.level < MAX_TOWER_LEVEL) return levelUp(s, t);
-        // A tier still closed by its stage: the engine plays until it opens
-        if (tierGate(s, t.tier + 1)) return undefined;
         return tierUp(s, t, (opts) => branchAt(t.tier + 1, opts));
       }
       const a = byTag(s, goal.a);
@@ -640,8 +637,8 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
         goals.shift();
         continue;
       }
-      if (tierGate(s, MAX_TIER + 1)) return undefined;
-      if ((s.state.gold[0] ?? 0) < s.data.economy.evolveCost) return [];
+      // Not yet affordable: the engine plays on, and this fires once the gold is there
+      if ((s.state.gold[0] ?? 0) < s.data.economy.evolveCost) return undefined;
       evolvedOn[match.recipe.id] = s.state.wave;
       goals.shift();
       return [{ type: 'evolve', towerA: a.id, towerB: b.id }];
@@ -649,7 +646,7 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
     return undefined;
   }
 
-  // The best option depends only on the wave (the coming monsters, the tier gates) and the
+  // The best option depends only on the wave (the coming monsters) and the
   // towers, not on gold or the monsters out, so it is worked out again only when one changes
   let cached: { key: string; best: Option | undefined } | undefined;
   const keyOf = (s: Sim) =>
@@ -684,13 +681,16 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
 const CONFIGS: Partial<Record<Strategy, BotConfig>> = {
   BOLT: { strategy: 'BOLT', builds: ['holy-bolt'], tiers: false },
   HOLY: { strategy: 'HOLY', builds: ['holy-bolt'], tiers: true },
-  TWOLINE: { strategy: 'TWOLINE', builds: ['holy-bolt', 'might'], tiers: true },
+  TWOLINE: { strategy: 'TWOLINE', builds: ['holy-bolt', 'might'], tiers: true, evolve: true },
   PALADIN: {
     strategy: 'PALADIN',
     builds: ['sacrifice', 'holy-bolt', 'might'],
     tiers: true,
+    evolve: true,
     // A Holy tower and a Might beside it, both to T2 (Blessed Hammer, Concentration),
-    // evolved into a Hammerdin; one Zealot on the path to hold the early waves.
+    // evolved into a Hammerdin once the evolution is affordable from banked gold; one Zealot
+    // on the path to hold the early waves. The bot never hoards for the evolution: until it
+    // can pay, the engine spends as usual, so the price paces it like any other purchase.
     opening: ({ sim, ranged, melee, besideTag, firstFree }) => [
       { kind: 'build', tag: 'holy', spot: () => firstFree(sim, ranged), skill: 'holy-bolt' },
       { kind: 'build', tag: 'zealot', spot: () => firstFree(sim, melee), skill: 'sacrifice' },
@@ -753,6 +753,9 @@ export interface RunResult {
   levels: number;
   /** Highest tier any tower reached; 4 means evolved. */
   topTier: number;
+  /** The wave on which the first tower of each tier (2, 3, and 4 for an evolution) appeared. */
+  tiersOn: Record<number, number>;
+  /** Wave on which each evolution recipe was first bought, by recipe id. */
   evolvedOn: Record<string, number>;
   /** Every command the bot sent, stamped with its tick: a replayable log. */
   log: TimedCommand[];
@@ -809,13 +812,20 @@ export function runBot(
   const margins = new MarginLog();
   let topTier = 0;
   let peakAlive = 0;
+  const tiersOn: Record<number, number> = {};
+  const evolvedOn: Record<string, number> = {};
   while (sim.state.status === 'playing' && sim.state.tick < maxTicks) {
     const commands = bot.decide(sim);
     for (const command of commands) log.push({ tick: sim.state.tick, command });
     step(sim, commands);
     margins.observe(sim);
     peakAlive = Math.max(peakAlive, sim.state.alive);
-    for (const t of sim.state.towers) topTier = Math.max(topTier, t.tier);
+    for (const t of sim.state.towers) {
+      const tier = t.evolved ? MAX_TIER + 1 : t.tier;
+      topTier = Math.max(topTier, tier);
+      if (tier > 1) tiersOn[tier] ??= sim.state.wave;
+      if (t.evolved) evolvedOn[t.evolved] ??= sim.state.wave;
+    }
     onTick?.(sim);
   }
   const s = sim.state;
@@ -829,7 +839,8 @@ export function runBot(
     towers: s.towers.length,
     levels: s.towers.reduce((n, t) => n + progress(t), 0),
     topTier,
-    evolvedOn: bot.evolvedOn,
+    tiersOn,
+    evolvedOn: { ...evolvedOn, ...bot.evolvedOn },
     log,
     margins: margins.margins.sort((a, b) => a.wave - b.wave),
   };

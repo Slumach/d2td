@@ -11,7 +11,7 @@ import { FIXTURE_BUILD, FIXTURE_TABLES, fixtureDesign, fixtureGameData } from '.
 import { stateHash } from './hash.ts';
 import { createMap, isPathTile } from './map.ts';
 import { createRng, nextU32, rollInt } from './rng.ts';
-import { createSim, runLog, step, tierGate } from './sim.ts';
+import { createSim, runLog, step } from './sim.ts';
 import type { TimedCommand } from './state.ts';
 
 describe('isqrt', () => {
@@ -160,29 +160,6 @@ describe('data', () => {
     expect(m.level).toBe(10);
   });
 
-  it('opens tiers by stage: T2 in Normal Act 2, T3 in Nightmare Act 1, evolutions in Hell Act 3, T5 in Hell Act 5', () => {
-    const data = fixtureGameData();
-    expect(Object.fromEntries(Object.entries(data.tierGates).map(([t, g]) => [t, [g.difficulty, g.act, g.wave]]))).toEqual({
-      2: [0, 2, 7],
-      3: [1, 1, 26],
-      4: [2, 3, 62],
-      5: [2, 5, 70],
-    });
-    const sim = createSim(data, 1);
-    sim.state.gold[0] = 100_000;
-    step(sim, [{ type: 'build', x: 11, y: 6, cls: 'paladin', skill: 'holy-bolt' }]);
-    const tower = sim.state.towers[0]!;
-    for (let i = 0; i < 4; i++) step(sim, [{ type: 'upgrade', towerId: tower.id }]);
-    expect(tierGate(sim, 2)).toMatchObject({ difficulty: 0, act: 2 });
-    step(sim, [{ type: 'upgradeTier', towerId: tower.id }]);
-    expect(tower.tier).toBe(1);
-    // Once Normal Act 2's first wave has started, T2 opens
-    sim.state.wave = 7;
-    expect(tierGate(sim, 2)).toBeUndefined();
-    step(sim, [{ type: 'upgradeTier', towerId: tower.id }]);
-    expect(tower.tier).toBe(2);
-  });
-
   it('builds tier ladders: every tier-up reaches the floor, five rising steps to the cap', () => {
     for (const data of [fixtureGameData(), ...(hasTables() ? [buildGameData(loadTables(), DESIGN)] : [])]) {
       const { dpsPct, caps } = DESIGN.balance.tierLadder;
@@ -292,10 +269,10 @@ function replaySuite(name: string, getData: () => GameData, strategies: Strategy
  * Replay runs on a rich economy so the bot's log reaches tiers, branches and evolutions
  * whatever balance.json says; determinism must not depend on tuning.
  */
-/** Plenty of gold, and every tier open from the start, so a short replay reaches tiers and an evolution. */
+/** Plenty of gold and a cheap evolution, so a short replay reaches tiers and an evolution. */
 const RICH: typeof DESIGN = {
   ...DESIGN,
-  balance: { ...DESIGN.balance, startingGold: 20_000, tierGates: { 2: [0, 1], 3: [0, 1], 4: [0, 1], 5: [0, 1] } },
+  balance: { ...DESIGN.balance, startingGold: 20_000, evolveCost: 50 },
 };
 
 replaySuite('replay (fixture data)', () => buildGameData(FIXTURE_TABLES, fixtureDesign(RICH), 30, FIXTURE_BUILD), ['PALADIN', 'TWOLINE']);

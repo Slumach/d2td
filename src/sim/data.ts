@@ -129,8 +129,6 @@ export interface BalanceJson {
    * timer still had left, per ten levels of the wave's monster.
    */
   earlySendGoldPerTenLevels: number;
-  /** The stage each tier opens at, by tier: [difficulty, act]. T2 from Normal Act 2 and so on. */
-  tierGates: Record<string, [number, number]>;
   /**
    * The placeholder acts' monster levels: the act's areas in levels.txt (MonLvlEx per
    * difficulty), from this low percentile on its first wave to this high one on its last.
@@ -338,19 +336,9 @@ export interface Rules {
   mods: Record<MonsterMod, { speedPct: number; damagePct: number; resist: ModResist[] }>;
 }
 
-/** A stage of the campaign: where a tier opens. */
-export interface StageGate {
-  difficulty: number;
-  act: number;
-  /** The run's wave number that starts it: the tier opens once that wave has started. */
-  wave: number;
-}
-
 export interface GameData {
   /** The five acts, for the map and the HUD. */
   acts: ActJson[];
-  /** Where each tier opens, by tier (2 to 5). */
-  tierGates: Record<number, StageGate>;
   skills: Record<string, SkillDef>;
   classes: Record<string, ClassDef>;
   evolutions: EvolutionDef[];
@@ -581,17 +569,6 @@ export function campaignWaves(
     });
   }
   return waves;
-}
-
-/** Where each tier opens: balance.json tierGates as the run's wave that starts each stage. */
-export function tierGatesFrom(balance: BalanceJson, monsters: MonstersJson): Record<number, StageGate> {
-  const perDifficulty = monsters.acts.reduce((n, a) => n + a.waves, 0);
-  const out: Record<number, StageGate> = {};
-  for (const [tier, [difficulty, act]] of Object.entries(balance.tierGates)) {
-    const before = monsters.acts.slice(0, act - 1).reduce((n, a) => n + a.waves, 0);
-    out[Number(tier)] = { difficulty, act, wave: difficulty * perDifficulty + before + 1 };
-  }
-  return out;
 }
 
 /** "Normal Act 2": a stage's name. */
@@ -849,7 +826,6 @@ export function buildGameData(
 
   return {
     acts: m.acts,
-    tierGates: tierGatesFrom(design.balance, m),
     skills,
     classes,
     evolutions,
