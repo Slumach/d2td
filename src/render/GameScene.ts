@@ -338,7 +338,6 @@ export class GameScene extends Phaser.Scene {
     // The loot filter from Options; the default needs no command
     const filter = (this.registry.get('lootFilter') as LootFilter | undefined) ?? 'default';
     if (filter !== 'default') this.issue({ type: 'lootFilter', mode: filter });
-    if (this.sim.players === 1) this.markSpawn();
     this.icons = iconIndex(this);
     createAnimations(this);
     this.fx = this.camera.asWorld(() => new SkillFx(this, DEPTH.effects));
@@ -400,6 +399,8 @@ export class GameScene extends Phaser.Scene {
     this.hud = this.add.text(16, online ? 8 : 18, '', text).setDepth(3000);
     this.hud2 = this.add.text(16, 38, '', { ...text, fontSize: '17px', color: '#b8b090' }).setDepth(3000);
     this.notice = this.add.text(GAME_WIDTH / 2, HUD_HEIGHT + 16, '', { ...text, fontSize: '20px', backgroundColor: '#000000a0', padding: { x: 12, y: 6 } }).setOrigin(0.5, 0).setDepth(5500).setVisible(false);
+    // The spawn mark toasts, so it waits for the notice text to exist (0.2.3 threw here on launch)
+    if (this.sim.players === 1) this.markSpawn();
     this.info = this.add.text(16, PANEL_TOP + 8, '', { ...text, fontSize: '20px' }).setDepth(3000);
     this.tooltip = createTooltip(this, 16, PANEL_TOP - 8);
     if (this.d2) {
