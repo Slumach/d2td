@@ -144,11 +144,11 @@ export class SkillFx {
   }
 
   /** An overlay.txt effect played once on a caster (skills.txt castoverlay). */
-  overlayOnce(id: string, at: Point, depth: number): void {
+  overlayOnce(id: string, at: Point, depth: number, alpha = 1): void {
     const texture = overlayKey(id);
     const s = this.spriteOf(texture, at.x, at.y);
     if (!s) return;
-    s.setDepth(depth);
+    s.setDepth(depth).setAlpha(alpha);
     s.play({ key: animKey(texture, 'MS', '0'), repeat: 0 });
     s.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => s.destroy());
   }
@@ -161,7 +161,7 @@ export class SkillFx {
    * Keeps one looping overlay on a unit while `id` is set, moved to its feet; an empty id
    * or a new one removes the old. `key` names the unit (`m12`, `t3`).
    */
-  ride(key: string, id: string | undefined, at: Point, depth: number): void {
+  ride(key: string, id: string | undefined, at: Point, depth: number, look: { scale?: number; alpha?: number } = {}): void {
     const have = this.riding.get(key);
     if (have && have.id !== id) {
       have.sprite.destroy();
@@ -174,6 +174,7 @@ export class SkillFx {
       const s = this.spriteOf(texture, at.x, at.y);
       if (!s) return;
       s.play({ key: animKey(texture, 'MS', '0'), repeat: -1 });
+      s.setScale(look.scale ?? 1).setAlpha(look.alpha ?? 1);
       r = { sprite: s, id };
       this.riding.set(key, r);
     }

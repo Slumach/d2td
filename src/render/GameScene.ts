@@ -114,6 +114,10 @@ const REVIVED_TINT = 0xd0ffd0;
 const SHOVE_PX = 14;
 /** Milliseconds per sim tick, for effects timed to the sim. */
 const TICK_MS = 1000 / TICKS_PER_SECOND;
+/** Enchant's full flame plays once this often on a tower (staggered by tower); a faint ember on the weapon hand rides between. */
+const ENCHANT_FLARE_TICKS = 12 * TICKS_PER_SECOND;
+/** Where a standing hero's weapon hand is, from its feet. */
+const ENCHANT_HAND = { x: 6, y: -11 };
 
 const DEPTH = { ground: 1, rings: 2, corpses: 3, units: 10, overlay: 1500, effects: 2000, chrome: 2900 };
 /** Each player's colour: their arcs on the map and the minimap. */
@@ -962,13 +966,17 @@ export class GameScene extends Phaser.Scene {
         } else sprite.destroy();
       }
     }
-    // Towers riding Enchant's fire, and every rider of a unit that is gone
+    // Towers under Enchant: a faint ember on the weapon all the time, and the full flame
+    // only now and then, so the tower stays readable; and every rider of a unit that is gone
+    const enchant = SKILL_ART['enchant']?.overlay;
     for (const t of s.towers) {
-      if ((this.sim.fx.towers[t.id]?.fireMax ?? 0) <= 0) continue;
+      if ((this.sim.fx.towers[t.id]?.fireMax ?? 0) <= 0 || !enchant) continue;
       const key = `t${t.id}`;
       riders.add(key);
       const at = project(t.x, t.y);
-      this.fx.ride(key, SKILL_ART['enchant']?.overlay, at, DEPTH.units + at.y / 1000 + 0.0005);
+      const depth = DEPTH.units + at.y / 1000 + 0.0005;
+      this.fx.ride(key, enchant, { x: at.x + ENCHANT_HAND.x, y: at.y + ENCHANT_HAND.y }, depth, { scale: 0.22, alpha: 0.35 });
+      if ((s.tick + t.id * 37) % ENCHANT_FLARE_TICKS === 0) this.fx.overlayOnce(enchant, at, depth, 0.5);
     }
     // The selected or hovered aura tower: D2's aura glow on every tower its auras reach
     const lit = this.highlightedTower();
