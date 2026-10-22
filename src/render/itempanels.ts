@@ -796,10 +796,15 @@ export class ItemPanels {
 
   // ---- tooltips ----
 
-  private ownedRunes(): Set<string> {
+  /** How many of each rune the player holds, inventory and stash, stacks counted. */
+  private ownedRunes(): Map<string, number> {
     const p = this.host.keeper.profile;
     const all = [...this.inventory(), ...(p?.stash.flat() ?? [])];
-    return new Set(all.map((i) => i.item.code).filter((c) => this.host.data.bases[c]?.isRune));
+    const counts = new Map<string, number>();
+    for (const { item } of all) {
+      if (this.host.data.bases[item.code]?.isRune) counts.set(item.code, (counts.get(item.code) ?? 0) + (item.quantity ?? 1));
+    }
+    return counts;
   }
 
   private tipFor(item: Item, x: number, y: number, extra: Partial<{ sellPrice: number; setWorn: number }> = {}): void {

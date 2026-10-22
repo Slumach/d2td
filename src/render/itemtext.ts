@@ -2,7 +2,8 @@
 // unique, set or rare, damage or defence, requirements, the magic properties in blue in
 // itemstatcost.txt's order with D2R's own strings (item-modifiers), sockets and ethereal,
 // set bonuses, and for a gem or rune what it gives in each kind of item. A rune also
-// lists every runeword that uses it, in rune order, marking the runes this player owns.
+// lists every runeword that uses it, in rune order: green when this player holds every rune
+// it takes, and otherwise the runes still missing in grey.
 
 import type { ItemData } from '../sim/items/data.ts';
 import { CLASS_CODES, maxSocketsAt } from '../sim/items/data.ts';
@@ -161,8 +162,8 @@ export function statLines(data: ItemData, stats: readonly StatRoll[], ctx: TextC
 }
 
 export interface ItemTextOptions extends TextContext {
-  /** Rune codes this player has (inventory and stash), for a rune's runeword list. */
-  owned?: ReadonlySet<string>;
+  /** How many of each rune this player has (inventory and stash), for a rune's runeword list. */
+  owned?: ReadonlyMap<string, number>;
   /** The vendor's price, shown while selling. */
   sellPrice?: number;
   /** Set pieces worn beside it on the same tower, for its set bonuses. */
@@ -255,22 +256,36 @@ function typeName(data: ItemData, type: string): string {
 }
 
 /**
- * Every runeword a rune is part of, in rune order: its runes (gold where this player owns
- * one, grey where not), the bases it goes in, and the sockets it needs.
+ * Every runeword a rune is part of, in rune order: its runes, green when this player holds
+ * all of them (a rune it takes twice, twice), orange with the missing ones listed in grey
+ * when not; then the bases it goes in and the sockets it needs.
  */
-export function runewordLines(data: ItemData, rune: string, owned: ReadonlySet<string> | undefined): Line[] {
+export function runewordLines(data: ItemData, rune: string, owned: ReadonlyMap<string, number> | undefined): Line[] {
   const words = data.runewords.filter((rw) => rw.runes.includes(rune));
   if (words.length === 0) return [];
   const runeName = (c: string) => (data.bases[c]?.name ?? c).replace(/ Rune$/, '');
   const order = (rw: (typeof words)[number]) => Math.max(...rw.runes.map((r) => data.runeOrder.indexOf(r)));
   const lines: Line[] = [{ text: `Runewords with ${runeName(rune)}:`, colour: TIP.gold }];
   for (const rw of [...words].sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name))) {
-    const runes = rw.runes.map((r) => (owned?.has(r) ? runeName(r) : `(${runeName(r)})`)).join(' ');
+    const missing = missingRunes(rw.runes, owned);
     const bases = rw.itypes.map((t) => typeName(data, t)).join(', ');
-    lines.push({ text: `${rw.name}: ${runes}`, colour: TIP.orange });
+    lines.push({ text: `${rw.name}: ${rw.runes.map(runeName).join(' ')}`, colour: missing.length === 0 ? TIP.green : TIP.orange });
+    if (missing.length > 0) lines.push({ text: `  Missing: ${missing.map(runeName).join(' ')}`, colour: TIP.grey });
     lines.push({ text: `  ${rw.runes.length} sockets in ${bases}`, colour: TIP.grey });
   }
   return lines;
+}
+
+/** The runes of a runeword the player lacks, in its order: a rune it takes twice needs two. */
+export function missingRunes(runes: readonly string[], owned: ReadonlyMap<string, number> | undefined): string[] {
+  const left = new Map(owned ?? []);
+  const missing: string[] = [];
+  for (const r of runes) {
+    const n = left.get(r) ?? 0;
+    if (n > 0) left.set(r, n - 1);
+    else missing.push(r);
+  }
+  return missing;
 }
 
 /** How many more sockets Smith's Hammer could add to an item. */
