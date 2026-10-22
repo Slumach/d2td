@@ -1,3 +1,10 @@
+0.3.8
+
+- Evolutions reach further: an evolved tower fires more arrows, bolts and jumps, swings more often and covers more ground than its parents, and each evolved level adds more.
+- Evolve with any partner on your ring: no more placing towers side by side. The tower you select evolves and stays where it is; the partner is used up. If several towers qualify, the panel asks which.
+- Each tower you own raises the next build's price by 15%, so a few evolved towers beat a field of small ones.
+- Team games: every player's arc is tinted in their colour, with their name at its corner and a marker at its spawn; zoomed out, your own arc stands out. Home takes the camera back to your arc.
+
 0.3.7
 
 - Monsters are tougher from Normal Act 2 on, tuned so a regular monster takes two or three hits from the towers you have at that point, rather than dying to one. Bosses more.
