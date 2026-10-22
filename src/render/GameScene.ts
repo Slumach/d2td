@@ -78,6 +78,7 @@ import { facingFromVector, type Facing8 } from './facing.ts';
 import { ISO_H, ISO_W, ORIGIN, WORLD_WIDTH, ellipseOf, project, screenVector, tileAtWorld, tileDiamond } from './iso.ts';
 import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, PANEL_TOP } from './layout.ts';
 import { Minimap } from './minimap.ts';
+import { Scoreboard, scoreRows } from './scoreboard.ts';
 import { saveCheckpoint } from './saves.ts';
 import { WorldView } from './view.ts';
 import { SkillFx, type Point } from './skillfx.ts';
@@ -195,6 +196,7 @@ export class GameScene extends Phaser.Scene {
   private waveSeen = 0;
   private stageText!: Phaser.GameObjects.Text;
   private minimap!: Minimap;
+  private scoreboard!: Scoreboard;
   /** D2R's inventory panel, with the HUD art. */
   private inventory: ItemPanels | undefined;
   /** The player's profile, kept in step with the game (inventory, stash, items in play). */
@@ -370,6 +372,7 @@ export class GameScene extends Phaser.Scene {
           onCallWave: () => this.issue({ type: 'callWave' }),
           onInventory: () => this.toggleInventory(),
           onAutomap: () => this.minimap.toggle(),
+          onParty: () => this.scoreboard.toggle(),
           onMenu: () => this.openMenu(),
         })
       : undefined;
@@ -382,6 +385,14 @@ export class GameScene extends Phaser.Scene {
       this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
     });
     this.minimap = new Minimap(this, this.camera, GAME_WIDTH - WORLD_WIDTH / 8 - 12, 84, 3100);
+    this.scoreboard = new Scoreboard(this, (GAME_WIDTH - WORLD_WIDTH / 8 - 24) / 2, 150, 5600);
+    // FFA: the rings lie side by side, so panning on past an edge shows the next player's
+    this.camera.onEdge = (dir) => {
+      const match = this.driver?.match;
+      if (!match || match.state.mode !== 'ffa' || match.players < 2) return false;
+      this.watch((this.view + dir + match.players) % match.players);
+      return true;
+    };
     this.aliveGfx = this.add.graphics().setDepth(3100);
     this.aliveText = this.add
       .text(GAME_WIDTH / 2, ALIVE_BAR.y + ALIVE_BAR.height / 2, '', { fontFamily: FONT, fontSize: '15px', color: '#f0e6d0' })
@@ -433,7 +444,9 @@ export class GameScene extends Phaser.Scene {
     });
     this.input.keyboard?.on('keydown-I', () => this.toggleInventory());
     this.input.keyboard?.addCapture('TAB');
-    this.input.keyboard?.on('keydown-TAB', () => this.minimap.toggle());
+    // Tab is the scoreboard (D2's party panel); M, or the panel's button, the automap
+    this.input.keyboard?.on('keydown-TAB', () => this.scoreboard.toggle());
+    this.input.keyboard?.on('keydown-M', () => this.minimap.toggle());
     if (online) {
       this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
         const n = Number(e.key);
@@ -720,6 +733,28 @@ export class GameScene extends Phaser.Scene {
     this.syncCowLevel();
     this.camera.asWorld(() => this.fx?.update());
     this.minimap.draw(this.sim, (arc) => this.arcColour(arc));
+    this.drawPlayers();
+  }
+
+  /** FFA's player chips under the minimap, and the scoreboard while it is open. */
+  private drawPlayers(): void {
+    const d = this.driver;
+    if (!d) return;
+    const match = d.match;
+    const colourOf = (slot: number) => PLAYER_COLOURS[slot % PLAYER_COLOURS.length]!;
+    if (match.state.mode === 'ffa' && match.players > 1) {
+      const chips = Array.from({ length: match.players }, (_, p) => ({
+        label: `${p + 1} ${this.nameOf(p)} ${aliveOf(match, p)}/${aliveLimitOf(match.zones[p]!)}`,
+        colour: colourOf(p),
+        here: p === this.view,
+        out: match.zones[p]!.state.status === 'lost',
+      }));
+      this.minimap.rings(chips, (p) => p !== this.view && this.watch(p));
+    }
+    if (this.scoreboard.visible) {
+      const title = match.state.mode === 'ffa' ? 'Free for All' : match.state.mode === 'team' ? 'Party' : 'Score';
+      this.scoreboard.update(scoreRows(match, d.me, (slot) => this.nameOf(slot), colourOf, (wave) => this.waveLabel(wave)), title);
+    }
   }
 
   // ---- sprites, synced once per sim tick ----
@@ -1428,7 +1463,7 @@ export class GameScene extends Phaser.Scene {
     const s = this.sim.state;
         const watching = !this.onOwnRing ? `   (watching ${this.nameOf(this.view)})` : '';
     this.drawAlive(s.alive);
-    this.hud.setText(`Gold ${this.onOwnRing ? this.gold : '-'}   Alive ${s.alive}   Wave ${s.wave}   Kills ${s.kills}${watching}`);
+    this.hud.setText(`Gold ${this.onOwnRing ? this.gold : (s.gold[0] ?? 0)}   Alive ${s.alive}   Wave ${s.wave}   Kills ${s.kills}${watching}`);
     this.d2?.update(this.hudNumbers(aliveLimitOf(this.sim)));
 
     const parts: string[] = [];
@@ -1461,7 +1496,8 @@ export class GameScene extends Phaser.Scene {
     const last = sim.data.waves[s.wave - 1];
     const left = s.status === 'playing' && waveAt(sim, s.wave) ? (s.nextWaveTick - s.tick) / sim.data.economy.waveTicks : 0;
     return {
-      gold: this.onOwnRing ? this.gold : 0,
+      // A watched FFA ring shows its own player's gold
+      gold: this.onOwnRing ? this.gold : (s.gold[0] ?? 0),
       kills: s.kills,
       killShare: s.kills > 0 ? (s.killsBy[seat] ?? 0) / s.kills : 1,
       alive: s.alive,
@@ -1545,7 +1581,7 @@ export class GameScene extends Phaser.Scene {
     this.tooltip.hide();
     if (!this.onOwnRing || (tower && tower.owner !== this.seat)) {
       const whose = tower ? `${this.nameOf(this.driver?.match.state.mode === 'team' ? tower.owner : this.view)}'s tower` : `${this.nameOf(this.view)}'s ring`;
-      this.info.setText(`Looking at ${whose}.${this.onOwnRing ? '' : ` Press ${(this.driver?.me ?? 0) + 1} to go back to yours.`}`);
+      this.info.setText(`Looking at ${whose}.${this.onOwnRing ? '' : ` Press ${(this.driver?.me ?? 0) + 1}, or click your name under the map, to go back to yours.`}`);
       this.d2?.setSlots([]);
       this.d2?.setTabs([]);
       this.d2?.setTowerPanel(undefined);

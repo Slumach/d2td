@@ -1,6 +1,8 @@
 // The world camera over the ring and the flat UI camera over it. The ring is bigger than
 // the screen: drag (any button) or WASD and the arrow keys pan, the wheel zooms, and zoom
 // is whole numbers only (1x, 2x, 3x) so classic sprites never land on a fractional scale.
+// In FFA the rings lie side by side: pushing on past the left or right edge moves on to
+// the next player's ring.
 //
 // Every game object is drawn by one camera: whatever GameScene creates inside asWorld()
 // belongs to the world, everything else (HUD, panel, tooltips) to the UI.
@@ -16,6 +18,8 @@ export const ZOOMS = [1, 1.5, 2, 3] as const;
 const KEY_PAN = 900;
 /** A press that moves less than this is a click, not a drag. */
 const DRAG_SLOP = 6;
+/** Screen pixels of pushing past the left or right edge that move on to the next ring (FFA). */
+const EDGE_PUSH = 260;
 
 export class WorldView {
   readonly world: Phaser.Cameras.Scene2D.Camera;
@@ -23,6 +27,14 @@ export class WorldView {
   private building = false;
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private press: { x: number; y: number; scrollX: number; scrollY: number; onUi: boolean; dragged: boolean } | undefined;
+  /** How far the keys have pushed past an edge, in screen pixels. */
+  private pushed = 0;
+  /**
+   * Pushing on past the world's left (-1) or right (+1) edge; true when the scene moved to
+   * another ring there, and the camera comes in from the opposite edge (FFA: the rings lie
+   * side by side). Unset, the edge is a wall.
+   */
+  onEdge: ((dir: -1 | 1) => boolean) | undefined;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -50,7 +62,14 @@ export class WorldView {
       if (!press.dragged && Math.hypot(p.x - press.x, p.y - press.y) < DRAG_SLOP) return;
       press.dragged = true;
       const z = this.world.zoom;
-      this.world.setScroll(press.scrollX - (p.x - press.x) / z, press.scrollY - (p.y - press.y) / z);
+      const wantX = press.scrollX - (p.x - press.x) / z;
+      const over = (wantX - this.clampX(wantX)) * z;
+      if (Math.abs(over) > EDGE_PUSH && this.crossed(over > 0 ? 1 : -1)) {
+        // Carry on dragging from the new ring's edge
+        Object.assign(press, { x: p.x, y: p.y, scrollX: this.world.scrollX, scrollY: this.world.scrollY });
+        return;
+      }
+      this.world.setScroll(wantX, press.scrollY - (p.y - press.y) / z);
     });
     scene.input.on('pointerup', (p: Phaser.Input.Pointer) => {
       const press = this.press;
@@ -92,6 +111,27 @@ export class WorldView {
     cam.setScroll(cam.scrollX + before.x - after.x, cam.scrollY + before.y - after.y);
   }
 
+  /** The scroll x range the bounds allow, as Phaser clamps it (scroll is offset by half the zoomed-away width). */
+  private scrollRange(): { min: number; max: number } {
+    const shown = this.world.width / this.world.zoom;
+    const min = (shown - this.world.width) / 2;
+    return { min, max: Math.max(min, min + WORLD_WIDTH - shown) };
+  }
+
+  private clampX(x: number): number {
+    const { min, max } = this.scrollRange();
+    return Math.max(min, Math.min(max, x));
+  }
+
+  /** Moves on to the next ring past an edge, if there is one; the camera enters from the opposite edge. */
+  private crossed(dir: -1 | 1): boolean {
+    this.pushed = 0;
+    if (!this.onEdge?.(dir)) return false;
+    const { min, max } = this.scrollRange();
+    this.world.setScroll(dir > 0 ? min : max, this.world.scrollY);
+    return true;
+  }
+
   centreOn(wx: number, wy: number): void {
     this.world.centerOn(wx, wy);
   }
@@ -107,8 +147,17 @@ export class WorldView {
     const k = this.keys;
     const dx = (k['D']?.isDown || k['RIGHT']?.isDown ? 1 : 0) - (k['A']?.isDown || k['LEFT']?.isDown ? 1 : 0);
     const dy = (k['S']?.isDown || k['DOWN']?.isDown ? 1 : 0) - (k['W']?.isDown || k['UP']?.isDown ? 1 : 0);
-    if (dx === 0 && dy === 0) return;
+    if (dx === 0 && dy === 0) {
+      this.pushed = 0;
+      return;
+    }
     const step = (KEY_PAN * deltaMs) / 1000 / this.world.zoom;
-    this.world.setScroll(this.world.scrollX + dx * step, this.world.scrollY + dy * step);
+    const wantX = this.world.scrollX + dx * step;
+    // Held against an edge, the keys build up a push that moves on to the next ring
+    if (dx !== 0 && this.clampX(wantX) !== wantX) {
+      this.pushed += (KEY_PAN * deltaMs) / 1000;
+      if (this.pushed > EDGE_PUSH * 1.5 && this.crossed(dx > 0 ? 1 : -1)) return;
+    } else this.pushed = 0;
+    this.world.setScroll(wantX, this.world.scrollY + dy * step);
   }
 }

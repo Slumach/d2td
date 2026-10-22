@@ -130,6 +130,7 @@ export interface HudCallbacks {
   onCallWave: () => void;
   onInventory: () => void;
   onAutomap: () => void;
+  onParty: () => void;
   onMenu: () => void;
 }
 
@@ -138,8 +139,8 @@ const MENU_TIPS: Record<string, [string, string]> = {
   skilltree: ['Skill Tree', 'A tower’s skills are on the tower: click one'],
   questlog: ['Quest Log', 'Not in Tower Defense'],
   inventory: ['Inventory', 'I'],
-  automap: ['Automap', 'Tab'],
-  messages: ['Party', 'Not in Tower Defense'],
+  automap: ['Automap', 'M'],
+  messages: ['Party', 'Tab'],
   pausemenu: ['Menu', 'Esc'],
 };
 
@@ -330,7 +331,7 @@ export class D2Hud {
   }
 
   private drawMiniMenu(): void {
-    const actions: Record<string, () => void> = { inventory: this.on.onInventory, automap: this.on.onAutomap, pausemenu: this.on.onMenu };
+    const actions: Record<string, () => void> = { inventory: this.on.onInventory, automap: this.on.onAutomap, messages: this.on.onParty, pausemenu: this.on.onMenu };
     for (const [name, x] of LAYOUT.menu.buttons) {
       if (!this.has(name)) continue;
       this.button(name, x, LAYOUT.menu.y, [0, 1, 2], MENU_TIPS[name] ?? [name, ''], actions[name]);
