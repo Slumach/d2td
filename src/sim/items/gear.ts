@@ -4,7 +4,8 @@
 //
 //   enhanced damage (item_maxdamage_percent)      damage percent on the tower's attacks
 //   +min/+max damage, + elemental min-max          added to each hit, of that element
-//   +all skills, +class skills, +skill tab,        skill levels on the tower's line skills
+//   +all skills, +class skills, +skill tab           skill levels on the tower's line skills
+//     (when the skill sits on that tab),
 //     +a named skill (when it is the tower's)
 //   increased attack speed / faster cast rate     attack speed: IAS for melee towers, FCR for the rest
 //   weapon rangeadder                              melee reach, half a tile a point
@@ -42,10 +43,12 @@ export interface TowerGear {
   adds: Partial<Record<Element, [number, number]>>;
   coldTicks: number;
   poisonTicks: number;
-  /** Skill levels added to the tower's line skills: +all, +class, +tab. */
+  /** Skill levels added to the tower's line skills: +all and +class skills. */
   plusSkills: number;
   /** +levels to single skills by skills.txt name or Id. */
   plusSkill: Record<string, number>;
+  /** +skill tab levels by the tab stat's param (0 to 20; see GameData.skillTabs). */
+  plusTab: Record<string, number>;
   /** +fire skills (item_elemskill): levels on towers whose skill deals fire. */
   fireSkills: number;
   attackSpeedPct: number;
@@ -88,6 +91,7 @@ export const NO_GEAR: TowerGear = {
   poisonTicks: 0,
   plusSkills: 0,
   plusSkill: {},
+  plusTab: {},
   fireSkills: 0,
   attackSpeedPct: 0,
   castSpeedPct: 0,
@@ -161,7 +165,7 @@ export function gearStats(data: ItemData, gear: Gear): StatRoll[] {
 
 /** The tower effects of the gear a tower of class `towerClass` wears (see the table above). */
 export function towerGear(data: ItemData, gear: Gear, towerClass: string): TowerGear {
-  const g: TowerGear = { ...NO_GEAR, adds: {}, plusSkill: {}, castOnHit: [], resistDown: {}, skillDamagePct: {}, auras: [] };
+  const g: TowerGear = { ...NO_GEAR, adds: {}, plusSkill: {}, plusTab: {}, castOnHit: [], resistDown: {}, skillDamagePct: {}, auras: [] };
   const stats = gearStats(data, gear);
   const sum = (stat: string) => stats.filter((s) => s.stat === stat).reduce((n, s) => n + s.value, 0);
   const myClass = CLASS_INDEX[CLASS_CODES[towerClass] ?? ''] ?? -1;
@@ -184,8 +188,8 @@ export function towerGear(data: ItemData, gear: Gear, towerClass: string): Tower
   g.plusSkills = sum('item_allskills');
   for (const s of stats) {
     if (s.stat === 'item_addclassskills' && Number(s.param) === myClass) g.plusSkills += s.value;
-    // +skill tab: the param is class x 8 + tab, so any of the class's tabs counts on the tower
-    if (s.stat === 'item_addskill_tab' && Math.floor(Number(s.param) / 8) === myClass) g.plusSkills += s.value;
+    // +skill tab: the param is the tab, 0 to 20, three a class; the tower's skill must sit on it
+    if (s.stat === 'item_addskill_tab' && s.param !== undefined && Math.floor(Number(s.param) / 3) === myClass) g.plusTab[s.param] = (g.plusTab[s.param] ?? 0) + s.value;
     if (s.stat === 'item_elemskill' && s.param === '1') g.fireSkills += s.value;
     if ((s.stat === 'item_singleskill' || s.stat === 'item_nonclassskill') && s.param) g.plusSkill[s.param] = (g.plusSkill[s.param] ?? 0) + s.value;
     if ((s.stat === 'item_skillonhit' || s.stat === 'item_skillonattack') && s.param) g.castOnHit.push({ skill: s.param, chancePct: s.value, level: s.level ?? 1 });

@@ -446,6 +446,12 @@ export interface GameData {
   /** skills.txt skill name to its Id, for items that name a skill by number. */
   skillIds: Record<string, string>;
   /**
+   * skills.txt skill name to the tab it sits on, as items' +skill tab stats count tabs: 0 to
+   * 20, three a class in itemtypes.txt class order (Amazon 0 to 2, Sorceress 3 to 5: fire,
+   * lightning, cold ...), from skills.txt charclass and skilldesc.txt SkillPage.
+   */
+  skillTabs: Record<string, string>;
+  /**
    * A skill as a geared tower casts it: its skills.txt levels raised by `plus`, and a melee
    * skill swinging `weapon` (whole HP). Built once and kept in `skills` under the returned
    * id, so missiles and curses look it up like any skill.
@@ -475,6 +481,9 @@ export interface DropRules {
   /** Smith's Hammer's chance per kill, parts per million, before Tier scaling. */
   smithsHammerPpm: number;
 }
+
+/** skills.txt charclass codes in itemtypes.txt class order, the order the item stats count classes and tabs. */
+const SKILL_CLASSES = ['ama', 'sor', 'nec', 'pal', 'bar', 'dru', 'ass'];
 
 /** The skill a variant id (blessed-hammer+3) was built from. */
 export function baseSkillId(id: string): string {
@@ -1121,9 +1130,23 @@ export function buildGameData(
     skills[key] = { ...def, id: key };
     return key;
   };
-  const byName = new Map(design.skills.map((s) => [s.skill, s.id]));
+  const skillIds: Record<string, string> = {};
+  for (const r of tables.skills) {
+    const name = str(r, 'skill');
+    const num = r['*Id'] ?? r['Id'];
+    if (name && num !== undefined) skillIds[name] = String(num);
+  }
+  const pages = new Map(tables.skilldesc.map((r) => [str(r, 'skilldesc'), int(r, 'SkillPage')]));
+  const skillTabs: Record<string, string> = {};
+  for (const r of tables.skills) {
+    const cls = SKILL_CLASSES.indexOf(str(r, 'charclass'));
+    const page = pages.get(str(r, 'skilldesc')) ?? 0;
+    if (cls >= 0 && page > 0) skillTabs[str(r, 'skill')] = String(cls * 3 + page - 1);
+  }
+  // Items name a skill by its skills.txt name ("Fire Ball") or its Id ("47", the affixes' way)
+  const byName = new Map(design.skills.flatMap((s) => [[s.skill, s.id] as const, [skillIds[s.skill] ?? '', s.id] as const]));
   const itemSkill = (name: string, level: number) => {
-    const id = byName.get(name);
+    const id = name ? byName.get(name) : undefined;
     if (!id) return undefined;
     const lvl = Math.max(1, level);
     // '+n' so baseSkillId and skillPlus read it like any variant; '#item' keeps it apart from the tower ladders
@@ -1131,12 +1154,6 @@ export function buildGameData(
     if (!skills[key]) skills[key] = { ...resolveSkill(tables, jsonById.get(id)!, design, weaponFor(id), Array<number>(MAX_TOWER_LEVEL).fill(lvl)), id: key };
     return key;
   };
-  const skillIds: Record<string, string> = {};
-  for (const r of tables.skills) {
-    const name = str(r, 'skill');
-    const num = r['*Id'] ?? r['Id'];
-    if (name && num !== undefined) skillIds[name] = String(num);
-  }
 
   return {
     acts: m.acts,
@@ -1154,6 +1171,7 @@ export function buildGameData(
     cow: { ...m.cow, ...design.balance.cow },
     monsterVariant: (id: string, difficulty: number, level?: number) => defOf(id, difficulty, level).id,
     skillIds,
+    skillTabs,
     skillVariant,
     itemSkill,
     ...(extendWaves ? { extendWaves } : {}),

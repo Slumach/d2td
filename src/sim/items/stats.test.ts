@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { activeSkill } from '../auras.ts';
 import { effectiveResist } from '../combat.ts';
 import { step } from '../sim.ts';
 import type { Tower } from '../state.ts';
@@ -153,6 +154,19 @@ describe('the item stats that act on monsters', () => {
     expect(m.hp).toBeLessThanOrEqual(0);
     expect(sim.state.kills).toBe(1);
     expect(sim.state.corpses).toEqual([]);
+  });
+
+  it('raises a skill by +skill tab only when the skill sits on that tab', () => {
+    const sim = testSim();
+    const tower = placeTower(sim, 6, 5, 'holy-bolt');
+    // Tab 9 is the Paladin's combat skills (Holy Bolt), 10 his offensive auras (Might), 3 the Sorceress' fire skills
+    wear(tower, { amulet: item('amu', [{ stat: 'item_addskill_tab', param: '9', value: 2 }]) });
+    expect(activeSkill(sim, tower)!.skill.id).toBe('holy-bolt+2');
+    wear(tower, { amulet: item('amu', [{ stat: 'item_addskill_tab', param: '10', value: 2 }, { stat: 'item_addskill_tab', param: '3', value: 2 }]) });
+    expect(activeSkill(sim, tower)!.skill.id).toBe('holy-bolt');
+    const aura = placeTower(sim, 7, 5, 'might');
+    wear(aura, { amulet: item('amu', [{ stat: 'item_addskill_tab', param: '10', value: 3 }]) });
+    expect(activeSkill(sim, aura)!.skill.id).toBe('might+3');
   });
 
   it("adds the facets' +% to elemental skill damage to spells of that element", () => {

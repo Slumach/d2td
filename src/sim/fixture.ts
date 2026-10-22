@@ -18,7 +18,7 @@ function damageCols(prefix: 'skill' | 'missile', min: number, max: number, step:
 
 const params = (...p: number[]): TableRow => Object.fromEntries(p.map((v, i) => [`Param${i + 1}`, v]));
 
-const skill = (name: string, extra: TableRow): TableRow => ({ skill: name, HitShift: 8, ...extra });
+const skill = (name: string, extra: TableRow): TableRow => ({ skill: name, skilldesc: name.toLowerCase(), HitShift: 8, ...extra });
 
 const monster = (Id: string, MonType: string, extra: TableRow): TableRow => ({
   Id,
@@ -107,11 +107,17 @@ const HAND_TABLES: Tables = {
     { Superunique: 'The Smith', Name: 'The Smith', Class: 'smith', Mod1: 6 },
     { Superunique: 'Boneash', Name: 'Boneash', Class: 'skmage_pois3', Mod1: 8, Mod2: 18 },
   ],
+  // Skill tree pages for the fixture's tabbed skills (skilldesc.txt SkillPage): Holy Bolt on
+  // the Paladin's combat tab (1), Might on his offensive auras (2)
+  skilldesc: [
+    { skilldesc: 'holy bolt', SkillPage: 1 },
+    { skilldesc: 'might', SkillPage: 2 },
+  ],
   skills: [
     skill('Sacrifice', { calc1: 'ln12', ...params(100, 10) }),
     skill('Zeal', { calc1: 'min((par5 + lvl -1), par6)', calc2: 'ln34', ...params(0, 0, 5, 5, 2, 4) }),
     skill('Vengeance', { calc1: 'ln12', calc2: 'ln12', calc3: 'ln12', EType: 'cold', ...params(50, 5) }),
-    skill('Holy Bolt', { srvmissile: 'holybolt', EType: 'mag', ...damageCols('skill', 10, 20, 2) }),
+    skill('Holy Bolt', { charclass: 'pal', srvmissile: 'holybolt', EType: 'mag', ...damageCols('skill', 10, 20, 2) }),
     skill('Blessed Hammer', { srvmissilea: 'blessedhammer', EType: 'mag', ...damageCols('skill', 12, 16, 3) }),
     skill('Fist of the Heavens', {
       srvmissilea: 'fohdelay',
@@ -120,7 +126,7 @@ const HAND_TABLES: Tables = {
       localdelay: 10,
       ...damageCols('skill', 100, 120, 10),
     }),
-    skill('Might', { aurarangecalc: 'ln12', aurastat1: 'damagepercent', aurastatcalc1: 'ln34', ...params(16, 2, 30, 10) }),
+    skill('Might', { charclass: 'pal', aurarangecalc: 'ln12', aurastat1: 'damagepercent', aurastatcalc1: 'ln34', ...params(16, 2, 30, 10) }),
     skill('Concentration', { aurarangecalc: 'ln12', aurastat1: 'damagepercent', aurastatcalc1: 'ln34', ...params(16, 2, 50, 10) }),
     skill('Holy Freeze', {
       aurarangecalc: 'ln12',

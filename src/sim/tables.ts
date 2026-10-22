@@ -8,6 +8,7 @@ export interface Tables {
   monumod: TableRow[];
   monseq: TableRow[];
   skills: TableRow[];
+  skilldesc: TableRow[];
   missiles: TableRow[];
   weapons: TableRow[];
   superuniques: TableRow[];
@@ -36,7 +37,7 @@ export interface Tables {
 }
 
 export const TABLE_NAMES: readonly (keyof Tables)[] = [
-  'monstats', 'monlvl', 'monumod', 'monseq', 'skills', 'missiles', 'weapons', 'superuniques', 'levels', 'monstrings',
+  'monstats', 'monlvl', 'monumod', 'monseq', 'skills', 'skilldesc', 'missiles', 'weapons', 'superuniques', 'levels', 'monstrings',
   'armor', 'misc', 'uniqueitems', 'setitems', 'sets', 'magicprefix', 'magicsuffix', 'rareprefix', 'raresuffix', 'gems', 'runes', 'itemstatcost', 'itemtypes', 'properties', 'treasureclassex', 'itemratio', 'qualityitems', 'itemstrings',
 ];
 

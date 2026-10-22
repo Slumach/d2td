@@ -21,11 +21,12 @@ export function gearOf(sim: Sim, tower: Tower): TowerGear {
   return gear;
 }
 
-/** Skill levels the gear adds to a skill: +all and +class skills, +the skill itself, +fire skills on fire skills. */
+/** Skill levels the gear adds to a skill: +all and +class skills, +its tab, +the skill itself, +fire skills on fire skills. */
 export function plusLevels(sim: Sim, gear: TowerGear, skill: SkillDef): number {
   if (gear === NO_GEAR) return 0;
   const named = (gear.plusSkill[skill.name] ?? 0) + (gear.plusSkill[sim.data.skillIds[skill.name] ?? ''] ?? 0);
-  return gear.plusSkills + named + (skill.damageType === 'fire' ? gear.fireSkills : 0);
+  const tab = gear.plusTab[sim.data.skillTabs[skill.name] ?? ''] ?? 0;
+  return gear.plusSkills + named + tab + (skill.damageType === 'fire' ? gear.fireSkills : 0);
 }
 
 /**
