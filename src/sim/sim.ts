@@ -71,6 +71,7 @@ export function createSim(data: GameData, seed: number, opts: SimOptions = {}): 
       inventories: Array.from({ length: players }, () => []),
       homeward: Array.from({ length: players }, () => []),
       belts: Array.from({ length: players }, () => [null, null, null, null]),
+      lootFilters: Array.from({ length: players }, () => 'default' as const),
       spawns: [],
       waves: [],
     },
@@ -128,6 +129,10 @@ function applyCommand(sim: Sim, command: Command): void {
   if (command.type === 'callWave') return sendEarly(sim);
   if (command.type === 'pickup') return pickup(sim, player, command.dropId);
   if (command.type === 'sellDrop') return sellDrop(sim, player, command.dropId);
+  if (command.type === 'lootFilter') {
+    sim.state.lootFilters[player] = command.mode;
+    return;
+  }
   if (command.type === 'cowPortal') return openCowPortal(sim, player, command.uid);
   switch (command.type) {
     case 'loadInventory':
@@ -228,7 +233,8 @@ function startWave(sim: Sim): void {
   for (let p = 0; p < sim.players; p++) {
     let offset = 1;
     waveDef.groups.forEach((group, g) => {
-      const arc = sim.players === 1 ? g % ARC_COUNT : p;
+      // Alone, everything comes from one corner of the ring (arc 0, the marked spawn); on a shared ring each player's arc
+      const arc = sim.players === 1 ? 0 : p;
       const dist = sim.map.arcs[arc]!.spawn;
       offset += group.delayTicks ?? 0;
       for (let i = 0; i < group.count; i++) {

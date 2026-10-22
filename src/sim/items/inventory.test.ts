@@ -136,6 +136,24 @@ describe('selling a drop where it lies', () => {
   });
 });
 
+describe('the loot filter', () => {
+  it('collects only what the filter keeps when a wave clears; Everything keeps the whites too', () => {
+    const sim = testSim();
+    while (sim.state.waves.length < 1) sim.state.waves.push({ remaining: 0 });
+    const white = item('tsw');
+    const rune = item('r01');
+    const socketed = item('thl', { sockets: 1 });
+    sim.state.drops.push({ id: 1, item: white, owner: 0, wave: 0, x: 0, y: 0 }, { id: 2, item: rune, owner: 0, wave: 0, x: 0, y: 0 }, { id: 3, item: socketed, owner: 0, wave: 0, x: 0, y: 0 });
+    run(sim);
+    expect(codes(sim).sort()).toEqual(['r01', 'thl']);
+    expect(sim.state.drops).toEqual([]);
+    run(sim, { type: 'lootFilter', mode: 'all' });
+    sim.state.drops.push({ id: 4, item: item('tsw'), owner: 0, wave: 0, x: 0, y: 0 });
+    run(sim);
+    expect(codes(sim).sort()).toEqual(['r01', 'thl', 'tsw']);
+  });
+});
+
 describe('the belt', () => {
   it('holds gems, runes and jewels, sockets from its slots, and gives them back', () => {
     const sim = testSim();

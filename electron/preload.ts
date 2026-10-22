@@ -17,6 +17,7 @@ const api: LauncherApi = {
   setVolume: (volume: number) => ipcRenderer.invoke('set-volume', volume),
   reportSmoke: (result: SmokeResult) => ipcRenderer.send('smoke-result', result),
   setName: (name: string) => ipcRenderer.invoke('set-name', name),
+  setLootFilter: (mode: 'default' | 'all') => ipcRenderer.invoke('set-loot-filter', mode),
   quit: () => ipcRenderer.send('quit'),
   mpHost: () => ipcRenderer.invoke('mp-host'),
   mpJoin: (code: string) => ipcRenderer.invoke('mp-join', code),

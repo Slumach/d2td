@@ -21,6 +21,8 @@ export interface LauncherState {
   logFile: string;
   /** The player's name in multiplayer lobbies. */
   name: string;
+  /** The loot filter from Options (src/sim/state.ts LootFilter). */
+  lootFilter: 'default' | 'all';
 }
 
 /** A code a friend types to join, and which network it works on. */
@@ -71,6 +73,7 @@ export interface LauncherApi {
   setVolume(volume: number): Promise<void>;
   reportSmoke(result: SmokeResult): void;
   setName(name: string): Promise<void>;
+  setLootFilter(mode: 'default' | 'all'): Promise<void>;
   /** Closes the app (the main menu's Exit). */
   quit(): void;
   /** Opens a lobby on this PC and joins it; codes for friends on the local network come back at once. */

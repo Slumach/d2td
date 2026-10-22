@@ -6,7 +6,7 @@ import type { ItemRef } from '../sim/items/inventory.ts';
 import type { Item, Quality, StatRoll } from '../sim/items/item.ts';
 import type { InvItem } from '../sim/items/loot.ts';
 import type { Command, Targeting } from '../sim/state.ts';
-import { TARGETING_MODES } from '../sim/state.ts';
+import { LOOT_FILTERS, TARGETING_MODES, type LootFilter } from '../sim/state.ts';
 
 const int = (v: unknown, max = 1_000_000_000): boolean => Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) <= max;
 const str = (v: unknown): boolean => typeof v === 'string' && v.length > 0 && v.length <= 64;
@@ -103,6 +103,8 @@ export function validCommand(v: unknown): Command | null {
       return int(c['dropId']) ? { type: 'pickup', dropId: c['dropId'] as number } : null;
     case 'sellDrop':
       return int(c['dropId']) ? { type: 'sellDrop', dropId: c['dropId'] as number } : null;
+    case 'lootFilter':
+      return LOOT_FILTERS.includes(c['mode'] as LootFilter) ? { type: 'lootFilter', mode: c['mode'] as LootFilter } : null;
     case 'cowPortal':
       return str(c['uid']) ? { type: 'cowPortal', uid: c['uid'] as string } : null;
     case 'loadInventory': {

@@ -89,10 +89,16 @@ export type CommandBody =
   | { type: 'socket'; target: ItemRef; uid: string }
   | { type: 'hammer'; target: ItemRef; uid: string }
   | { type: 'sellItem'; uid: string }
+  /** The player's loot filter: what is collected when a wave clears and shown on the ground. */
+  | { type: 'lootFilter'; mode: LootFilter }
   /** Sells one of the player's drops where it lies, at the capped sell price. */
   | { type: 'sellDrop'; dropId: number }
   /** The trade window: handled by the match, which spans rings (src/sim/items/trade.ts). */
   | TradeCommand;
+
+/** D2R-style loot filter: the default keeps magic and better, socketed and superior items, gems and runes; 'all' keeps everything. */
+export type LootFilter = 'default' | 'all';
+export const LOOT_FILTERS: readonly LootFilter[] = ['default', 'all'];
 
 export interface TimedCommand {
   tick: number;
@@ -319,6 +325,8 @@ export interface SimState {
   homeward: Item[][];
   /** Each player's belt: four quick slots for gems, runes and jewels. */
   belts: (Item | null)[][];
+  /** Each player's loot filter (src/sim/items/loot.ts passesFilter). */
+  lootFilters: LootFilter[];
 }
 
 /** An aura source this tick, kept for the renderer's radius rings. */

@@ -41,7 +41,7 @@ import {
   waveAt,
 } from '../sim/sim.ts';
 import { TABLE_NAMES, type Tables } from '../sim/tables.ts';
-import { TARGETING_MODES } from '../sim/state.ts';
+import { TARGETING_MODES, type LootFilter } from '../sim/state.ts';
 import type { DebuffDef, PierceDef, SkillDef } from '../sim/archetypes/types.ts';
 import { SKILL_ART, STATUS_OVERLAYS, SUMMON_BOLTS } from './art.ts';
 import {
@@ -204,6 +204,8 @@ export class GameScene extends Phaser.Scene {
   private halted = '';
   private lastTick = -1;
   private hover: { x: number; y: number } | undefined;
+  private spawnLabel: Phaser.GameObjects.Text | undefined;
+  private altKey: Phaser.Input.Keyboard.Key | undefined;
   private selection: Selection;
   private panelKey = '';
 
@@ -332,6 +334,10 @@ export class GameScene extends Phaser.Scene {
     this.waveSeen = this.sim.state.wave;
     this.keeper = new Keeper(this.registry.get('launcher') as LauncherApi | undefined, this.gameData.items);
     this.keeper.begin((c) => this.issue(c));
+    // The loot filter from Options; the default needs no command
+    const filter = (this.registry.get('lootFilter') as LootFilter | undefined) ?? 'default';
+    if (filter !== 'default') this.issue({ type: 'lootFilter', mode: filter });
+    if (this.sim.players === 1) this.markSpawn();
     this.icons = iconIndex(this);
     createAnimations(this);
     this.fx = this.camera.asWorld(() => new SkillFx(this, DEPTH.effects));
@@ -432,10 +438,22 @@ export class GameScene extends Phaser.Scene {
       });
     }
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => (this.hover = this.camera.dragging ? undefined : this.tileAt(p)));
+    // Alt shows every drop label, filtered ones included
+    this.altKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ALT, false);
     this.events.emit('game-ready');
   }
 
   // ---- input and commands ----
+
+  /** Alone, the monsters' one spawn is marked on the ground until the first wave: the place to build near. */
+  private markSpawn(): void {
+    const sp = positionAt(this.sim.map, this.sim.map.arcs[0]!.spawn);
+    const at = project(sp.x, sp.y);
+    this.spawnLabel = this.camera.asWorld(() =>
+      this.add.text(Math.round(at.x), Math.round(at.y) - 40, 'Monsters come from here\nbuild nearby', { fontFamily: FONT, fontSize: '9px', color: '#ff9080', align: 'center', backgroundColor: '#000000a0', padding: { x: 4, y: 2 } }).setOrigin(0.5, 1).setResolution(3).setDepth(DEPTH.overlay),
+    );
+    this.toast('Monsters come from the marked corner; build near it');
+  }
 
   /** The tower whose auras are shown: the selected tower, or the one under the pointer. */
   private highlightedTower(): number | undefined {
@@ -708,7 +726,11 @@ export class GameScene extends Phaser.Scene {
     this.syncTowers();
     this.syncMissiles();
     this.syncSummons();
-    this.drops?.sync(this.sim.data.items, s.drops, this.seat);
+    this.drops?.sync(this.sim.data.items, s.drops, this.seat, this.sim.state.lootFilters[this.seat] ?? 'default', this.altKey?.isDown === true);
+    if (this.spawnLabel && s.wave >= 1) {
+      this.spawnLabel.destroy();
+      this.spawnLabel = undefined;
+    }
     this.keeper?.sync(this.ownSim, this.seat);
   }
 

@@ -8,7 +8,7 @@ import type { GameData } from './data.ts';
 import { createMatch, type Match, type MatchMode, type MatchState, type PlayerCommand } from './match.ts';
 import type { SimState } from './state.ts';
 
-export const CHECKPOINT_VERSION = 4;
+export const CHECKPOINT_VERSION = 5;
 
 export interface TimedPlayerCommand extends PlayerCommand {
   tick: number;
@@ -61,6 +61,7 @@ function withoutItems(state: SimState): SimState {
     inventories: state.inventories.map(() => []),
     homeward: state.homeward.map(() => []),
     belts: state.belts.map(() => [null, null, null, null]),
+    lootFilters: state.lootFilters.map(() => 'default' as const),
   };
 }
 

@@ -5,7 +5,7 @@
 // shifts combat's rolls.
 
 import { compoundPct } from '../fixed.ts';
-import type { Monster, Sim } from '../state.ts';
+import type { LootFilter, Monster, Sim } from '../state.ts';
 import { baseMonsterId } from '../difficulty.ts';
 import { rollInt } from '../rng.ts';
 import { rollKillDrops, rollTreasure } from './drops.ts';
@@ -166,12 +166,27 @@ export function sellDrop(sim: Sim, player: number, dropId: number): void {
   s.drops = s.drops.filter((d) => d.id !== dropId);
 }
 
-/** Drops of cleared waves go to their owners' inventories if there is room; the rest are lost. */
+/**
+ * D2R-style loot filter. The default keeps what a player would stop for: magic, rare, set,
+ * unique and runeword items, anything socketed or superior, gems, runes and the consumables
+ * (Smith's Hammer, Wirt's Leg); plain white items drop but are not collected. 'all' keeps
+ * everything. A click on a label picks anything up regardless.
+ */
+export function passesFilter(data: ItemData, item: Item, filter: LootFilter): boolean {
+  if (filter === 'all') return true;
+  const base = data.bases[item.code];
+  if (!base) return false;
+  if (base.isGem || base.isRune || base.consumable) return true;
+  if (item.sockets > 0) return true;
+  return item.quality !== 'normal' && item.quality !== 'low';
+}
+
+/** Drops of cleared waves go to their owners' inventories if the filter keeps them and there is room; the rest are lost. */
 export function collectCleared(sim: Sim): void {
   const s = sim.state;
   if (s.drops.length === 0) return;
   const cleared = s.drops.filter((d) => (d.cow ? !s.cow : (s.waves[d.wave]?.remaining ?? 0) <= 0));
   if (cleared.length === 0) return;
-  for (const d of cleared) stow(sim, d.owner, d.item);
+  for (const d of cleared) if (passesFilter(sim.data.items, d.item, s.lootFilters[d.owner] ?? 'default')) stow(sim, d.owner, d.item);
   s.drops = s.drops.filter((d) => !cleared.includes(d));
 }

@@ -11,6 +11,7 @@ export function stubLauncher(): LauncherApi {
     setupOk: true,
     bad: [],
     volume: 50,
+    lootFilter: 'default',
     version: 'dev',
     smoke: false,
     logFile: '',
@@ -31,6 +32,10 @@ export function stubLauncher(): LauncherApi {
     reportSmoke: () => undefined,
     setName: (name) => {
       state.name = name;
+      return Promise.resolve();
+    },
+    setLootFilter: (mode) => {
+      state.lootFilter = mode;
       return Promise.resolve();
     },
     quit: () => window.close(),

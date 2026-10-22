@@ -38,6 +38,7 @@ interface Settings {
   d2rPath: string | null;
   volume: number;
   name: string;
+  lootFilter: 'default' | 'all';
 }
 
 function defaultName(): string {
@@ -55,7 +56,7 @@ const assetsDir = () => join(app.getPath('userData'), 'assets');
 const rendererDir = () => join(app.getAppPath(), 'dist');
 
 function loadSettings(): Settings {
-  const defaults: Settings = { d2rPath: null, volume: 80, name: defaultName() };
+  const defaults: Settings = { d2rPath: null, volume: 80, name: defaultName(), lootFilter: 'default' };
   try {
     return { ...defaults, ...JSON.parse(readFileSync(settingsPath(), 'utf8')) };
   } catch {
@@ -119,6 +120,7 @@ async function launcherState(): Promise<LauncherState> {
     smoke: smokeFile !== undefined,
     logFile,
     name: settings.name,
+    lootFilter: settings.lootFilter,
   };
 }
 
@@ -345,6 +347,10 @@ void app.whenReady().then(async () => {
   ipcMain.handle('open-log-folder', () => shell.openPath(dirname(logFile)));
   ipcMain.handle('set-name', (_e, name: string) => {
     settings = { ...settings, name: String(name).trim().slice(0, 20) || defaultName() };
+    saveSettings(settings);
+  });
+  ipcMain.handle('set-loot-filter', (_e, mode: string) => {
+    settings = { ...settings, lootFilter: mode === 'all' ? 'all' : 'default' };
     saveSettings(settings);
   });
   ipcMain.on('quit', () => app.quit());

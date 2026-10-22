@@ -101,6 +101,12 @@ export class MenuScene extends Phaser.Scene {
     });
   }
 
+  private async setLootFilter(mode: 'default' | 'all'): Promise<void> {
+    await this.api.setLootFilter(mode);
+    this.state = { ...this.state, lootFilter: mode };
+    this.draw();
+  }
+
   private async setVolume(volume: number): Promise<void> {
     await this.api.setVolume(volume);
     this.state = await this.api.getState();
@@ -276,6 +282,7 @@ export class MenuScene extends Phaser.Scene {
   /** A new campaign, or the saved one carried on from its last act. */
   private startGame(resume?: Checkpoint): void {
     menuMusic(this, false);
+    this.registry.set('lootFilter', this.state.lootFilter);
     this.scene.start('Game', (resume ? { resume } : {}) satisfies SoloStart);
   }
 
@@ -315,6 +322,12 @@ export class MenuScene extends Phaser.Scene {
     med(left, y, '-', () => void this.setVolume(volume - 10), 130, volume > 0);
     add(this.add.text(left + 175, y + 6, `${volume}`, TEXT).setDepth(3101));
     med(left + 240, y, '+', () => void this.setVolume(volume + 10), 130, volume < 100);
+    y += 70;
+
+    add(this.add.text(left, y, 'Loot filter: what is collected when a wave clears (Alt shows every label)', MUTED).setDepth(3101));
+    y += 30;
+    const filter = this.state.lootFilter;
+    med(left, y, filter === 'all' ? 'Everything' : 'Magic and better, sockets, gems, runes', () => void this.setLootFilter(filter === 'all' ? 'default' : 'all'), 460);
     y += 70;
 
     add(this.add.text(left, y, 'Diablo II: Resurrected folder', MUTED).setDepth(3101));

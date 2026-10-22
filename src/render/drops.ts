@@ -6,8 +6,8 @@ import Phaser from 'phaser';
 
 import type { ItemData } from '../sim/items/data.ts';
 import type { Item } from '../sim/items/item.ts';
-import type { Drop } from '../sim/items/loot.ts';
-import type { Command } from '../sim/state.ts';
+import { passesFilter, type Drop } from '../sim/items/loot.ts';
+import type { Command, LootFilter } from '../sim/state.ts';
 import { project } from './iso.ts';
 import { labelText, nameColour } from './itemtext.ts';
 import { FONT } from './ui.ts';
@@ -30,8 +30,8 @@ export class GroundDrops {
     private readonly sell: (d: Drop) => void,
   ) {}
 
-  /** Matches the labels to the sim's drops; a new one plays its drop sound. */
-  sync(data: ItemData, drops: readonly Drop[], seat: number): void {
+  /** Matches the labels to the sim's drops; a new one plays its drop sound. Filtered-out drops show their label only while Alt is held. */
+  sync(data: ItemData, drops: readonly Drop[], seat: number, filter: LootFilter = 'all', showAll = false): void {
     const live = new Set<number>();
     // Labels stack upwards when drops share a spot, as D2 lifts overlapping names
     const placed: { x: number; y: number }[] = [];
@@ -44,6 +44,7 @@ export class GroundDrops {
         this.views.set(d.id, view);
         this.dropSound(d.item);
       }
+      view.box.setVisible(showAll || passesFilter(data, d.item, filter));
       const at = project(d.x, d.y);
       let y = at.y - 12;
       while (placed.some((p) => Math.abs(p.x - at.x) < 50 && Math.abs(p.y - y) < 10)) y -= 11;
