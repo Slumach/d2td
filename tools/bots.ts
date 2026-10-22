@@ -126,13 +126,15 @@ const partsMemo = new WeakMap<GameData, Map<string, Parts>>();
 function attackParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boolean, buff: Buff, hpCap: number): Parts {
   let memo = partsMemo.get(sim.data);
   if (!memo) partsMemo.set(sim.data, (memo = new Map()));
-  const key = `${skill.id}|${lvl}|${ignoreDelay}|${buff.damagePct},${buff.attackSpeedPct},${buff.fire}|${hpCap}`;
+  // Static Field cannot take a monster below the difficulty's floor (Hell: half its HP)
+  const floor = sim.data.rules.staticFloorPct[sim.data.waves[sim.state.wave]?.difficulty ?? 0] ?? 0;
+  const key = `${skill.id}|${lvl}|${ignoreDelay}|${buff.damagePct},${buff.attackSpeedPct},${buff.fire}|${hpCap}|${floor}`;
   let parts = memo.get(key);
-  if (!parts) memo.set(key, (parts = computeParts(sim, skill, lvl, ignoreDelay, buff, hpCap)));
+  if (!parts) memo.set(key, (parts = computeParts(sim, skill, lvl, ignoreDelay, buff, hpCap, floor)));
   return parts;
 }
 
-function computeParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boolean, buff: Buff, hpCap: number): Parts {
+function computeParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boolean, buff: Buff, hpCap: number, floor: number): Parts {
   const rate = Math.max(1, ((skill.rates[lvl] ?? skill.rateTicks) * 100) / (100 + buff.attackSpeedPct));
   const interval = Math.max(rate, ignoreDelay ? 0 : skill.delayTicks);
   const hit = (damage: number, filter?: HitFilter) =>
@@ -188,8 +190,10 @@ function computeParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boole
     }
     case 'debuff': {
       const l = skill.levels[lvl]!;
-      // A pulse takes hpPct of what is left: about half that over a monster's life, on a crowd
-      if (skill.mode === 'pulse') add(el, (((hpCap * l.hpPct) / 100 / 2) * CROWD) / interval);
+      // A pulse takes hpPct of what is left: about half that over a monster's life, on a crowd,
+      // and nothing once the monster is at the difficulty's floor, so only the share above the
+      // floor is there to take and the pulses soon stop paying (Hell: a quarter of the model)
+      if (skill.mode === 'pulse') add(el, (((hpCap * Math.min(l.hpPct, 100 - floor)) / 100 / 2) * ((100 - floor) / 100) * CROWD) / interval);
       break;
     }
     case 'summon': {

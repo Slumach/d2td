@@ -278,7 +278,7 @@ Each milestone has one gate. Nothing moves to the next until the gate is met, be
 
 ### Stage A: economy rebuild (Oct 22)
 
-The player wins with a handful of towers, not dozens. Each tower owned raises the next build's price by 220%, the only brake on the tower count (there is no cap anywhere, the bots' old 64-tower cap included). Tiers, levels and the evolution cost more (table above); income is unchanged, and the escalating build cost is what holds the counts down. Act bosses ramp: a boss's HP is its monstats HP times balance.json bossHpPct, from 60% on Normal Blood Raven in a straight line by wave to 900% on Hell Baal, so early bosses are easier than the tables and late ones much harder. Zeal reaches only the path tile beside its tower (rangeTenths 11, down from 15: about 0.9 tiles of path instead of 2.2) and swings every 9 ticks instead of 20.
+The player wins with a handful of towers, not dozens. Each tower owned raises the next build's price by 220%, the only brake on the tower count (there is no cap anywhere, the bots' old 64-tower cap included). Tiers, levels and the evolution cost more (table above); income is unchanged, and the escalating build cost is what holds the counts down. Act bosses ramp: a boss's HP is its monstats HP times balance.json bossHpPct, from 60% on Normal Blood Raven in a straight line by wave to 450% on Hell Baal (900% overnight; brought down Oct 22 so the wall is the endless Tiers, not Baal), so early bosses are easier than the tables and late ones much harder. Zeal reaches only the path tile beside its tower (rangeTenths 11, down from 15: about 0.9 tiles of path instead of 2.2) and swings every 9 ticks instead of 20.
 
 Harness (npm run report, seeds 1 and 2, the ordinary bots TWOLINE, PALADIN, NECRO, MIXED3), against the targets:
 - Towers at the end of Normal: 5 (target about 4); Nightmare: 7 to 8 (7); Hell: 8 to 9 (10). Close.
@@ -312,15 +312,23 @@ Stat mapping (src/sim/items/gear.ts and tower.ts), D2's values throughout:
 | Added fire, cold, lightning, magic and poison damage | melee towers: an extra hit of that element per swing (cold with its chill length, poison over its length) |
 | Increased attack speed | melee towers: attack speed, at D2's effective rate 120 x IAS / (120 + IAS) |
 | Faster cast rate | every other tower: cast speed, the same diminishing rate |
-| Crushing blow | melee: a quarter of the monster's life before the hit (an eighth for uniques and bosses), never on physical immunes |
-| Deadly strike | melee: doubles the physical part of the hit |
+| Crushing blow | melee: a quarter of the monster's life before the hit (an eighth for uniques and bosses), less the monster's physical resistance as D2 reduces it, nothing on a physical immune |
+| Deadly strike | melee: doubles the physical part of the hit (not the skill's elemental shares of the roll) |
+| +% damage to demons, +% damage to undead | melee: added to the physical hit's enhanced damage against that kind, as D2 adds it |
+| Open wounds | melee: on the chance, the monster bleeds for 8 seconds by D2's formula for the attacker's level (9L+31 per frame to level 15 ... 45L-1319 past 60, over 200 frames), unreduced by resistance; the level is the item's. A new wound refreshes the time, never stacks. |
+| -% to enemy fire, cold, lightning, poison, magic and physical resistance (the pierce stats) | every tower: the cut applies to the tower's own hits of that element, added to Conviction's and the curses', under D2's immunity rule: against a monster at 100% or more only a fifth of the whole cut counts, and the immunity breaks only when that fifth brings it under 100. A summon's hits carry its tower's cut. |
+| +% to fire, cold, lightning, poison and magic skill damage (facets, masteries) | spells of that element: added to the tower's damage percent |
+| Pierce | bolt skills (the projectile and line-missile archetypes): a bolt that hit rolls the chance and flies on in a straight line through what it meets, each hit rolling again; a limited line missile keeps a pass. Spells that are not bolts take none of it, as in D2. |
+| Chance to cast on striking, on attack | melee: on the chance, the tower casts the named skill once at the item's level with none of its own bonuses, as that skill's own act (its own target, its own range): Fire Ball, Chain Lightning, Static Field, Bone Spear, Frozen Orb, Decrepify, Lower Resist, Amplify Damage and the other skills a tower here casts. Skills no tower casts (Life Tap, Venom, Volcano ...) do nothing. |
+| An aura (item_aura: Infinity's Conviction, Beast's Fanaticism, Pride's Concentration, Doom's Holy Freeze, Last Wish's Might) | the tower projects the aura at the item's level, D2's own numbers at that level, from its own tile; the same aura from its own skill or another tower counts once (strongest). Two items with the same aura: the higher level. Auras no tower has (Holy Shock, Holy Fire, Sanctuary, Thorns, Meditation, Redemption, Defiance, Vigor) do nothing; Holy Freeze from an item slows but does not pulse. |
+| Slain Monsters Rest in Peace | the tower's kills leave no corpse (nothing to explode or revive) |
 | Slow target, freeze target | melee: slows for two seconds; freezes (never bosses) |
 | Gold find | the killing tower's bounty, added: 100% gold find doubles it |
 | Magic find | the killing tower's drops (Stage D) |
 | Defence, enhanced defence, block | durability: monsters hit the tower's summons by D2's chance to hit (their attack rating against the defence, 5% to 95%) and then the summon blocks by the block chance. Monsters never attack towers. |
-| Resistances, life, mana, leech, attributes, light radius | nothing |
+| Resistances, life, mana, leech, attributes, attack rating, light radius, knockback, hit blinds, hit causes flee, chance to cast when struck | nothing (towers are never hit, never miss and have no life) |
 
-Not yet built: chance to cast on hit and on attack (the stat is read and kept, but a tower casts only its own skills), open wounds and pierce; the worn weapon does not yet change the tower's weapon layer (the class composites are extracted with one weapon each).
+Not yet built: the worn weapon does not change the tower's weapon layer (the class composites are extracted with one weapon each); Enigma's Teleport charges do not move a tower.
 
 ### Stage D: drops (Oct 22)
 
@@ -330,7 +338,7 @@ Every kill rolls its drops as D2 does (src/sim/items/drops.ts), on a drop stream
 - Quality is itemratio.txt's (the expansion rows; normal, exceptional and elite, class items): unique, set, rare, magic, superior in turn, each 128 in (ratio - (ilvl - qlvl) / divisor) x 128, divided by magic find (diminishing for unique 250, set 500, rare 600), floored at the minimum, less the treasure class's quality bonus in 1024ths. A unique with none of its base at the item level becomes rare, a set item magic, as in D2. Rings, amulets and jewels are never white. The item level is the monster's level; the magic find is the killing tower's.
 - Rune entries (rune codes and the Runes N classes) weigh balance.json drops.runeMultiplierPct, 125%, against everything else: D2R's rates otherwise.
 - Endless Tiers: each Tier multiplies the drop rate by 1.25, compounding (drops.tierDropPct 25: NoDrop is divided by 1.25 per Tier, so Tier 4 has 2.4x the drops and Tier 10 9.3x), and Smith's Hammer's chance with it.
-- Smith's Hammer (code xsh, ours, drawn as the Hellforge Hammer): its own roll on every kill, drops.smithsHammerPpm 10 in a million, the rate npm run drops measures for Um and Ist from Hell's monsters. Stackable.
+- Smith's Hammer (code xsh, ours, drawn as the Hellforge Hammer): its own roll on every kill, drops.smithsHammerPpm 11 in a million, Pul's rate per Hell kill (npm run drops -- --sample 10000000 measures Pul 11, Um 8, Mal 7 and Ist 6 in a million; the overnight figure of 10 "for Um and Ist" came from a 400,000-kill sample, four drops a rune, and was already in the Pul-to-Mal band). Stackable.
 - A drop is the killer's (the player whose tower last hurt the monster). It lands at the kill spot with its item's D2 drop sound (weapons, armor and misc dropsound, extracted through sounds.txt) and D2R's name label in the quality's colour. Its owner clicks the label to pick it up (a pickup command); when the monster's wave is cleared, whatever is still on the ground goes to the owner's inventory if there is room (D2's 10 x 4 grid, placed column by column from the top left, consumables stacking) and is lost otherwise. Only your own drops show.
 
 npm run drops (all 75 campaign waves killed once a run, 20 runs, no magic find): Normal 128 items a run (79 white, 33 magic, 6 rare, about one set item and a unique every ten runs), 1.6 runes; Nightmare 89 items, 0.7 sets and 0.7 uniques, 4.7 runes up to Lem; Hell 73 items, 0.6 sets, 0.2 uniques, 1.6 runes, the odd Mal, Gul or Cham. A Smith's Hammer is rare in the campaign (about one in 100,000 Hell kills) and comes with the Tiers.
@@ -347,22 +355,23 @@ npm run drops (all 75 campaign waves killed once a run, 20 runs, no magic find):
 
 ### Stage F: the harness with items (Oct 22)
 
-npm run loot plays each bot four ways (tools/loot.ts, tools/outfit.ts): no items; nm, every drop of one pass through Normal and Nightmare (each monster killed once, no magic find); hell, the same through Hell too; bis, every unique, set item and runeword at its best rolls (runewords on the best base that takes them), any number of copies. An outfitter dresses the bot's towers from the pool once a wave, slot by slot, keeping whatever raises the tower's line skill's standard damage per second most with the gear on (+skills raising the skill, the weapon and enhanced damage on melee towers, attack or cast speed), and +skills and speed for aura and summon towers. Item stats are D2's throughout; nothing was tuned on the items.
+npm run loot plays each bot four ways (tools/loot.ts, tools/outfit.ts): no items; nm, every drop of one pass through Normal and Nightmare (each monster killed once, no magic find); hell, the same through Hell too; bis, every unique, set item and runeword at its best rolls (runewords on the best base that takes them), any number of copies. An outfitter dresses the bot's towers from the pool once a wave, slot by slot, keeping whatever raises the tower's line skill's standard damage per second most with the gear on (+skills raising the skill, the weapon and enhanced damage on melee towers, attack or cast speed, the pierce stats of the skill's element as damage, an item aura as +skills), and +skills and speed for aura and summon towers. Item stats are D2's throughout; nothing was tuned on the items.
 
-Results (seeds 1 and 2; waves, towers at the end):
+Targets (Oct 22, day): MIXED3, the bot that plays every class, is the reference bot and is held to them; a single-class bot may die anywhere from Hell Act 3 on without a miss, since Hell's immunities exist to stop one class.
 
-| Bot | none (target Hell Act 1-2) | nm (target Hell Act 4-5) | hell (target Tier 3-6) | bis (target 175-225) |
+| MIXED3 | none (dies Hell Act 1 or 2) | nm (dies Hell Act 4 or 5) | hell (clears Baal, dies Tier 3 to 6) | bis (dies 175 to 225) |
 | --- | --- | --- | --- | --- |
-| TWOLINE | 77, 77 | 77, 88 | 77, 88 | 110, 106 |
-| PALADIN | 77, 77 | 77, 77 | 77, 77 | 119, 119 |
-| NECRO | 60, 58 | 60, 59 | 60, 60 | 58, 58 |
-| MIXED3 | 59, 59 | 77, 77 | 99, 98 (met) | 115, 120 |
+| overnight (Baal 900%, resist stats inert, tab stats inert) | 59, 59 | 77, 77 | 99, 98 | 115, 120 |
+| day, Baal 450%, the item stats live | 59, 59 | 88, 88 | 98, 102 | 120, 121 |
+| day, and +skill tabs live, the bot's Static Field model fixed | 53, 55 (met) | 64, 64 | 88, 79 | 121, 121 |
 
-Missed, and why:
-- The two Paladin bots die on wave 77 with no items, with Normal and Nightmare loot and with the whole campaign's loot alike: Hell Baal at bossHpPct 900% laps the ring and they cannot kill him, so the next waves pile onto the alive count. Itemless they clear Hell Acts 1 to 4, so they also miss the itemless target from the other side.
-- The Necromancer bot dies in Hell Act 2 whatever it wears, best in slot included: Hell's immunity walls stop its lines, and no item stat breaks an immunity in the mapping (resist and pierce stats do nothing).
-- Best in slot reaches waves 106 to 120, not 175 to 225. It is a wall, not a slope: with endless scaling at 1% or 2% a wave instead of 3% (npm run loot -- --set endless.hpPctPerWave=1 --set endless.damagePctPerWave=1) PALADIN still dies on 119 and TWOLINE on 119; only MIXED3 moves (131 at 1%). The endless Tiers walk Hell's regular waves with their immunities, and a Tier's fourth wave brings monsters immune to everything a two-line Paladin does. The levers are the immunity schedule in the Tiers, the boss HP ramp, and giving item stats that cut resistance (D2's -enemy resistance and pierce stats, now ignored) an effect; Stage A and B's numbers were left as they are, since moving them does not reach these targets.
-- MIXED3 with the whole campaign's loot dies in endless Tier 3, on target; with Normal and Nightmare loot it gets past Hell (wave 77) rather than dying in Hell Act 4 or 5.
+The single-class bots on the last row (seeds 1 and 2): TWOLINE 99 to 104 in every set but bis (119); PALADIN 97 to 104, bis 120; NECRO 64 or 65 whatever it wears (bis included), and 22 on nm seed 2.
+
+What the numbers say:
+- The best-in-slot wall is HP, not immunities. Waves 118 to 121 (Tier 5) are Blood Lords at 150 to 190 million HP each, thirty a wave, then Baal's minions at 300 million with the three Ancients at 550 to 680 million, and every bot in every set dies there. Flattening the Tier curve moves it, but not to the target: MIXED3 bis dies on 131 to 138 with 1% HP and damage a wave instead of 3%, and on 143 to 154 with 0% (level growth alone, 85 + n, with monlvl.txt extrapolated); the hell set stays on target either way (103 at 1%, 107 at 0%). Best-in-slot gear is worth about two to two and a half times itemless power to these bots, and waves 175 to 225 need ten to fifteen times. The curve was left at 3%: it is a design choice, and the levers are endless.hpPctPerWave, the level climb (a level every two waves would need a schema change), and what the outfitter makes of the gear.
+- The nm set overshoots or undershoots by the bot's build, not by Baal: with the stats live MIXED3 in Normal and Nightmare loot clears Baal at 450% and at 500% alike (88 and 91) when it builds lightning towers, and dies in Hell Act 3 (64) when it builds support towers. Hell loot is only slightly better than Nightmare loot as the sets are defined (one pass, no magic find, 0.2 uniques a run), so the two sets cannot sit 25 waves apart; a hell set with magic find and several passes would.
+- The bots are the noise. The same seed on the same build lives to 88 or dies on 64 depending on one item in one slot: the bot judges its purchases by a model of its towers' power, and small changes to what it wears flip which tower it saves for. Two cases traced today: NECRO nm seed 2 held 7,100 gold for a T3 while the alive count ran to 100 (one more tower, as it bought on the previous build, lives to 59); MIXED3 hell seed 2 built two Conviction towers (the same aura counts once), Fanaticism, Decrepify and two Thunder Storms around two T1 Charged Bolts, and ran out of damage in Tier 1. Fixed today: the bot's model valued Static Field as if it could take a Hell monster to zero (the floor is half its HP), which with +skill tabs live made Static Field its favourite Hell tower. Still open: the bot does not know that a second copy of an aura adds nothing, and it never panic-buys when the alive count climbs; both would steady the harness.
+- The itemless target is met and single-class bots die where they may; NECRO's 22 is the knife-edge above.
 
 ### Stage G: the belt and the character page (Oct 22)
 
@@ -400,6 +409,12 @@ Calls made without asking, each the option closest to Diablo II's own rules.
 - Oct 22: the cow waves hold the campaign's wave timer: the campaign pauses for them rather than running underneath (D2's cow level is a place the player goes, not a second front), and resumes after the third.
 - Oct 22: all cows come out of the portal, the opener's spawn, alone as well as in multiplayer, so the portal is where the cows are.
 - Oct 22: Moo Moo Farm in D2 is an Act 1 Wilderness level with no tile set of its own; its map here is the Act 1 field with the farm's fences (Act1/Outdoors/Fence.dt1) in place of the boulders.
+- Oct 22 (day): D2 lets only Conviction and Lower Resist break an immunity (at a fifth) and applies items' -% to enemy resistance only to a monster already under 100. Here, as asked, every cut is one sum under the fifth rule, so enough item pierce breaks an immunity on its own. A summon's hits carry its tower's cut (D2 has no such case: a mercenary's items are its own).
+- Oct 22 (day): open wounds and the other "attacker's level" formulas take the item's level as the tower's, like the per-level stats.
+- Oct 22 (day): D2's pierce stat is for arrows, javelins and throwing weapons, which no tower fires; here it applies to the bolt skills (Holy Bolt, Fire Bolt, Ice Bolt, Charged Bolt, Teeth, Bone Spirit, and a pass kept on Bone Spear and Lightning), the nearest thing a tower has to a missile attack.
+- Oct 22 (day): chance to cast casts the skill as the skill's own act (its own target in its own range) rather than at the struck monster, so curses, novas and Static Field behave as they do from a tower; D2 casts most of these at the target or the caster, which comes to the same thing beside the path.
+- Oct 22 (day): items' +skill tab stats never applied overnight: the mapping read the tab param as class x 8 + tab, but D2 counts tabs 0 to 20, three a class, and a skill's tab is skilldesc.txt's SkillPage, a table the pipeline did not extract. skilldesc.txt is extracted now (extraction version 19, so an installed game re-extracts on its next start) and +Combat Skills raises Holy Bolt but not Might.
+- Oct 22 (day): the harness's reference bot is MIXED3, the bot that plays every class, since Hell's immunities exist to stop one class; a single-class bot's death from Hell Act 3 on is not a miss.
 
 ## Open questions
 

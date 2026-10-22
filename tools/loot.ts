@@ -1,11 +1,16 @@
 // Item harness (Stage F): bots play with no items, with the loot of Normal and Nightmare,
 // with the loot of the whole campaign, and in best-in-slot gear, and this prints the wave
-// each run ends on and its towers then, beside the targets:
+// each run ends on and its towers then, beside the targets. MIXED3, the bot that plays
+// every class, is the reference bot and is held to them:
 //
 //   none   dies in Hell Act 1 or 2
 //   nm     reaches Hell Act 4 or 5
 //   hell   clears Hell Baal and dies in endless Tier 3 to 6
 //   bis    dies between waves 175 and 225
+//
+// A single-class bot may die anywhere from Hell Act 3 on without that counting as a miss
+// (Hell's immunities are built to stop one class); it misses only when it dies before
+// Hell Act 3 and short of the set's target.
 //
 //   npm run loot
 //   npm run loot -- --bots PALADIN,NECRO --seeds 1,2 --sets nm,bis --jobs 6
@@ -35,6 +40,8 @@ const { values: args } = parseArgs({
 
 /** The furthest a run may go: wave 260, well past the best-in-slot target. */
 const MAX_WAVE = 260;
+/** The bot held to the targets. */
+const REFERENCE_BOT: Strategy = 'MIXED3';
 
 /** balance.json with --set overrides (key or key.sub = number or comma list). */
 function balance(): BalanceJson {
@@ -111,13 +118,18 @@ async function main(): Promise<void> {
   process.stderr.write('\n');
   const data = buildGameData(loadTables(), { ...DESIGN, balance: balance() });
   data.extendWaves?.(MAX_WAVE);
+  const hellAct3 = data.waves.findIndex((w) => w.difficulty === 2 && w.act === 3) + 1;
   if (args.set.length > 0) console.log(`With ${args.set.join(', ')}\n`);
   for (const set of sets) {
     const t = target(set, data);
-    console.log(`${set} (target: ${t.text}, waves ${t.lo} to ${t.hi})`);
+    console.log(`${set} (target for MIXED3: ${t.text}, waves ${t.lo} to ${t.hi}; other bots may die from Hell Act 3, wave ${hellAct3}, on)`);
     for (const bot of bots) {
       const rs = results.filter((r) => r.set === set && r.bot === bot).sort((a, b) => a.seed - b.seed);
-      const cells = rs.map((r) => `${r.wave} ${r.label} (${r.towers} towers, ${r.worn} items)${r.wave >= t.lo && r.wave <= t.hi ? '' : ' MISS'}`);
+      const cells = rs.map((r) => {
+        const inTarget = r.wave >= t.lo && r.wave <= t.hi;
+        const miss = bot === REFERENCE_BOT ? !inTarget : r.wave < t.lo && r.wave < hellAct3;
+        return `${r.wave} ${r.label} (${r.towers} towers, ${r.worn} items)${miss ? ' MISS' : ''}`;
+      });
       console.log(`  ${bot.padEnd(8)} ${cells.join('; ')}`);
     }
   }
