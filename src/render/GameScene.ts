@@ -129,14 +129,8 @@ export interface SoloStart {
   resume?: Checkpoint;
 }
 
-/** Act colours for the grey-box ground until an act's art exists: field, then boss lair. */
-const ACT_TINTS: [number, number][] = [
-  [0x30402a, 0x34343a],
-  [0x6a5a3c, 0x4a3a2c],
-  [0x2c4a3a, 0x2a3424],
-  [0x4a2a22, 0x3a1a18],
-  [0x5a6470, 0x3c4450],
-];
+/** The grey-box ground, for a run without the extracted maps: field, then boss lair. */
+const GREY_BOX: [number, number] = [0x30402a, 0x34343a];
 
 interface MonsterView {
   sprite: Phaser.GameObjects.Sprite;
@@ -1037,7 +1031,7 @@ export class GameScene extends Phaser.Scene {
       }
       return;
     }
-    const grass = ACT_TINTS[stage.act - 1]?.[stage.lair ? 1 : 0] ?? 0x30402a;
+    const grass = GREY_BOX[stage.lair ? 1 : 0];
     const darker = Phaser.Display.Color.IntegerToColor(grass).darken(8).color;
     for (let y = 0; y < map.height; y++) {
       for (let x = 0; x < map.width; x++) {
@@ -1052,8 +1046,7 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * The map the ring on screen shows: the act of its last wave started (Act 1 before the
-   * first), in its boss lair while that act's final wave is out. Only Act 1's art exists;
-   * the other acts are tinted grey boxes with a label.
+   * first), in its boss lair while that act's final wave is out.
    */
   private stage(): { act: number; lair: boolean; label: string } {
     const s = this.sim.state;
@@ -1062,8 +1055,7 @@ export class GameScene extends Phaser.Scene {
     const lair = s.wave > 0 && wave?.final === true;
     const info = this.sim.data.acts[act - 1];
     const place = info ? (lair ? info.lair : info.field) : '';
-    const placeholder = act > 1 ? ' (placeholder)' : '';
-    return { act, lair, label: `${stageName(wave?.difficulty ?? 0, act)}: ${place}${placeholder}` };
+    return { act, lair, label: `${stageName(wave?.difficulty ?? 0, act)}: ${place}` };
   }
 
   /**

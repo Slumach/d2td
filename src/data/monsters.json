@@ -28,14 +28,19 @@
     "cantor1": {
       "resurrect": { "monType": "zakarum", "chanceColumn": "aip1", "rangeColumn": "aip4" },
       "party": "zealot1"
-    }
+    },
+    "overseer1": {
+      "resurrect": { "monType": "minion", "chanceColumn": "aip2", "rangeColumn": "aip4" },
+      "party": "minion1"
+    },
+    "siegebeast1": { "party": "imp1" }
   },
   "acts": [
     { "name": "Act 1", "waves": 6, "field": "Blood Moor", "lair": "Catacombs" },
     { "name": "Act 2", "waves": 5, "field": "Rocky Waste", "lair": "Tal Rasha's Tomb" },
     { "name": "Act 3", "waves": 5, "field": "Spider Forest", "lair": "Durance of Hate" },
     { "name": "Act 4", "waves": 3, "field": "Outer Steppes", "lair": "Chaos Sanctuary" },
-    { "name": "Act 5", "waves": 6, "field": "Bloody Foothills", "lair": "Worldstone Chamber" }
+    { "name": "Act 5", "waves": 6, "field": "Bloody Foothills", "lair": "Throne of Destruction" }
   ],
   "campaign": {
     "1": {
@@ -131,23 +136,39 @@
         { "monster": "megademon1", "kind": "tank", "area": "Chaos Sanctuary", "superunique": "infector" },
         { "boss": "diablo", "area": "Chaos Sanctuary" }
       ]
+    },
+    "5": {
+      "normal": [
+        { "monster": "minion1", "kind": "swarm", "area": "Bloody Foothills", "superunique": "eldritch" },
+        { "monster": "overseer1", "kind": "tank", "area": "Bloody Foothills", "superunique": "shenk" },
+        { "monster": "imp1", "kind": "swarm", "area": "Frigid Highlands" },
+        { "monster": "siegebeast1", "kind": "tank", "area": "Frigid Highlands", "superunique": "threshsocket" },
+        { "monster": "deathmauler1", "kind": "tank", "area": "Arreat Plateau" },
+        { "boss": "baal", "area": "Throne of Destruction" }
+      ],
+      "nightmare": [
+        { "monster": "slinger1", "kind": "swarm", "area": "Frigid Highlands" },
+        { "monster": "snowyeti1", "kind": "tank", "area": "Frozen River", "superunique": "frozenstein" },
+        { "monster": "frozenhorror1", "kind": "tank", "area": "Glacial Trail" },
+        { "monster": "succubus1", "kind": "swarm", "area": "Nihlathak's Temple", "superunique": "pindleskin" },
+        { "monster": "bloodlord1", "kind": "tank", "area": "Halls of Vaught", "superunique": "nihlathak" },
+        { "boss": "baal", "area": "Throne of Destruction" }
+      ],
+      "hell": [
+        { "monster": "suicideminion1", "kind": "swarm", "area": "Frigid Highlands" },
+        { "monster": "imp3", "kind": "swarm", "area": "Arreat Plateau" },
+        { "monster": "deathmauler3", "kind": "tank", "area": "Crystalline Passage" },
+        { "monster": "bloodlord3", "kind": "tank", "area": "Worldstone Keep" },
+        {
+          "monster": "baalminion1",
+          "kind": "tank",
+          "area": "Throne of Destruction",
+          "superunique": ["talic", "madawc", "korlic"]
+        },
+        { "boss": "baal", "area": "Throne of Destruction" }
+      ]
     }
   },
-  "placeholder": [
-    { "monster": "zombie2", "kind": "tank" },
-    { "monster": "brute1", "kind": "tank" },
-    { "monster": "corruptrogue1", "kind": "swarm" },
-    { "monster": "cr_lancer1", "kind": "tank" },
-    { "monster": "foulcrow1", "kind": "swarm" },
-    { "monster": "corruptrogue2", "kind": "swarm" },
-    { "monster": "quillrat2", "kind": "swarm" },
-    { "monster": "sk_archer1", "kind": "tank" },
-    { "monster": "goatman2", "kind": "tank" },
-    { "monster": "goatman5", "kind": "tank" },
-    { "monster": "wraith2", "kind": "tank" },
-    { "monster": "zombie3", "kind": "tank" },
-    { "monster": "vampire5", "kind": "tank" }
-  ],
   "superuniques": [
     { "id": "corpsefire", "superunique": "Corpsefire", "class": "zombie1", "minion": "zombie1" },
     { "id": "bishibosh", "superunique": "Bishibosh", "class": "fallenshaman1", "minion": "fallen1" },
@@ -194,13 +215,28 @@
     { "id": "hephasto", "superunique": "The Feature Creep", "class": "hephasto" },
     { "id": "vizier", "superunique": "Grand Vizier of Chaos", "class": "fingermage3", "minion": "fingermage3" },
     { "id": "deseis", "superunique": "Lord De Seis", "class": "doomknight3", "minion": "doomknight1" },
-    { "id": "infector", "superunique": "Infector of Souls", "class": "megademon3", "minion": "megademon3" }
+    { "id": "infector", "superunique": "Infector of Souls", "class": "megademon3", "minion": "megademon3" },
+    { "id": "shenk", "superunique": "Siege Boss", "class": "overseer1" },
+    { "id": "eldritch", "superunique": "Megaflow Rectifier", "class": "minion1", "minion": "minion1" },
+    { "id": "threshsocket", "superunique": "Threash Socket", "class": "siegebeast3" },
+    { "id": "frozenstein", "superunique": "Frozenstein", "class": "snowyeti4", "minion": "snowyeti4" },
+    {
+      "id": "pindleskin",
+      "superunique": "Pindleskin",
+      "class": "reanimatedhorde5",
+      "minion": "reanimatedhorde5"
+    },
+    { "id": "nihlathak", "superunique": "Nihlathak Boss", "class": "nihlathakboss" },
+    { "id": "talic", "superunique": "Ancient Barbarian 1", "class": "ancientbarb1" },
+    { "id": "madawc", "superunique": "Ancient Barbarian 2", "class": "ancientbarb2" },
+    { "id": "korlic", "superunique": "Ancient Barbarian 3", "class": "ancientbarb3" }
   ],
   "bosses": [
     { "id": "bloodraven", "class": "bloodraven", "minion": "zombie2" },
     { "id": "andariel", "class": "andariel" },
     { "id": "duriel", "class": "duriel" },
     { "id": "mephisto", "class": "mephisto" },
-    { "id": "diablo", "class": "diablo" }
+    { "id": "diablo", "class": "diablo" },
+    { "id": "baal", "class": "baalcrab" }
   ]
 }

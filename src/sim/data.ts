@@ -86,10 +86,8 @@ export interface MonstersJson {
   roster: Record<string, { resurrect?: ResurrectJson; party?: string }>;
   /** The five acts; the run plays all of them on Normal, then Nightmare, then Hell. */
   acts: ActJson[];
-  /** Each act with content, by act number, on each difficulty: its waves in order, the last its act boss. */
+  /** Every act, by act number, on each difficulty: its waves in order, the last its act boss. */
   campaign: Record<string, Record<DifficultyName, WaveJson[]>>;
-  /** An act without content cycles these Act 1 monsters at the act's own levels. */
-  placeholder: { monster: string; kind: 'swarm' | 'tank' }[];
   /** Superuniques and other named monsters: each appears as a unique pack inside a wave. */
   superuniques: NamedJson[];
   /** Act bosses: each closes its act behind its pack. */
@@ -135,10 +133,10 @@ export interface BalanceJson {
    */
   earlySendGoldPerTenLevels: number;
   /**
-   * The placeholder acts' monster levels: the act's areas in levels.txt (MonLvlEx per
-   * difficulty), from this low percentile on its first wave to this high one on its last.
+   * An act's level floor: this percentile of its areas' MonLvlEx in levels.txt for the
+   * difficulty. A monster the tables make weaker than the act it walks in is lifted to it.
    */
-  placeholderLevelPercentiles: [number, number];
+  actFloorPercentile: number;
   /**
    * The walk speed (monstats Velocity units) of a monster the tables leave stationary (the
    * Trapped Soul, Velocity 0): on the ring everything walks, at the slowest walkers' pace.
@@ -428,7 +426,7 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
   // an empty resistance is 0, as in the game)
   const col = (name: string, normal = name) => (row[`${name}${sfx}`] !== undefined ? `${name}${sfx}` : normal);
   // D2: monstats HP and damage are percentages of the monlvl values for the monster's level
-  // (its difficulty's Level column, or a placeholder act's level), at the difficulty's columns
+  // (its difficulty's Level column, or its act's floor), at the difficulty's columns
   const level = atLevel ?? int(row, col('Level'));
   const lvlRow = findRow(tables.monlvl, 'Level', level);
   const lvlCol = (name: string) => (lvlRow[`${name}${sfx}`] !== undefined ? `${name}${sfx}` : name);
@@ -516,11 +514,9 @@ export type DefOf = (id: string, difficulty: number, level?: number) => MonsterD
 
 /**
  * The campaign: five acts on Normal, then Nightmare, then Hell (monsters.json acts), each
- * act's last wave its act boss. An act with content (monsters.json campaign) plays its own
- * waves on each difficulty, every monster at its monstats level for the difficulty, lifted
- * to the act's floor (the low end of `actLevels`) when the table has it weaker than the act
- * it walks in. An act without content cycles the placeholder monsters at the act's own
- * levels and ends on that difficulty's Act 1 boss.
+ * act's last wave its act boss. Every act plays its own waves (monsters.json campaign) on
+ * each difficulty, every monster at its monstats level for the difficulty, lifted to the
+ * act's floor (`actFloor`) when the table has it weaker than the act it walks in.
  *
  * A wave is a stream of one monster for waves.streamTicks: swarms a monster a second, tanks
  * one every 1.5 s. A superunique's pack (it, and its minions) walks in the middle of its
@@ -533,7 +529,7 @@ export function campaignWaves(
   balance: BalanceJson,
   monsters: MonstersJson,
   defOf: DefOf,
-  actLevels: (act: number, difficulty: number) => [number, number],
+  actFloor: (act: number, difficulty: number) => number,
 ): WaveDef[] {
   const w = balance.waves;
   const schedule = balance.modSchedule;
@@ -542,20 +538,15 @@ export function campaignWaves(
   for (let d = 0; d < DIFFICULTIES.length; d++) {
     const added = schedule.added[DIFFICULTIES[d]!] ?? {};
     /** An act's own waves on this difficulty, checked: one per wave of the act, the last its boss. */
-    const content = (a: number): WaveJson[] | undefined => {
-      const own = monsters.campaign[String(a + 1)]?.[DIFFICULTIES[d]!];
-      if (!own) return undefined;
+    const content = (a: number): WaveJson[] => {
       const where = `monsters.json campaign.${a + 1}.${DIFFICULTIES[d]}`;
+      const own = monsters.campaign[String(a + 1)]?.[DIFFICULTIES[d]!];
+      if (!own) throw new Error(`${where} is missing`);
       const last = own.at(-1);
       if (!last || !('boss' in last)) throw new Error(`${where} must end on its act boss`);
       if (own.length !== monsters.acts[a]!.waves) throw new Error(`${where} has ${own.length} waves, Act ${a + 1} ${monsters.acts[a]!.waves}`);
       return own;
     };
-    const act1 = content(0);
-    if (!act1) throw new Error(`monsters.json campaign.1.${DIFFICULTIES[d]} is missing`);
-    const boss = act1.at(-1)!;
-    // The placeholder cycle starts at a different monster on each difficulty
-    let cursor = d * 5;
     // A named monster's mods: its table's, Normal's schedule, the difficulty's on top, resolved
     const namedMods = (id: string, own: MonsterMod[]) => resolveMods(balance, [...own, ...(schedule.named[id] ?? []), ...(added.named?.[id] ?? [])]);
     /** A named monster and its pack, as groups `spacing` apart, each at `levelOf` its id. */
@@ -570,15 +561,12 @@ export function campaignWaves(
     monsters.acts.forEach((act, a) => {
       const n = act.waves;
       const own = content(a);
-      const [lo, hi] = a === 0 ? [0, 0] : actLevels(a + 1, d);
+      const floor = a === 0 ? 0 : actFloor(a + 1, d);
       for (let i = 0; i < n; i++) {
         number++;
-        // The act's own wave, or a placeholder: the cycle's next monster, the boss last
-        const entry: WaveJson = own ? own[i]! : i === n - 1 ? boss : monsters.placeholder[cursor++ % monsters.placeholder.length]!;
-        // A placeholder walks at the act's levels; an act's own monster at its table level,
-        // lifted to the act's floor when the table has it weaker than the act
-        const placeholderLevel = lo + idiv((hi - lo) * i, Math.max(1, n - 1));
-        const levelOf = (id: string): number | undefined => (!own ? placeholderLevel : a > 0 && defOf(id, d).level < lo ? lo : undefined);
+        const entry = own[i]!;
+        // A monster at its table level, lifted to the act's floor when the table has it weaker than the act
+        const levelOf = (id: string): number | undefined => (defOf(id, d).level < floor ? floor : undefined);
         let groups: WaveGroup[];
         let kind: WaveDef['kind'];
         let lead: MonsterDef;
@@ -606,7 +594,7 @@ export function campaignWaves(
         }
         waves.push({
           kind,
-          area: entry.area ?? `${own ? '' : 'placeholder: '}${i === n - 1 ? act.lair : act.field}`,
+          area: entry.area ?? (i === n - 1 ? act.lair : act.field),
           difficulty: d,
           act: a + 1,
           actWave: i + 1,
@@ -719,11 +707,8 @@ export interface BuildOptions {
   checkTierBonus?: boolean;
 }
 
-/**
- * Each act's level range per difficulty, from levels.txt: the MonLvlEx column of the act's
- * areas that have monsters, from the low percentile to the high one.
- */
-export function actLevelsFrom(tables: Tables, [lowPct, highPct]: [number, number]): (act: number, difficulty: number) => [number, number] {
+/** An act's level floor on a difficulty: `pct` percentile of its areas' MonLvlEx in levels.txt. */
+export function actFloorFrom(tables: Tables, pct: number): (act: number, difficulty: number) => number {
   const columns = ['MonLvlEx', 'MonLvlEx(N)', 'MonLvlEx(H)'];
   return (act, difficulty) => {
     const values = tables.levels
@@ -732,8 +717,7 @@ export function actLevelsFrom(tables: Tables, [lowPct, highPct]: [number, number
       .filter((v) => v > 0)
       .sort((a, b) => a - b);
     if (values.length === 0) throw new Error(`levels.txt has no Act ${act} areas with monsters`);
-    const at = (pct: number) => values[idiv((values.length - 1) * pct, 100)]!;
-    return [at(lowPct), at(highPct)];
+    return values[idiv((values.length - 1) * pct, 100)]!;
   };
 }
 
@@ -869,11 +853,10 @@ export function buildGameData(
     ...Object.keys(m.roster),
     ...Object.values(m.roster).flatMap((r) => (r.party ? [r.party] : [])),
     ...Object.values(m.campaign).flatMap((byDifficulty) => Object.values(byDifficulty).flatMap((ws) => ws.flatMap((w) => ('monster' in w ? [w.monster] : [])))),
-    ...m.placeholder.map((p) => p.monster),
     ...[...m.superuniques, ...m.bosses].flatMap((b) => [b.id, ...(b.minion ? [b.minion] : [])]),
   ];
   for (let d = 0; d < DIFFICULTIES.length; d++) for (const id of new Set(everyone)) defOf(id, d);
-  const levels = actLevelsFrom(tables, design.balance.placeholderLevelPercentiles);
+  const levels = actFloorFrom(tables, design.balance.actFloorPercentile);
   const waves = campaignWaves(design.balance, m, defOf, levels).slice(0, waveCount);
 
   return {

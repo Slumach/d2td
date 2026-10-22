@@ -88,7 +88,7 @@ const HAND_TABLES: Tables = {
   monseq: Array.from({ length: 15 }, (_, frame) => ({ sequence: 'seq_shamanresurrect', mode: 'A2', frame })),
   weapons: [{ name: 'Crystal Sword', mindam: 4, maxdam: 12 }],
   monstrings: [],
-  levels: [2, 3, 4, 5].flatMap((act) =>
+  levels: [1, 2, 3, 4, 5].flatMap((act) =>
     [0, 1, 2].map((i) => ({ Name: `act${act}-${i}`, Act: act - 1, mon1: 'zombie1', MonLvlEx: act * 5 + i, 'MonLvlEx(N)': 30 + act * 3 + i, 'MonLvlEx(H)': 34 + act * 2 + i })),
   ),
   superuniques: [
@@ -292,8 +292,9 @@ function fillSchedule(tables: Tables): Tables {
     have.add(id);
     rows.push(monster(id, id, { Level: 20, ...extra }));
   };
-  for (const b of [...m.superuniques, ...m.bosses]) add(b.class, b.minion && b.minion !== b.class ? { minion1: b.minion } : {});
+  // A raiser's party first: a superunique of the same class shares its row
   for (const [id, r] of Object.entries(m.roster)) if (r.party) add(id, { minion1: r.party, PartyMin: 2, PartyMax: 4 });
+  for (const b of [...m.superuniques, ...m.bosses]) add(b.class, b.minion && b.minion !== b.class ? { minion1: b.minion } : {});
   for (const id of [
     ...Object.values(m.campaign).flatMap((byDifficulty) => Object.values(byDifficulty).flatMap((ws) => ws.flatMap((w) => ('monster' in w ? [w.monster] : [])))),
     ...m.superuniques.flatMap((b) => (b.minion ? [b.minion] : [])),

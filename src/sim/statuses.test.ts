@@ -8,7 +8,7 @@ import { fixtureGameData } from './fixture.ts';
 import { speedOf } from './monsters.ts';
 import { step } from './sim.ts';
 import type { Element, Monster } from './state.ts';
-import { addMonster, freeze, placeTower, testSim, ticks } from './testkit.ts';
+import { addMonster, freeze, monsterIn, placeTower, testSim, ticks } from './testkit.ts';
 import { auraMultiplier } from './dps.ts';
 import { resolveMods, variantId } from './data.ts';
 import { DESIGN } from '../data/design.ts';
@@ -319,8 +319,8 @@ describe('summons on harder difficulties', () => {
   });
 
   it("monsters hit summons with their own difficulty's damage", () => {
-    const normal = testSim().data.monsters['brute1']!;
-    const hellBrute = hell().data.monsters['brute1@hell']!;
+    const normal = monsterIn(testSim().data, 'brute1');
+    const hellBrute = monsterIn(hell().data, 'brute1@hell');
     expect(hellBrute.maxDamage).toBeGreaterThan(normal.maxDamage);
     // A1MaxD(H) percent of monlvl DM(H) at Level(H)
     expect(hellBrute.maxDamage).toBe(Math.trunc((120 * (4 + 30 * 2)) / 100) * 256);

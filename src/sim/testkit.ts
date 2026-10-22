@@ -1,12 +1,25 @@
 // Test helpers: put towers and monsters straight into a sim, bypassing commands and gold,
 // so a test can set up one exact situation. Real play only ever goes through commands.
 
-import { fixtureGameData } from './fixture.ts';
-import type { GameData } from './data.ts';
+import { DESIGN } from '../data/design.ts';
+import { FIXTURE_TABLES, fixtureGameData } from './fixture.ts';
+import { monsterDef, type GameData, type MonsterDef } from './data.ts';
 import { tileCenter } from './map.ts';
 import { createMonster } from './monsters.ts';
 import { createSim, step } from './sim.ts';
 import type { Command, Monster, MonsterMod, Rank, Sim, Tower } from './state.ts';
+
+const DIFFICULTY_IDS = ['normal', 'nightmare', 'hell'];
+
+/**
+ * A monster's entry, built from the fixture tables on first use when the schedule does not
+ * use it: `brute1`, `brute1@hell`, `zombie2@hell:80`.
+ */
+export function monsterIn(data: GameData, id: string): MonsterDef {
+  const [base, rest] = id.split('@') as [string, string | undefined];
+  const [diff, level] = (rest ?? 'normal').split(':') as [string, string | undefined];
+  return (data.monsters[id] ??= monsterDef(FIXTURE_TABLES, DESIGN.monsters, base, DESIGN.balance.auraRangePerTile, Math.max(0, DIFFICULTY_IDS.indexOf(diff)), level === undefined ? undefined : Number(level)));
+}
 
 export function testSim(data: GameData = fixtureGameData(), seed = 1): Sim {
   return createSim(data, seed);
@@ -57,6 +70,7 @@ export function addMonster(
   const s = sim.state;
   const wave = opts.wave ?? 0;
   while (s.waves.length <= wave) s.waves.push({ remaining: 0 });
+  monsterIn(sim.data, def);
   const m = createMonster(sim, def, wave, opts.rank ?? 'normal', opts.mods ?? [], dist, opts.hp);
   s.monsters.push(m);
   s.waves[wave]!.remaining++;

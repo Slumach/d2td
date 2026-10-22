@@ -6,12 +6,13 @@ import { distSq } from './combat.ts';
 import { positionAt } from './map.ts';
 import { step } from './sim.ts';
 import type { Corpse, Sim } from './state.ts';
-import { addMonster, freeze, placeTower, testSim, ticks } from './testkit.ts';
+import { addMonster, freeze, monsterIn, placeTower, testSim, ticks } from './testkit.ts';
 
 // The tower stands at tile (2, 4); a monster at path distance 3000 is beside it.
 const BESIDE = 3000;
 
 function corpse(sim: Sim, def: string, dist: number, opts: Partial<Corpse> = {}): Corpse {
+  monsterIn(sim.data, def);
   const p = positionAt(sim.map, dist);
   const c: Corpse = { id: sim.state.nextId++, def, rank: 'normal', dist, x: p.x, y: p.y, maxHp: 20_000, ticksLeft: 200, ...opts };
   sim.state.corpses.push(c);

@@ -22,7 +22,6 @@ const namedById = new Map(named.map((b) => [b.id, b]));
 export const WAVE_MONSTER_ART: readonly string[] = [
   ...new Set([
     ...Object.values(campaign).flatMap((byDifficulty) => Object.values(byDifficulty).flatMap((ws) => ws.flatMap((w) => (w.monster ? [w.monster] : [])))),
-    ...monsters.placeholder.map((p) => p.monster),
   ]),
 ];
 

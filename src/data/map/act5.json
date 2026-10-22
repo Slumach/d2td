@@ -1,0 +1,147 @@
+{
+  "comment": "Act 5's two maps for the ring, authored by us: the Bloody Foothills into the Frigid Highlands (the field) and the Throne of Destruction (the boss lair). Tiles are referenced by DT1 file, orientation and main-sub index (and v, which of a key's random variants); the art is read from the player's install and baked at extraction (tools/extract/map.ts). Scenery goes on the tiles src/data/map/ring.json gives each kind, so the picture matches the buildable mask.",
+  "palette": "global/palette/act5/pal.dat",
+  "seed": 5005,
+  "maps": {
+    "field": {
+      "floor": { "file": "Expansion/Siege/snow.dt1", "ground": ["6-0"] },
+      "road": {
+        "file": "Expansion/Siege/battle.dt1",
+        "tiles": [
+          "20-0",
+          "20-1",
+          "20-2",
+          "20-3",
+          "20-4",
+          "20-5",
+          "20-6",
+          "20-7",
+          "20-8",
+          "20-9",
+          "20-10",
+          "20-11",
+          "20-12",
+          "20-13"
+        ],
+        "halfWidth": 0.68,
+        "wobble": 0.12,
+        "edge": 0.12
+      },
+      "scenery": {
+        "treeline": {
+          "prefabs": ["deadtree1", "deadtree2", "deadtree3", "deadtree4", "deadtree5", "pine1", "pine2"],
+          "every": 2,
+          "outside": 1.5,
+          "front": { "file": "Expansion/Siege/snow.dt1", "tiles": ["6-20", "6-21", "6-22", "6-23", "6-24"] }
+        },
+        "rocks": { "prefabs": ["rock1", "rock2", "rock3", "rock4"] },
+        "bushes": { "prefabs": ["shrub1", "shrub2", "shrub3", "shrub4", "rock5"] },
+        "cottage": { "centre": "watchtower", "corners": "post" }
+      }
+    },
+    "lair": {
+      "floor": {
+        "file": "Expansion/baallair/floor.dt1",
+        "ground": ["0-0"],
+        "sprinkle": { "file": "Expansion/baallair/floor.dt1", "tiles": ["3-10", "3-11"], "chancePct": 6 }
+      },
+      "road": {
+        "file": "Expansion/baallair/throne.dt1",
+        "tiles": [
+          "7-0",
+          "7-1",
+          "7-2",
+          "7-3",
+          "7-4",
+          "7-5",
+          "7-6",
+          "7-7",
+          "7-8",
+          "7-9",
+          "7-10",
+          "7-11",
+          "7-12",
+          "7-13",
+          "7-14",
+          "7-15"
+        ],
+        "halfWidth": 0.72,
+        "wobble": 0,
+        "edge": 0.06
+      },
+      "scenery": {
+        "treeline": {
+          "prefabs": ["pillar1", "pillar2", "pillar3", "pillar4", "pillar5", "banner"],
+          "every": 2.5,
+          "outside": 1,
+          "front": {
+            "file": "Expansion/baallair/floor.dt1",
+            "tiles": [
+              "5-1",
+              "5-2",
+              "5-3",
+              "5-4",
+              "5-5",
+              "5-6",
+              "5-7",
+              "5-9",
+              "5-10",
+              "5-11",
+              "5-12",
+              "5-13",
+              "5-14",
+              "5-15",
+              "5-16",
+              "5-17",
+              "5-18",
+              "5-19",
+              "5-20",
+              "5-21",
+              "5-22",
+              "5-23",
+              "5-24"
+            ]
+          }
+        },
+        "rocks": { "prefabs": ["crystal1", "crystal2"] },
+        "bushes": { "prefabs": ["crystal3", "crystal4", "banner"] },
+        "cottage": { "centre": "crystal1", "corners": "banner" }
+      }
+    }
+  },
+  "prefabs": {
+    "deadtree1": { "pieces": [{ "file": "Expansion/Siege/trees.dt1", "o": 14, "key": "0-13", "at": [0, 0] }] },
+    "deadtree2": { "pieces": [{ "file": "Expansion/Siege/trees.dt1", "o": 14, "key": "0-9", "at": [0, 0] }] },
+    "deadtree3": { "pieces": [{ "file": "Expansion/Siege/trees.dt1", "o": 14, "key": "0-6", "at": [0, 0] }] },
+    "deadtree4": { "pieces": [{ "file": "Expansion/Siege/trees.dt1", "o": 14, "key": "10-6", "at": [0, 0] }] },
+    "deadtree5": { "pieces": [{ "file": "Expansion/Siege/trees.dt1", "o": 14, "key": "10-2", "at": [0, 0] }] },
+    "pine1": { "pieces": [{ "file": "Expansion/Siege/pinetree.dt1", "o": 14, "key": "2-1", "at": [0, 0] }] },
+    "pine2": { "pieces": [{ "file": "Expansion/Siege/pinetree.dt1", "o": 14, "key": "2-0", "at": [0, 0] }] },
+    "rock1": { "pieces": [{ "file": "Expansion/Siege/rocks.dt1", "o": 12, "key": "30-0", "at": [0, 0] }] },
+    "rock2": { "pieces": [{ "file": "Expansion/Siege/rocks.dt1", "o": 12, "key": "30-2", "at": [0, 0] }] },
+    "rock3": { "pieces": [{ "file": "Expansion/Siege/rocks.dt1", "o": 12, "key": "30-3", "at": [0, 0] }] },
+    "rock4": { "pieces": [{ "file": "Expansion/Siege/rocks.dt1", "o": 12, "key": "30-7", "at": [0, 0] }] },
+    "rock5": { "pieces": [{ "file": "Expansion/Siege/rocks.dt1", "o": 12, "key": "30-5", "at": [0, 0] }] },
+    "shrub1": { "pieces": [{ "file": "Expansion/Siege/shrub.dt1", "o": 14, "key": "30-0", "at": [0, 0] }] },
+    "shrub2": { "pieces": [{ "file": "Expansion/Siege/shrub.dt1", "o": 14, "key": "30-1", "at": [0, 0] }] },
+    "shrub3": { "pieces": [{ "file": "Expansion/Siege/shrub.dt1", "o": 14, "key": "30-4", "at": [0, 0] }] },
+    "shrub4": { "pieces": [{ "file": "Expansion/Siege/shrub.dt1", "o": 14, "key": "30-6", "at": [0, 0] }] },
+    "watchtower": {
+      "pieces": [
+        { "file": "Expansion/Siege/battle.dt1", "o": 3, "key": "11-15", "at": [0, 0] },
+        { "file": "Expansion/Siege/battle.dt1", "o": 4, "key": "11-15", "at": [0, 0] }
+      ]
+    },
+    "post": { "pieces": [{ "file": "Expansion/Siege/battle.dt1", "o": 7, "key": "11-0", "at": [0, 0] }] },
+    "pillar1": { "pieces": [{ "file": "Expansion/baallair/throne.dt1", "o": 12, "key": "7-6", "at": [0, 0] }] },
+    "pillar2": { "pieces": [{ "file": "Expansion/baallair/throne.dt1", "o": 12, "key": "7-5", "at": [0, 0] }] },
+    "pillar3": { "pieces": [{ "file": "Expansion/baallair/throne.dt1", "o": 12, "key": "7-4", "at": [0, 0] }] },
+    "pillar4": { "pieces": [{ "file": "Expansion/baallair/throne.dt1", "o": 12, "key": "7-3", "at": [0, 0] }] },
+    "pillar5": { "pieces": [{ "file": "Expansion/baallair/throne.dt1", "o": 12, "key": "7-2", "at": [0, 0] }] },
+    "banner": { "pieces": [{ "file": "Expansion/baallair/throne.dt1", "o": 12, "key": "7-0", "at": [0, 0] }] },
+    "crystal1": { "pieces": [{ "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-0", "at": [0, 0] }] },
+    "crystal2": { "pieces": [{ "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-1", "at": [0, 0] }] },
+    "crystal3": { "pieces": [{ "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-2", "at": [0, 0] }] },
+    "crystal4": { "pieces": [{ "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-3", "at": [0, 0] }] }
+  }
+}
