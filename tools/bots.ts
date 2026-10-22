@@ -526,7 +526,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
         const match = evolutionFor(sim, towers[i]!, towers[j]!);
         if (!match) continue;
         const { recipe, attack, partner } = match;
-        const partnerLevel = partner.picks[partner.tier - 1] === recipe.partner.skill ? partner.level - 1 : EVOLVED_LEVEL_INDEX;
+        const partnerLevel = partner.picks[partner.tier - 1] === recipe.partner.skill ? Math.min(partner.level, MAX_TOWER_LEVEL) - 1 : EVOLVED_LEVEL_INDEX;
         const merged: Tower = { ...attack, tier: MAX_TIER + 1, level: MAX_TOWER_LEVEL, evolved: recipe.id, partnerSkill: recipe.partner.skill, partnerLevel };
         out.push({
           cost: e.evolveCost,
@@ -558,7 +558,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
         const next = { ...t, tier: t.tier + 1, level: 1, picks: [...t.picks, skill] };
         const commands: Command[] =
           t.level < MAX_TOWER_LEVEL ? [{ type: 'upgrade', towerId: t.id }] : [{ type: 'upgradeTier', towerId: t.id }];
-        if (t.level === MAX_TOWER_LEVEL && opts.length > 1) commands.push({ type: 'pickBranch', towerId: t.id, skill });
+        if (t.level >= MAX_TOWER_LEVEL && opts.length > 1) commands.push({ type: 'pickBranch', towerId: t.id, skill });
         // Pay only for the next step now; the option is judged on the whole path
         const stepCost = t.level < MAX_TOWER_LEVEL ? level! : tierPrice;
         const gain = (gainOf(sim, towers, judge, next) * LOOKAHEAD_DISCOUNT_PCT) / 100;

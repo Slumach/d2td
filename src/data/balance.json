@@ -22,6 +22,7 @@
   "tierCosts": [400, 8000],
   "evolveCost": 30000,
   "evolvedLevels": { "costBase": 15000, "costPctPerLevel": 180, "skillLevelsPerLevel": 2 },
+  "lineLevels": { "costPctPerLevel": 180, "skillLevelsPerLevel": 2 },
   "sellRefundPct": 60,
   "bountyPerLevel": 2,
   "rankBountyMultiplier": { "normal": 1, "champion": 3, "unique": 5, "boss": 20 },

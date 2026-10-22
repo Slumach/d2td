@@ -7,7 +7,7 @@
 import { archetypeOf } from './archetypes/index.ts';
 import type { AuraContribution, MonsterAuraFx, SkillDef, TowerBuff } from './archetypes/types.ts';
 import { within } from './combat.ts';
-import { baseSkillId, EVOLVED_LEVEL_INDEX } from './data.ts';
+import { baseSkillId, EVOLVED_LEVEL_INDEX, MAX_TOWER_LEVEL } from './data.ts';
 import { gearOf, geared, itemSkill } from './items/tower.ts';
 import { idiv } from './fixed.ts';
 import { ELEMENTS, type AuraEmitter, type AuraField, type Monster, type Sim, type Tower } from './state.ts';
@@ -23,7 +23,8 @@ export function activeSkill(sim: Sim, tower: Tower): { skill: SkillDef; lvl: num
   }
   const id = tower.picks[tower.tier - 1];
   const skill = id ? sim.data.skills[id] : undefined;
-  return skill && { skill: geared(sim, tower, skill), lvl: tower.level - 1 };
+  // Levels past 5 play the ladder's top level raised by the bought skill levels (geared)
+  return skill && { skill: geared(sim, tower, skill), lvl: Math.min(tower.level, MAX_TOWER_LEVEL) - 1 };
 }
 
 interface Source {

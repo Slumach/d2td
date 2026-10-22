@@ -176,6 +176,7 @@ export interface BalanceJson {
   tierCosts: number[];
   evolveCost: number;
   evolvedLevels: OverLevels;
+  lineLevels: { costPctPerLevel: number; skillLevelsPerLevel: number };
   sellRefundPct: number;
   bountyPerLevel: number;
   /** Bounty multiplier by rank; bossBountyMultiplier overrides a boss by id. */
@@ -393,6 +394,13 @@ export interface Economy {
    * levels to both its skills (attack and partner), the way +skills do.
    */
   evolvedLevels: OverLevels;
+  /**
+   * Any tower's levels past 5 in its tier: the line never has to tier out to grow. The first
+   * costs costPctPerLevel percent of the tier's last level, each next one that much more,
+   * and each adds skillLevelsPerLevel skills.txt levels. lineLevels[tier - 1].costBase is
+   * filled in from levelCosts.
+   */
+  lineLevels: OverLevels[];
   sellRefundPct: number;
   bountyPerLevel: number;
   rankBountyMultiplier: Record<Rank, number>;
@@ -901,6 +909,10 @@ export function economyFrom(balance: BalanceJson): Economy {
     tierCosts: balance.tierCosts,
     evolveCost: balance.evolveCost,
     evolvedLevels: balance.evolvedLevels,
+    lineLevels: balance.levelCostBase.map((base) => {
+      const last = idiv(base * steps.at(-1)!, 1000);
+      return { costBase: idiv(last * balance.lineLevels.costPctPerLevel, 100), costPctPerLevel: balance.lineLevels.costPctPerLevel, skillLevelsPerLevel: balance.lineLevels.skillLevelsPerLevel };
+    }),
     sellRefundPct: balance.sellRefundPct,
     bountyPerLevel: balance.bountyPerLevel,
     rankBountyMultiplier: balance.rankBountyMultiplier,

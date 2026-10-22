@@ -47,7 +47,7 @@ describe('tower model', () => {
     expect(canBuild(sim, 7, 6)).toBe(false);
   });
 
-  it('charges level costs per tier and stops at level 5', () => {
+  it('charges level costs per tier up to level 5, then the line levels on at its rising price', () => {
     const sim = testSim();
     sim.state.gold[0] = 100_000;
     const tower = built(sim, 7, 6, 'holy-bolt');
@@ -55,8 +55,11 @@ describe('tower model', () => {
     maxLevel(sim, tower);
     const costs = sim.data.economy.levelCosts[0]!;
     expect(before - sim.state.gold[0]!).toBe(costs.reduce((a, b) => a + b, 0));
-    run(sim, { type: 'upgrade', towerId: tower.id });
     expect(tower.level).toBe(MAX_TOWER_LEVEL);
+    const gold = sim.state.gold[0]!;
+    run(sim, { type: 'upgrade', towerId: tower.id });
+    expect(tower.level).toBe(MAX_TOWER_LEVEL + 1);
+    expect(gold - sim.state.gold[0]!).toBe(sim.data.economy.lineLevels[0]!.costBase);
   });
 
   it('unlocks the next tier only at level 5, at the balance.json tier cost', () => {
@@ -182,6 +185,25 @@ describe('evolution', () => {
     // The partner aura levels too
     const partner = auraSources(sim, evolved).find((s) => baseSkillId(s.skill.id) === 'concentration')!;
     expect(partner.skill.skillLevels).toEqual(sim.data.skills['concentration']!.skillLevels.map((l) => l + 2 * curve.skillLevelsPerLevel));
+  });
+
+  it('levels any line past 5 at a rising price and rising effect, so it never has to tier out', () => {
+    const sim = testSim();
+    sim.state.gold[0] = 10_000_000;
+    const freeze = placeTower(sim, 6, 5, 'holy-freeze', { tier: 2, level: 5 });
+    const curve = sim.data.economy.lineLevels[1]!;
+    const last = sim.data.economy.levelCosts[1]![3]!;
+    expect(upgradeCost(sim, freeze)).toBe(Math.trunc((last * curve.costPctPerLevel) / 100));
+    const plain = activeSkill(sim, freeze)!.skill;
+    for (let i = 0; i < 3; i++) run(sim, { type: 'upgrade', towerId: freeze.id });
+    expect(freeze.level).toBe(8);
+    expect(freeze.tier).toBe(2);
+    const raised = activeSkill(sim, freeze)!;
+    expect(raised.lvl).toBe(MAX_TOWER_LEVEL - 1);
+    expect(raised.skill.skillLevels).toEqual(plain.skillLevels.map((l) => l + 3 * curve.skillLevelsPerLevel));
+    expect(baseSkillId(raised.skill.id)).toBe('holy-freeze');
+    // A tier up stays open, never forced
+    expect(upgradeCost(sim, freeze)).toBeGreaterThan(0);
   });
 
   it('rejects the wrong partner, a missing tier and too little gold', () => {

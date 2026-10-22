@@ -54,7 +54,12 @@ export function pendingChoices(sim: Sim, tower: Tower): string[] {
 export function upgradeCost(sim: Sim, tower: Tower): number | undefined {
   // An evolved tower keeps levelling past its base level 5 on its own steep ladder
   if (tower.evolved) return overLevelCost(sim.data.economy.evolvedLevels, tower.level - MAX_TOWER_LEVEL);
-  if (!tower.picks[tower.tier - 1] || tower.level >= MAX_TOWER_LEVEL) return undefined;
+  if (!tower.picks[tower.tier - 1]) return undefined;
+  // Past level 5 a line goes on growing at a rising price: it never has to tier out
+  if (tower.level >= MAX_TOWER_LEVEL) {
+    const curve = sim.data.economy.lineLevels[tower.tier - 1];
+    return curve && overLevelCost(curve, tower.level - MAX_TOWER_LEVEL);
+  }
   return sim.data.economy.levelCosts[tower.tier - 1]?.[tower.level - 1];
 }
 
@@ -195,7 +200,7 @@ export function evolve(sim: Sim, a: Tower, b: Tower): void {
   const { recipe, attack, partner } = match;
   // The partner aura keeps the level it reached: its current level if it still has it,
   // otherwise it was maxed to tier past it
-  const partnerLevel = partner.picks[partner.tier - 1] === recipe.partner.skill ? partner.level - 1 : MAX_TOWER_LEVEL - 1;
+  const partnerLevel = partner.picks[partner.tier - 1] === recipe.partner.skill ? Math.min(partner.level, MAX_TOWER_LEVEL) - 1 : MAX_TOWER_LEVEL - 1;
   removeTower(sim, attack.id);
   removeTower(sim, partner.id);
   // The evolved tower keeps the attack tower's gear; the partner's goes back to its owner

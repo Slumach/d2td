@@ -85,11 +85,12 @@ export function openWoundsDamage(level: number): number {
   return perFrame * 200;
 }
 
-/** skills.txt levels a tower has bought past its ladder's top (an evolved tower's levels past 5), on every skill it casts. */
+/** skills.txt levels a tower has bought past its ladder's top (levels past 5, evolved or not), on every skill it casts. */
 export function boughtLevels(sim: Sim, tower: Tower): number {
   const past = tower.level - MAX_TOWER_LEVEL;
   if (past <= 0) return 0;
-  return tower.evolved ? past * sim.data.economy.evolvedLevels.skillLevelsPerLevel : 0;
+  const e = sim.data.economy;
+  return past * (tower.evolved ? e.evolvedLevels.skillLevelsPerLevel : (e.lineLevels[tower.tier - 1]?.skillLevelsPerLevel ?? 0));
 }
 
 /** D2's diminishing returns on attack and cast speed: effective = 120 x speed / (120 + speed). */
