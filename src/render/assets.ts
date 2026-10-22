@@ -40,7 +40,7 @@ export interface IconIndex {
 }
 
 /** Each class's HD skill icons and their index, as the extraction writes them. */
-const ICON_FOLDERS = ['paladin', 'sorceress', 'necromancer'];
+const ICON_FOLDERS = Object.keys(sprites.heroes);
 const iconIndexKey = (folder: string) => `icons:${folder}`;
 
 export const SUMMON_IDS = sprites.summons.ids;

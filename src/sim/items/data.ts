@@ -26,7 +26,7 @@ const BODY_LOC: Record<string, Slot[]> = {
 };
 
 /** itemtypes.txt Class codes, by our tower classes; the other four classes' items fit no tower. */
-export const CLASS_CODES: Record<string, string> = { paladin: 'pal', sorceress: 'sor', necromancer: 'nec' };
+export const CLASS_CODES: Record<string, string> = { amazon: 'ama', sorceress: 'sor', necromancer: 'nec', paladin: 'pal', barbarian: 'bar', druid: 'dru', assassin: 'ass' };
 
 export type BaseKind = 'weapon' | 'armor' | 'misc';
 
