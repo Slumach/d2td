@@ -10,13 +10,13 @@ import Phaser from 'phaser';
 
 import type { SoloStart } from '../render/GameScene.ts';
 import { FONT, button } from '../render/ui.ts';
-import { loadCheckpoint } from '../render/saves.ts';
+import { clearCheckpoint, loadCheckpoint } from '../render/saves.ts';
 import type { Checkpoint } from '../sim/checkpoint.ts';
 import { stageName } from '../sim/data.ts';
 import { buildItemData, type ItemData } from '../sim/items/data.ts';
 import { itemCost, SELL_DIVISOR } from '../sim/items/price.ts';
 import type { Tables } from '../sim/tables.ts';
-import { loadProfile, type Profile } from './profile.ts';
+import { emptyProfile, loadProfile, saveProfile, type Profile } from './profile.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
 import type { LauncherApi, LauncherState } from './api.ts';
 import { burningLogo, frontendManifest, menuMusic, optionsPanel, preloadFrontend, smoothHd, stoneButton } from './frontend.ts';
@@ -33,7 +33,7 @@ const LOGO_SCALE = 1.25;
 const BUTTONS_TOP = 470;
 const BUTTON_STEP = 92;
 
-type Page = 'main' | 'character' | 'multiplayer' | 'options';
+type Page = 'main' | 'character' | 'newgame' | 'multiplayer' | 'options';
 
 /** The item tables the character page needs to price the stash (GameScene loads the rest). */
 const ITEM_TABLES: (keyof Tables)[] = [
@@ -120,6 +120,7 @@ export class MenuScene extends Phaser.Scene {
 
     if (this.page === 'options') return this.drawOptions(d2);
     if (this.page === 'character') return this.drawCharacter(d2);
+    if (this.page === 'newgame') return this.drawNewGame(d2);
     const saved = this.saved;
     const items: [string, () => void][] =
       this.page === 'multiplayer'
@@ -163,7 +164,35 @@ export class MenuScene extends Phaser.Scene {
     const items: [string, () => void][] = [
       ['Play', () => this.startGame()],
       ...(saved ? [[`Continue: ${stageName(saved.difficulty, saved.act)}`, () => this.startGame(saved)] as [string, () => void]] : []),
+      ['New Game', () => this.go('newgame')],
       ['Back', () => this.go('main')],
+    ];
+    items.forEach(([label, onClick], i) => {
+      const y = BUTTONS_TOP + 140 + i * BUTTON_STEP;
+      if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 330 }));
+      else this.parts.push(...button(this, CX - 180, y - 18, { label, onClick, width: 360 }));
+    });
+  }
+
+  /** New Game: start over entirely, after a warning. Clears the stash, the inventory, the belt, the best wave and every saved campaign. */
+  private drawNewGame(d2: boolean): void {
+    const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
+    const top = BUTTONS_TOP - 70;
+    add(this.add.rectangle(CX, top + 50, 620, 170, 0x000000, 0.8).setStrokeStyle(1, 0xa03030).setDepth(3000));
+    add(this.add.text(CX, top - 10, 'Start over?', { ...TEXT, fontSize: '28px', color: '#e0a0a0' }).setOrigin(0.5).setDepth(3001));
+    const warning = ['This clears everything you own: the stash, the inventory and the belt,', 'your best wave, and every saved campaign, single player and multiplayer.', 'There is no undo.'];
+    warning.forEach((l, k) => add(this.add.text(CX, top + 30 + k * 28, l, TEXT).setOrigin(0.5).setDepth(3001)));
+    const wipe = async () => {
+      await saveProfile(this.api, emptyProfile());
+      await clearCheckpoint(this.api, 'solo');
+      await clearCheckpoint(this.api, 'mp');
+      this.profile = emptyProfile();
+      this.saved = undefined;
+      this.startGame();
+    };
+    const items: [string, () => void][] = [
+      ['Yes, start over', () => void wipe()],
+      ['Back', () => this.go('character')],
     ];
     items.forEach(([label, onClick], i) => {
       const y = BUTTONS_TOP + 140 + i * BUTTON_STEP;

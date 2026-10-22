@@ -382,6 +382,7 @@ What the numbers say:
 ### Stage G: the belt and the character page (Oct 22)
 
 - The belt's four slots hold gems, runes and jewels (sim state, carried in the profile). Click a slot to take its item onto the cursor, click a socketed item in the inventory or on the selected tower to socket it, or an empty inventory cell to put it back; hold a gem, rune or jewel from the inventory over an empty slot and click to belt it. It works with the panels closed too: socketing a tower's gear straight from the belt.
+- New Game (Oct 22 afternoon), on the character page: after a warning that there is no undo, it empties the profile (stash, inventory, belt, best wave) and clears both saved campaigns, then starts a fresh run.
 - Single Player opens a page in the manner of D2's character select: the profile's card (the player's name, what everything they own would fetch from a vendor before the stage cap, how many items, the best wave reached) with Play, Continue when there is a save, and Back.
 
 ### The Secret Cow Level (Oct 22)
