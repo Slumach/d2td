@@ -18,7 +18,7 @@ import { itemCost, SELL_DIVISOR } from '../sim/items/price.ts';
 import type { Tables } from '../sim/tables.ts';
 import { emptyProfile, loadProfile, saveProfile, type Profile } from './profile.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
-import type { LauncherApi, LauncherState } from './api.ts';
+import type { LauncherApi, LauncherState, UpdateCheck, UpdateEvent } from './api.ts';
 import { burningLogo, frontendManifest, menuMusic, optionsPanel, preloadFrontend, smoothHd, stoneButton } from './frontend.ts';
 import { shortPath } from './paths.ts';
 import { TextField } from './TextField.ts';
@@ -33,7 +33,7 @@ const LOGO_SCALE = 1.25;
 const BUTTONS_TOP = 470;
 const BUTTON_STEP = 92;
 
-type Page = 'main' | 'character' | 'newgame' | 'multiplayer' | 'options';
+type Page = 'main' | 'character' | 'newgame' | 'multiplayer' | 'options' | 'update';
 
 /** The item tables the character page needs to price the stash (GameScene loads the rest). */
 const ITEM_TABLES: (keyof Tables)[] = [
@@ -49,7 +49,11 @@ export class MenuScene extends Phaser.Scene {
   private page: Page = 'main';
   /** The single-player checkpoint, if there is one: Continue carries it on. */
   private saved: Checkpoint | undefined;
+  private static updateHooked = false;
   private nameField: TextField | undefined;
+  /** The update page's state, kept across pages while a download runs. */
+  private updateState: { checking: boolean; check?: UpdateCheck; downloading: boolean; downloaded: boolean; status: string; notes: string } = { checking: false, downloading: false, downloaded: false, status: '', notes: '' };
+  private updateTexts: { status: Phaser.GameObjects.Text; notes: Phaser.GameObjects.Text } | undefined;
   /** The profile, for the character page. */
   private profile: Profile | undefined;
   private items: ItemData | undefined;
@@ -65,6 +69,11 @@ export class MenuScene extends Phaser.Scene {
 
   create(): void {
     this.api = this.registry.get(LAUNCHER_KEY) as LauncherApi;
+    // Once: the scene instance is reused every time the menu comes back
+    if (!MenuScene.updateHooked) {
+      MenuScene.updateHooked = true;
+      this.api.onUpdate((e) => this.onUpdateEvent(e));
+    }
     // Whatever path led here, no lobby or game connection outlives the main menu
     void this.api.mpLeave();
     this.page = 'main';
@@ -121,6 +130,7 @@ export class MenuScene extends Phaser.Scene {
     if (this.page === 'options') return this.drawOptions(d2);
     if (this.page === 'character') return this.drawCharacter(d2);
     if (this.page === 'newgame') return this.drawNewGame(d2);
+    if (this.page === 'update') return this.drawUpdate(d2);
     const saved = this.saved;
     const items: [string, () => void][] =
       this.page === 'multiplayer'
@@ -134,6 +144,7 @@ export class MenuScene extends Phaser.Scene {
             ['Multiplayer', () => this.go('multiplayer')],
             ...(saved ? [[`Continue: ${stageName(saved.difficulty, saved.act)}`, () => this.startGame(saved)] as [string, () => void]] : []),
             ['Options', () => this.go('options')],
+            ['Update', () => this.go('update')],
             ['Exit', () => this.api.quit()],
           ];
     items.forEach(([label, onClick], i) => {
@@ -172,6 +183,67 @@ export class MenuScene extends Phaser.Scene {
       if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 330 }));
       else this.parts.push(...button(this, CX - 180, y - 18, { label, onClick, width: 360 }));
     });
+  }
+
+  /** The update page: asks the feed, shows the version and notes, downloads, installs on restart. */
+  private drawUpdate(d2: boolean): void {
+    const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
+    const top = BUTTONS_TOP - 70;
+    add(this.add.rectangle(CX, top + 70, 680, 230, 0x000000, 0.8).setStrokeStyle(1, 0x7a6440).setDepth(3000));
+    add(this.add.text(CX, top - 10, `Update   (this is v${this.state.version})`, { ...TEXT, fontSize: '28px', color: '#c7b377' }).setOrigin(0.5).setDepth(3001));
+    const status = add(this.add.text(CX, top + 30, this.updateState.status, { ...TEXT, align: 'center', wordWrap: { width: 640 } }).setOrigin(0.5, 0).setDepth(3001));
+    const notes = add(this.add.text(CX, top + 70, this.updateState.notes, { ...MUTED, fontSize: '15px', align: 'left', wordWrap: { width: 640 } }).setOrigin(0.5, 0).setDepth(3001));
+    this.updateTexts = { status, notes };
+    const u = this.updateState;
+    const items: [string, () => void][] = [];
+    if (u.check?.state === 'available' && !u.downloaded && !u.downloading) items.push([`Download v${u.check.version}`, () => this.downloadUpdate()]);
+    if (u.downloaded) items.push(['Restart and install', () => this.api.updateInstall()]);
+    items.push(['Check again', () => void this.checkUpdate()]);
+    items.push(['Back', () => this.go('main')]);
+    items.forEach(([label, onClick], i) => {
+      const y = BUTTONS_TOP + 190 + i * BUTTON_STEP;
+      if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 330 }));
+      else this.parts.push(...button(this, CX - 180, y - 18, { label, onClick, width: 360 }));
+    });
+    if (!u.check && !u.checking) void this.checkUpdate();
+  }
+
+  private async checkUpdate(): Promise<void> {
+    this.updateState = { ...this.updateState, checking: true, status: 'Checking for updates...', notes: '' };
+    this.refreshUpdate();
+    const check = await this.api.updateCheck();
+    const status =
+      check.state === 'available' ? `Version ${check.version} is available.`
+      : check.state === 'current' ? `You have the newest version, ${check.version}.`
+      : `Could not check: ${check.message}`;
+    this.updateState = { ...this.updateState, checking: false, check, status, notes: check.state === 'available' ? check.notes : '' };
+    if (this.page === 'update') this.draw();
+  }
+
+  private downloadUpdate(): void {
+    this.updateState = { ...this.updateState, downloading: true, status: 'Downloading... 0%' };
+    this.draw();
+    void this.api.updateDownload().then((r) => {
+      if (!r.ok) {
+        this.updateState = { ...this.updateState, downloading: false, status: `Download failed: ${r.error ?? 'unknown error'}` };
+        if (this.page === 'update') this.draw();
+      }
+    });
+  }
+
+  /** Progress from the main process; the page redraws when the download lands. */
+  private onUpdateEvent(e: UpdateEvent): void {
+    if (e.kind === 'progress') this.updateState = { ...this.updateState, status: `Downloading... ${e.percent}%` };
+    else if (e.kind === 'downloaded') this.updateState = { ...this.updateState, downloading: false, downloaded: true, status: `Version ${e.version} is downloaded. Restart to install it.` };
+    else this.updateState = { ...this.updateState, downloading: false, status: `Update failed: ${e.message}` };
+    if (this.page !== 'update') return;
+    if (e.kind === 'progress') this.refreshUpdate();
+    else this.draw();
+  }
+
+  private refreshUpdate(): void {
+    this.updateTexts?.status.setText(this.updateState.status);
+    this.updateTexts?.notes.setText(this.updateState.notes);
   }
 
   /** New Game: start over entirely, after a warning. Clears the stash, the inventory, the belt, the best wave and every saved campaign. */

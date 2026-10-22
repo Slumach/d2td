@@ -30,6 +30,10 @@ You only do this once. Next time the game opens straight to the main menu.
 
 ## After an update
 
+## Updating
+
+The main menu's **Update** button checks for a newer version, shows what changed, downloads it, and installs it when you restart. Nothing you own is touched: the stash, the inventory and the saved campaigns stay where they are.
+
 A new version of the game may need a few more files from Diablo II: Resurrected. When it does, the setup screen appears by itself on the next start, copies only what is new or changed, and goes on to the main menu. You do not need to click anything, and it is usually done in seconds.
 
 ## Playing

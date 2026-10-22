@@ -394,6 +394,10 @@ What the numbers say:
 - The campaign resumes on the timer after the third cow wave, at the scaling it had; the portal closes, and the farm and the music give way to the act again, when the last cow dies. Cow drops go to their owners' inventories when the portal closes.
 - Harness (npm run cow): PALADIN, the only itemless bot that reaches Hell Act 5, opening the portal as Hell Act 5 begins, seeds 1 to 5: 4 of 5 runs lose to the cows (the ring overruns during the cow waves); seed 3 clears them at a peak of 96 alive and, with the cows' gold, lives to wave 85 against 77 without the portal. Six packs of eight let every run clear the cows; ten packs of ten killed every run.
 
+### Updates (Oct 22 afternoon)
+
+electron-updater with the generic provider: package.json build.publish names the S3 bucket's URL (d2td-updates), electron-builder writes latest.yml (with release-notes.md as the notes) and the blockmap beside the installer, and `npm run publish` builds and copies all three to the bucket with the AWS CLI and the machine's credentials (tools/publish.ts). The main menu's Update button asks the feed, shows the version and notes, downloads on request and installs on restart (electron/main.ts wireUpdates; the renderer only sees updateCheck, updateDownload, updateInstall and progress events). A development run reports that updates work in the installed game.
+
 ## Overnight decisions
 
 Calls made without asking, each the option closest to Diablo II's own rules.

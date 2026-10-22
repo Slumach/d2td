@@ -2,7 +2,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 
-import type { LauncherApi, MpEvent, SaveSlot, SetupProgress, SmokeResult } from '../src/launcher/api.ts';
+import type { LauncherApi, MpEvent, SaveSlot, SetupProgress, SmokeResult, UpdateEvent } from '../src/launcher/api.ts';
 import type { ClientMessage } from '../src/net/protocol.ts';
 
 const api: LauncherApi = {
@@ -30,6 +30,12 @@ const api: LauncherApi = {
   clearCheckpoint: (slot: SaveSlot) => ipcRenderer.invoke('clear-checkpoint', slot),
   loadProfile: () => ipcRenderer.invoke('load-profile'),
   saveProfile: (json: string) => ipcRenderer.invoke('save-profile', json),
+  updateCheck: () => ipcRenderer.invoke('update-check'),
+  updateDownload: () => ipcRenderer.invoke('update-download'),
+  updateInstall: () => ipcRenderer.send('update-install'),
+  onUpdate: (callback: (e: UpdateEvent) => void) => {
+    ipcRenderer.on('update-event', (_e, event: UpdateEvent) => callback(event));
+  },
 };
 
 contextBridge.exposeInMainWorld('d2td', api);

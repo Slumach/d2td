@@ -9,8 +9,9 @@ import { dirname, join, normalize, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { BrowserWindow, app, dialog, ipcMain, net, protocol, screen, shell } from 'electron';
+import { autoUpdater } from 'electron-updater';
 
-import type { JoinCode, LauncherState, MpEvent, SetupResult, SmokeResult } from '../src/launcher/api.ts';
+import type { JoinCode, LauncherState, MpEvent, SetupResult, SmokeResult, UpdateCheck, UpdateEvent } from '../src/launcher/api.ts';
 import { decodeJoinCode, encodeJoinCode } from '../src/net/codes.ts';
 import { DEFAULT_PORT, PROTOCOL, type ClientMessage } from '../src/net/protocol.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../src/render/layout.ts';
@@ -119,6 +120,46 @@ async function launcherState(): Promise<LauncherState> {
     logFile,
     name: settings.name,
   };
+}
+
+// ---- updates: electron-updater against the generic feed package.json build.publish names (the S3 bucket) ----
+
+function wireUpdates(win: BrowserWindow): void {
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.logger = {
+    info: (m: unknown) => log(`update: ${String(m)}`),
+    warn: (m: unknown) => log(`update: ${String(m)}`),
+    error: (m: unknown) => log(`update error: ${String(m)}`),
+    debug: () => undefined,
+  };
+  const send = (e: UpdateEvent) => {
+    if (!win.isDestroyed()) win.webContents.send('update-event', e);
+  };
+  autoUpdater.on('download-progress', (p: { percent: number }) => send({ kind: 'progress', percent: Math.round(p.percent) }));
+  autoUpdater.on('update-downloaded', (info: { version: string }) => send({ kind: 'downloaded', version: info.version }));
+  autoUpdater.on('error', (e: Error) => send({ kind: 'error', message: describe(e) }));
+  ipcMain.handle('update-check', async (): Promise<UpdateCheck> => {
+    if (!app.isPackaged) return { state: 'unavailable', message: 'Updates work in the installed game, not in a development run' };
+    try {
+      const r = await autoUpdater.checkForUpdates();
+      const info = r?.updateInfo;
+      if (!info || !r.isUpdateAvailable) return { state: 'current', version: app.getVersion() };
+      const notes = typeof info.releaseNotes === 'string' ? info.releaseNotes : (info.releaseNotes ?? []).map((n) => n.note ?? '').join('\n');
+      return { state: 'available', version: info.version, notes };
+    } catch (e) {
+      return { state: 'unavailable', message: describe(e) };
+    }
+  });
+  ipcMain.handle('update-download', async () => {
+    try {
+      await autoUpdater.downloadUpdate();
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: describe(e) };
+    }
+  });
+  ipcMain.on('update-install', () => autoUpdater.quitAndInstall(false, true));
 }
 
 // ---- multiplayer: the relay when hosting, the router mapping, and this player's socket ----
@@ -280,6 +321,7 @@ void app.whenReady().then(async () => {
   log(`display ${display.size.width}x${display.size.height} at ${display.scaleFactor}x; D2R folder ${settings.d2rPath ?? 'not set'}, registry says ${(await detectD2R()) ?? 'nothing'}`);
   serveApp();
   const win = createWindow();
+  wireUpdates(win);
 
   ipcMain.handle('get-state', () => launcherState());
   ipcMain.handle('pick-folder', async () => {

@@ -53,5 +53,9 @@ export function stubLauncher(): LauncherApi {
       localStorage.setItem('d2td:profile', json);
       return Promise.resolve();
     },
+    updateCheck: () => Promise.resolve({ state: 'unavailable', message: 'Updates work in the installed game' }),
+    updateDownload: () => Promise.resolve({ ok: false, error: 'Not in the browser' }),
+    updateInstall: () => undefined,
+    onUpdate: () => undefined,
   };
 }

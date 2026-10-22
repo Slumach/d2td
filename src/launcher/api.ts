@@ -87,10 +87,24 @@ export interface LauncherApi {
   /** The player's profile (inventory, stash) as JSON, or null before the first save. */
   loadProfile(): Promise<string | null>;
   saveProfile(json: string): Promise<void>;
+  /** Updates: asks the feed, downloads the newer version, installs it on restart. */
+  updateCheck(): Promise<UpdateCheck>;
+  updateDownload(): Promise<{ ok: boolean; error?: string }>;
+  updateInstall(): void;
+  /** Download progress and completion. Register once. */
+  onUpdate(callback: (e: UpdateEvent) => void): void;
 }
 
 /** Single player's save, and the host's multiplayer save. */
 export type SaveSlot = 'solo' | 'mp';
+
+/** What the update feed says: this is the newest, or a newer version with its notes, or no answer. */
+export type UpdateCheck =
+  | { state: 'current'; version: string }
+  | { state: 'available'; version: string; notes: string }
+  | { state: 'unavailable'; message: string };
+
+export type UpdateEvent = { kind: 'progress'; percent: number } | { kind: 'downloaded'; version: string } | { kind: 'error'; message: string };
 
 declare global {
   interface Window {
