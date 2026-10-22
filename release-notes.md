@@ -1,3 +1,10 @@
+0.3.6
+
+- Gold on kill: each kill shows the gold it paid over the corpse, gold find and Find Item included. Options can turn it off.
+- Enchant no longer hides the towers it reaches: a faint ember on the weapon, and the full flame only now and then.
+- Every class hides a secret beyond its evolutions. Put three of a class's evolutions side by side and see.
+- Setup extracts a little more art on the first start after the update.
+
 0.3.5
 
 - Towers wear what you give them: a worn weapon shows in the tower's hands in its own stance (a bow on a Paladin draws like a bowman), and a shield on its arm. The look is made from your D2R install the first time a tower wears that pair.
