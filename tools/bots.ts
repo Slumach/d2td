@@ -24,6 +24,7 @@ import { tileCenter, isPathTile } from '../src/sim/map.ts';
 import { activeSkill, buildCostFor, canBuild, createSim, waveAt, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
 import { withMods } from '../src/sim/combat.ts';
 import { freeSpot } from '../src/sim/items/loot.ts';
+import { lootPool, outfit, type LootSet } from './outfit.ts';
 import { ELEMENTS, type Command, type Element, type Sim, type TimedCommand, type Tower } from '../src/sim/state.ts';
 
 export type Strategy = 'BOLT' | 'HOLY' | 'TWOLINE' | 'PALADIN' | 'SORC' | 'NECRO' | 'MIXED3';
@@ -796,6 +797,15 @@ class MarginLog {
 }
 
 const MAX_TICKS = 600_000;
+/** How often a looted bot re-dresses its towers: once a wave. */
+const OUTFIT_TICKS = 900;
+
+export interface RunExtras {
+  /** Opens the Secret Cow Level (with a Wirt's Leg it is handed) as this wave, by number, starts. */
+  cowAtWave?: number;
+  /** Items the bot's towers wear (tools/outfit.ts). */
+  loot?: LootSet;
+}
 
 /** Plays a run with one bot (to the end, or `maxTicks`), recording its commands as a replayable log. */
 export function runBot(
@@ -804,9 +814,11 @@ export function runBot(
   seed: number,
   onTick?: (sim: Sim) => void,
   maxTicks = MAX_TICKS,
-  /** Opens the Secret Cow Level (with a Wirt's Leg it is handed) as this wave, by number, starts. */
-  cowAtWave?: number,
+  extra: RunExtras = {},
 ): RunResult {
+  const { cowAtWave } = extra;
+  // Stage F: the bot's towers wear items from a loot set, re-dressed once a wave
+  const loot = extra.loot && extra.loot !== 'none' ? lootPool(data, extra.loot) : undefined;
   const sim = createSim(data, seed);
   const bot = createBot(strategy, sim);
   const log: TimedCommand[] = [];
@@ -818,6 +830,7 @@ export function runBot(
   let cowOpened = false;
   while (sim.state.status === 'playing' && sim.state.tick < maxTicks) {
     const commands = bot.decide(sim);
+    if (loot && sim.state.tick % OUTFIT_TICKS === 0) commands.push(...outfit(sim, loot.pool, loot.reuse));
     if (cowAtWave !== undefined && !cowOpened && sim.state.wave >= cowAtWave) {
       cowOpened = true;
       const leg = { uid: 'bot-leg', code: 'leg', quality: 'normal' as const, ilvl: 85, sockets: 0, socketed: [], stats: [] };

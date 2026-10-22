@@ -345,6 +345,25 @@ npm run drops (all 75 campaign waves killed once a run, 20 runs, no magic find):
 - Profile: inventory, stash (10 x 10 pages, a page added whenever one is needed) and best wave, in the app data folder per Windows user (userData/profile.json, written to a temporary file and renamed so a crash never loses it), in localStorage in a browser. Saved on every change. While a game runs the sim owns the inventory (every peer must agree what fits); the profile mirrors it and records what the towers wear as in play. Leaving a game any way (quit, restart, defeat, disconnect, or closing the app, which the next start catches) brings everything home into the inventory, overflow into the stash. Items from any mode work in every mode. Checkpoints keep no items: a continued game starts with bare towers.
 - Trading (multiplayer): each player has a Trade button per other player on the inventory panel. D2R's trade window replaces the stash for both: their offer above, yours below; drop inventory items on your grid to offer them (they fade in the inventory), click one to take it back, click your gold to add 100 (shift 1000, right-click less), and click the check to accept. Any change clears both accepts; when both have accepted, items and gold move at once, or nothing moves if it no longer fits. Trades are match commands, so they work between FFA rings too, and every peer applies them on the same tick.
 
+### Stage F: the harness with items (Oct 22)
+
+npm run loot plays each bot four ways (tools/loot.ts, tools/outfit.ts): no items; nm, every drop of one pass through Normal and Nightmare (each monster killed once, no magic find); hell, the same through Hell too; bis, every unique, set item and runeword at its best rolls (runewords on the best base that takes them), any number of copies. An outfitter dresses the bot's towers from the pool once a wave, slot by slot, keeping whatever raises the tower's line skill's standard damage per second most with the gear on (+skills raising the skill, the weapon and enhanced damage on melee towers, attack or cast speed), and +skills and speed for aura and summon towers. Item stats are D2's throughout; nothing was tuned on the items.
+
+Results (seeds 1 and 2; waves, towers at the end):
+
+| Bot | none (target Hell Act 1-2) | nm (target Hell Act 4-5) | hell (target Tier 3-6) | bis (target 175-225) |
+| --- | --- | --- | --- | --- |
+| TWOLINE | 77, 77 | 77, 88 | 77, 88 | 110, 106 |
+| PALADIN | 77, 77 | 77, 77 | 77, 77 | 119, 119 |
+| NECRO | 60, 58 | 60, 59 | 60, 60 | 58, 58 |
+| MIXED3 | 59, 59 | 77, 77 | 99, 98 (met) | 115, 120 |
+
+Missed, and why:
+- The two Paladin bots die on wave 77 with no items, with Normal and Nightmare loot and with the whole campaign's loot alike: Hell Baal at bossHpPct 900% laps the ring and they cannot kill him, so the next waves pile onto the alive count. Itemless they clear Hell Acts 1 to 4, so they also miss the itemless target from the other side.
+- The Necromancer bot dies in Hell Act 2 whatever it wears, best in slot included: Hell's immunity walls stop its lines, and no item stat breaks an immunity in the mapping (resist and pierce stats do nothing).
+- Best in slot reaches waves 106 to 120, not 175 to 225. It is a wall, not a slope: with endless scaling at 1% or 2% a wave instead of 3% (npm run loot -- --set endless.hpPctPerWave=1 --set endless.damagePctPerWave=1) PALADIN still dies on 119 and TWOLINE on 119; only MIXED3 moves (131 at 1%). The endless Tiers walk Hell's regular waves with their immunities, and a Tier's fourth wave brings monsters immune to everything a two-line Paladin does. The levers are the immunity schedule in the Tiers, the boss HP ramp, and giving item stats that cut resistance (D2's -enemy resistance and pierce stats, now ignored) an effect; Stage A and B's numbers were left as they are, since moving them does not reach these targets.
+- MIXED3 with the whole campaign's loot dies in endless Tier 3, on target; with Normal and Nightmare loot it gets past Hell (wave 77) rather than dying in Hell Act 4 or 5.
+
 ### The Secret Cow Level (Oct 22)
 
 - Wirt's Leg is the real item (weapons.txt leg, its own HD sprite), stackable here. It drops only in Hell and the endless Tiers: 20 in a million from any kill, 2% from each of Griswold's pack (balance.json cow legPpm and griswoldLegPpm; a named monster's pack carries its id, so the Griswold wave knows its own).

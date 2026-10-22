@@ -32,7 +32,7 @@ for (const bot of bots) {
     const cow = runBot(data(), bot, seed, (sim) => {
       inCow = sim.state.cow !== undefined;
       if (inCow) peak = Math.max(peak, sim.state.alive);
-    }, maxTicks, at);
+    }, maxTicks, { cowAtWave: at });
     const diedInCow = !cow.won && inCow;
     const label = (r: typeof plain) => (r.won ? 'won' : `wave ${r.wave}`);
     const got = plain.wave >= at;
