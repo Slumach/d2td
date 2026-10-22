@@ -1,0 +1,15 @@
+{
+  "id": "death-sentry",
+  "skill": "mon death sentry",
+  "displayName": "Death Sentry",
+  "archetype": "corpse",
+  "damageType": "fire",
+  "rangeTenths": 40,
+  "rateTicks": 30,
+  "corpse": {
+    "radiusCalc": "aurarangecalc",
+    "minPctCalc": "calc1",
+    "maxPctCalc": "calc2",
+    "physicalPctCalc": "calc3"
+  }
+}

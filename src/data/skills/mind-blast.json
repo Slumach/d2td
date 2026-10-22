@@ -1,0 +1,14 @@
+{
+  "id": "mind-blast",
+  "skill": "Mind Blast",
+  "archetype": "splash",
+  "damageType": "phys",
+  "rangeTenths": 50,
+  "rateTicks": 30,
+  "splash": {
+    "delivery": "strike",
+    "missile": "mindblast center",
+    "stunLen": true,
+    "radiusCalc": "aurarangecalc"
+  }
+}

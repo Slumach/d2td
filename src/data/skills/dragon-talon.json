@@ -1,0 +1,12 @@
+{
+  "id": "dragon-talon",
+  "skill": "Dragon Talon",
+  "archetype": "melee",
+  "damageType": "phys",
+  "rangeTenths": 11,
+  "rateTicks": 18,
+  "melee": {
+    "swingsCalc": "calc1",
+    "damagePctCalc": "calc2"
+  }
+}

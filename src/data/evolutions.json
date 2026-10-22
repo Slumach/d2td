@@ -219,5 +219,38 @@
       "skill": "dire-wolf",
       "minTier": 2
     }
+  },
+  "trapsin": {
+    "name": "Trapsin",
+    "attack": {
+      "skill": "death-sentry",
+      "minTier": 3
+    },
+    "partner": {
+      "skill": "lightning-sentry",
+      "minTier": 2
+    }
+  },
+  "kicksin": {
+    "name": "Kicksin",
+    "attack": {
+      "skill": "dragon-talon",
+      "minTier": 2
+    },
+    "partner": {
+      "skill": "shadow-master",
+      "minTier": 3
+    }
+  },
+  "phoenix-striker": {
+    "name": "Phoenix Striker",
+    "attack": {
+      "skill": "phoenix-strike",
+      "minTier": 3
+    },
+    "partner": {
+      "skill": "mind-blast",
+      "minTier": 2
+    }
   }
 }

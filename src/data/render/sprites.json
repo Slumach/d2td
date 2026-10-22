@@ -1,6 +1,6 @@
 {
   "monsterModes": ["WL", "A1", "DT", "DD"],
-  "summons": { "ids": ["necroskeleton", "necromage", "dopplezon", "druidhawk", "fenris", "druidbear"], "modes": ["NU", "WL", "A1", "DT", "S1"] },
+  "summons": { "ids": ["necroskeleton", "necromage", "dopplezon", "druidhawk", "fenris", "druidbear", "shadowmaster"], "modes": ["NU", "WL", "A1", "DT", "S1"] },
   "objects": { "redportal": { "token": "PP", "modes": ["OP", "ON"], "variant": "lit" } },
   "heroes": {
     "paladin": {
@@ -47,6 +47,15 @@
         "fire": { "weapon": "Club" },
         "wind": { "weapon": "Club", "shield": "Buckler" },
         "summoning": { "weapon": "Club" }
+      }
+    },
+    "assassin": {
+      "token": "AI",
+      "attackMode": "A1",
+      "lines": {
+        "traps": { "weapon": "Katar" },
+        "martial": { "weapon": "Katar" },
+        "shadow": { "weapon": "Katar" }
       }
     },
     "necromancer": {
@@ -110,6 +119,11 @@
     "volcano": { "zone": "volcano" },
     "arctic-blast": { "fly": "arcticblast1" },
     "tornado": { "fly": "tornado" },
+    "fire-blast": { "fly": "bomb in air" },
+    "lightning-sentry": { "bolt": "lightninghit" },
+    "death-sentry": { "corpse": "corpseexplosion", "impact": ["explodingarrowexp"] },
+    "phoenix-strike": { "impact": ["meteorexplode"] },
+    "mind-blast": { "impact": ["mindblast center"] },
     "might": { "overlay": "aura_might_front" },
     "concentration": { "overlay": "concentrationfront" },
     "fanaticism": { "overlay": "fanaticismfront" },
@@ -120,7 +134,7 @@
   },
   "summonBolts": { "pois": "necromage1", "cold": "necromage2", "fire": "necromage3", "ltng": "necromage4" },
   "statusOverlays": { "frozen": "frozenarmor", "poison": "poisonhit" },
-  "iconClasses": ["pal", "sor", "nec", "ama", "bar", "dru"],
+  "iconClasses": ["pal", "sor", "nec", "ama", "bar", "dru", "ass"],
   "palettes": ["act1/pal.dat", "act1/pal.pl2"],
   "strings": ["skills.json"]
 }

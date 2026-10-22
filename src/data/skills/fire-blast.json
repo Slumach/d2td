@@ -1,0 +1,20 @@
+{
+  "id": "fire-blast",
+  "skill": "Fire Trauma",
+  "displayName": "Fire Blast",
+  "archetype": "splash",
+  "damageType": "fire",
+  "skillLevels": [
+    1,
+    5,
+    10,
+    15,
+    20
+  ],
+  "rangeTenths": 50,
+  "rateTicks": 20,
+  "splash": {
+    "delivery": "missile",
+    "radiusCalc": "aurarangecalc"
+  }
+}

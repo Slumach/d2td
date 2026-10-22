@@ -6,6 +6,7 @@ import type { SkillJson } from '../sim/archetypes/types.ts';
 import type { BalanceJson, ClassJson, DesignData, EvolutionJson, MonstersJson } from '../sim/data.ts';
 import balance from './balance.json';
 import amazon from './classes/amazon.json';
+import assassin from './classes/assassin.json';
 import barbarian from './classes/barbarian.json';
 import druid from './classes/druid.json';
 import necromancer from './classes/necromancer.json';
@@ -23,6 +24,15 @@ import doubleSwing from './skills/double-swing.json';
 import findItem from './skills/find-item.json';
 import frenzy from './skills/frenzy.json';
 import arcticBlast from './skills/arctic-blast.json';
+import cloakOfShadows from './skills/cloak-of-shadows.json';
+import deathSentry from './skills/death-sentry.json';
+import dragonTalon from './skills/dragon-talon.json';
+import fireBlast from './skills/fire-blast.json';
+import lightningSentry from './skills/lightning-sentry.json';
+import mindBlast from './skills/mind-blast.json';
+import phoenixStrike from './skills/phoenix-strike.json';
+import shadowMaster from './skills/shadow-master.json';
+import tigerStrike from './skills/tiger-strike.json';
 import direWolf from './skills/dire-wolf.json';
 import firestorm from './skills/firestorm.json';
 import fissure from './skills/fissure.json';
@@ -107,6 +117,16 @@ export const SKILL_JSON = [
   raven,
   direWolf,
   grizzly,
+  // Assassin
+  fireBlast,
+  lightningSentry,
+  deathSentry,
+  tigerStrike,
+  dragonTalon,
+  phoenixStrike,
+  cloakOfShadows,
+  mindBlast,
+  shadowMaster,
   // Paladin
   sacrifice,
   zeal,
@@ -149,7 +169,7 @@ export const SKILL_JSON = [
 
 export const DESIGN: DesignData = {
   skills: SKILL_JSON,
-  classes: [paladin as ClassJson, sorceress as ClassJson, necromancer as ClassJson, amazon as ClassJson, barbarian as ClassJson, druid as ClassJson],
+  classes: [paladin as ClassJson, sorceress as ClassJson, necromancer as ClassJson, amazon as ClassJson, barbarian as ClassJson, druid as ClassJson, assassin as ClassJson],
   evolutions: evolutions as Record<string, EvolutionJson>,
   monsters: monsters as MonstersJson,
   balance: balance as unknown as BalanceJson,

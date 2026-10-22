@@ -1,0 +1,12 @@
+{
+  "id": "shadow-master",
+  "skill": "Shadow Master",
+  "archetype": "summon",
+  "damageType": "phys",
+  "rangeTenths": 30,
+  "rateTicks": 20,
+  "summon": {
+    "countCalc": "petmax",
+    "respawnTicks": 160
+  }
+}

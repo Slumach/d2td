@@ -1,0 +1,49 @@
+{
+  "id": "assassin",
+  "name": "Assassin",
+  "weapon": "Katar",
+  "lines": {
+    "traps": {
+      "name": "Traps",
+      "tiers": [
+        [
+          "fire-blast"
+        ],
+        [
+          "lightning-sentry"
+        ],
+        [
+          "death-sentry"
+        ]
+      ]
+    },
+    "martial": {
+      "name": "Martial Arts",
+      "tiers": [
+        [
+          "tiger-strike"
+        ],
+        [
+          "dragon-talon"
+        ],
+        [
+          "phoenix-strike"
+        ]
+      ]
+    },
+    "shadow": {
+      "name": "Shadow",
+      "tiers": [
+        [
+          "cloak-of-shadows"
+        ],
+        [
+          "mind-blast"
+        ],
+        [
+          "shadow-master"
+        ]
+      ]
+    }
+  }
+}

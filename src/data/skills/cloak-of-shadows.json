@@ -1,0 +1,21 @@
+{
+  "id": "cloak-of-shadows",
+  "skill": "Cloak of Shadows",
+  "archetype": "debuff",
+  "damageType": "none",
+  "skillLevels": [
+    1,
+    5,
+    10,
+    15,
+    20
+  ],
+  "rangeTenths": 40,
+  "rateTicks": 40,
+  "debuff": {
+    "mode": "curse",
+    "radiusCalc": "aurarangecalc",
+    "durationCalc": "auralencalc",
+    "blind": true
+  }
+}

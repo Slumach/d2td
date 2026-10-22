@@ -121,7 +121,9 @@ export function missileSpeed(missile: TableRow): number {
 }
 
 export function missileLifetime(missile: TableRow): number {
-  return Math.max(1, d2FramesToTicks(int(missile, 'Range')));
+  const raw = missile['Range'];
+  const frames = typeof raw === 'string' && !/^-?\d+$/.test(raw.trim()) ? evalCalc(raw, { lvl: 20, params: params(missile) }) : int(missile, 'Range');
+  return Math.max(1, d2FramesToTicks(frames));
 }
 
 export function tenthsToUnits(tenths: number): number {

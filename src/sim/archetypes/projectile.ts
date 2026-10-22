@@ -24,6 +24,8 @@ interface ProjectileJson {
    */
   weapon?: boolean;
   damagePctCalc?: string;
+  /** The missiles.txt row, when the skill row names no server missile (Lightning Sentry's bolt is its trap's). */
+  missile?: string;
 }
 
 export const projectile: ArchetypeModule<ProjectileDef> = {
@@ -31,7 +33,7 @@ export const projectile: ArchetypeModule<ProjectileDef> = {
 
   resolve(json, ctx) {
     const f = fields<ProjectileJson>(json);
-    const missile = missileOf(ctx.tables, ctx.skillRow);
+    const missile = missileOf(ctx.tables, ctx.skillRow, f.missile);
     if (json.damageType === 'none') throw new Error(`${json.id}: projectile needs a damage type`);
     if (!f.weapon) elementalType(json, ctx.skillRow);
     let weapon: DamageRange | undefined;
