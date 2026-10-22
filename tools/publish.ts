@@ -4,7 +4,8 @@
 // was built with, and an update fails its checksum). Before anything is sent, latest.yml's
 // version, size and sha512 are checked against the local installer. The release for tag
 // v<version> is created at HEAD if it does not exist; files of the same names already on it
-// are replaced. Needs GH_TOKEN (a token with repo scope).
+// are replaced; a new tag is pushed before the release is made on it. Needs GH_TOKEN (a token
+// with repo scope) and a git remote that can push.
 //
 //   npm run dist && npm run publish
 
@@ -63,8 +64,12 @@ async function main(): Promise<void> {
   const tag = `v${pkg.version}`;
   let res = await api('GET', `/releases/tags/${tag}`);
   if (res.status === 404) {
+    // The tag goes up first: GitHub only knows commits that have been pushed
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-    res = await api('POST', '/releases', { tag_name: tag, target_commitish: head, name: pkg.version, body: notes(), draft: false, prerelease: false });
+    const local = execFileSync('git', ['tag', '--list', tag], { encoding: 'utf8' }).trim();
+    if (!local) execFileSync('git', ['tag', tag, head]);
+    execFileSync('git', ['push', 'origin', tag], { stdio: 'inherit' });
+    res = await api('POST', '/releases', { tag_name: tag, name: pkg.version, body: notes(), draft: false, prerelease: false });
     if (!res.ok) fail(`creating the release failed: ${res.status} ${await res.text()}`);
     console.log(`created release ${tag} at ${head.slice(0, 7)}`);
   } else if (!res.ok) {
