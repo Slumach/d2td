@@ -52,6 +52,7 @@ export const FIXTURE_ITEM_WEAPONS: TableRow[] = [
   base('tsy', 'swor', { name: 'Test Elite Sword', level: 50, mindam: 20, maxdam: 40, gemsockets: 6, invheight: 3, wclass: '1hs', normcode: 'tsw', ubercode: 'tsx', ultracode: 'tsy' }),
   base('tst', 'staf', { name: 'Test Staff', '2handed': 1, '2handmindam': 5, '2handmaxdam': 15, gemsockets: 6, invheight: 4, wclass: 'stf' }),
   base('tob', 'orb', { name: 'Test Orb', mindam: 1, maxdam: 3, gemsockets: 3, wclass: '1hs' }),
+  base('tbw', 'bow', { name: 'Test Bow', '2handed': 1, '2handmindam': 30, '2handmaxdam': 60, gemsockets: 5, invheight: 4, wclass: 'bow' }),
 ];
 
 export const FIXTURE_ITEM_TABLES: ItemTables = {
@@ -61,6 +62,8 @@ export const FIXTURE_ITEM_TABLES: ItemTables = {
     type('swor', 'mele', worn('rarm', [3, 4, 6])),
     type('staf', 'mele', worn('rarm', [5, 6, 6])),
     type('orb', 'weap', { ...worn('rarm', [2, 3, 3]), Class: 'sor' }),
+    type('miss', 'weap'),
+    type('bow', 'miss', worn('rarm', [3, 4, 6])),
     type('armo', ''),
     type('shld', 'armo'),
     type('shie', 'shld', worn('rarm', [2, 3, 4])),

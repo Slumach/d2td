@@ -10,7 +10,7 @@ const plain = (code: string, extra: Partial<Item> = {}): Item => ({ uid: code, c
 
 describe('item data', () => {
   it('reads every worn base, gem, rune and jewel, and leaves potions out', () => {
-    expect(Object.keys(data.bases).sort()).toEqual(['amu', 'gsr', 'jew', 'leg', 'r01', 'r02', 'rin', 'tar', 'tas', 'thl', 'tob', 'tsh', 'tst', 'tsw', 'tsy', 'xsh'].sort());
+    expect(Object.keys(data.bases).sort()).toEqual(['amu', 'gsr', 'jew', 'leg', 'r01', 'r02', 'rin', 'tar', 'tas', 'tbw', 'thl', 'tob', 'tsh', 'tst', 'tsw', 'tsy', 'xsh'].sort());
     expect(data.bases['tst']!.twoHanded).toBe(true);
     expect(data.bases['tsw']!.twoHanded).toBe(false);
     expect(data.bases['tsy']!.tier).toBe(2);

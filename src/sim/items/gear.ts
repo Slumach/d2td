@@ -12,8 +12,8 @@
 //   crushing blow, deadly strike, open wounds,     on hit, D2's rules (melee towers)
 //     slow, freeze
 //   pierce                                         bolt missiles fly on through what they hit
-//   -% to enemy resistance (the pierce stats)      the tower's hits cut that resistance, under
-//                                                   D2's fifth rule against immunes (combat.ts)
+//   -% to enemy resistance (the pierce stats)      the tower's hits cut that resistance, in full,
+//                                                   once the monster is not immune (combat.ts)
 //   +% to elemental skill damage (facets)          damage percent on spells of that element
 //   +% damage to demons, to undead                 melee towers, on the physical hit
 //   chance to cast on hit / on attack             casts the skill, at its level, when the game has it

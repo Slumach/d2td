@@ -324,10 +324,14 @@ export function itemName(data: ItemData, item: Item): string {
 }
 
 /** Whether an item can be worn in a slot by a tower of a class, given what the tower already wears. */
+/** itemtypes.txt types no tower can use: missile and thrown weapons (no tower shoots or throws; a melee skill needs a melee weapon, as in D2). */
+const NO_TOWER_WEAPON = ['miss', 'thro', 'jave', 'taxe', 'tkni'];
+
 export function canWear(data: ItemData, item: Item, slot: Slot, towerClass: string, worn: Partial<Record<Slot, Item>>): boolean {
   const base = data.bases[item.code];
   if (!base || !base.slots.includes(slot)) return false;
   if (base.classOnly && base.classOnly !== CLASS_CODES[towerClass]) return false;
+  if (slot === 'weapon' && NO_TOWER_WEAPON.some((t) => isType(data, base, t))) return false;
   // Two-handed weapons need the shield hand free, and a shield needs a one-handed weapon
   if (slot === 'shield' && worn.weapon && data.bases[worn.weapon.code]?.twoHanded) return false;
   if (slot === 'weapon' && base.twoHanded && worn.shield) return false;

@@ -65,15 +65,17 @@ export function actorGear(sim: Sim): TowerGear {
 }
 
 /**
- * Resistance after the reductions on the monster (Conviction, the curses) and the acting
- * tower's -% to enemy resistance from its items, added up. D2's rule for immunities: a
- * monster at 100% or more only loses a fifth of the reduction, so the immunity breaks only
- * when that fifth brings it under 100. Monster resistance never drops below -100.
+ * Resistance after the reductions, by D2's rules. The reductions on the monster (Conviction,
+ * Lower Resist and the other curses) are the only ones that break an immunity: a monster at
+ * 100% or more loses a fifth of them, and is immune still unless that fifth brings it under
+ * 100. The acting tower's -% to enemy resistance from its items then applies at full value,
+ * but only to a monster that is not immune. Monster resistance never drops below -100.
  */
 export function effectiveResist(sim: Sim, monster: Monster, element: Element): number {
   const base = baseResist(sim, monster, element);
-  const down = (monsterFx(sim, monster).resistDown[element] ?? 0) + (actorGear(sim).resistDown[element] ?? 0);
-  const resist = base >= 100 ? base - idiv(down, 5) : base - down;
+  const down = monsterFx(sim, monster).resistDown[element] ?? 0;
+  let resist = base >= 100 ? base - idiv(down, 5) : base - down;
+  if (resist < 100) resist -= actorGear(sim).resistDown[element] ?? 0;
   return Math.max(-100, resist);
 }
 

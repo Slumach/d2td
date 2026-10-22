@@ -5,7 +5,7 @@ import { effectiveResist } from '../combat.ts';
 import { step } from '../sim.ts';
 import type { Tower } from '../state.ts';
 import { addMonster, freeze, placeTower, testSim, ticks } from '../testkit.ts';
-import type { Item, StatRoll } from './item.ts';
+import { canWear, type Item, type StatRoll } from './item.ts';
 import { OPEN_WOUNDS_TICKS, openWoundsDamage } from './tower.ts';
 
 const BESIDE = 3000;
@@ -16,24 +16,29 @@ const wear = (tower: Tower, gear: Tower['gear']) => {
 };
 
 describe('the item stats that act on monsters', () => {
-  it("cuts resistance with the items' -% to enemy resistance, a fifth of it against an immune", () => {
+  it("cuts resistance with the items' -% to enemy resistance, at full value, once the monster is not immune", () => {
     const sim = testSim();
     const tower = placeTower(sim, 6, 4, 'sacrifice');
-    wear(tower, { ring1: item('rin', [{ stat: 'passive_pois_pierce', value: 50 }, { stat: 'passive_fire_pierce', value: 80 }, { stat: 'passive_mag_pierce', value: 30 }]) });
+    wear(tower, { ring1: item('rin', [{ stat: 'passive_pois_pierce', value: 600 }, { stat: 'passive_fire_pierce', value: 80 }, { stat: 'passive_mag_pierce', value: 30 }]) });
     const andariel = addMonster(sim, 'andariel', 0);
     const rogue = addMonster(sim, 'corruptrogue1', 0);
     // Nobody acting: the items do nothing
     expect(effectiveResist(sim, andariel, 'pois')).toBe(100);
     sim.actorTower = tower.id;
-    // Poison 100 is an immunity: 50 only takes 10 off, and it stays immune
-    expect(effectiveResist(sim, andariel, 'pois')).toBe(90);
+    // Poison 100 is an immunity, and no amount of item pierce breaks one
+    expect(effectiveResist(sim, andariel, 'pois')).toBe(100);
     // Fire -50 can only fall to -100
     expect(effectiveResist(sim, andariel, 'fire')).toBe(-100);
     // The rogue's 20 magic resistance takes the whole cut
     expect(effectiveResist(sim, rogue, 'mag')).toBe(-10);
-    // Enough to break: 100 poison under 600 of cuts loses 120 and is no longer immune
-    wear(tower, { ring1: item('rin', [{ stat: 'passive_pois_pierce', value: 600 }]) });
-    expect(effectiveResist(sim, andariel, 'pois')).toBe(-20);
+    // Conviction breaks it at a fifth (50 takes 10 off), and then the items count in full
+    sim.fx = { towers: {}, emitters: [], monsters: { [andariel.id]: { slowPct: 0, resistDown: { pois: 50 }, damageDownPct: 0 } } };
+    expect(effectiveResist(sim, andariel, 'pois')).toBe(-100);
+    wear(tower, { ring1: item('rin', [{ stat: 'passive_pois_pierce', value: 30 }]) });
+    expect(effectiveResist(sim, andariel, 'pois')).toBe(60);
+    // Too little Conviction leaves it immune, items or not
+    sim.fx.monsters[andariel.id]!.resistDown = { pois: 4 };
+    expect(effectiveResist(sim, andariel, 'pois')).toBe(100);
   });
 
   it("projects an item's aura at the item's level, on towers and on monsters", () => {
@@ -167,6 +172,12 @@ describe('the item stats that act on monsters', () => {
     const aura = placeTower(sim, 7, 5, 'might');
     wear(aura, { amulet: item('amu', [{ stat: 'item_addskill_tab', param: '10', value: 3 }]) });
     expect(activeSkill(sim, aura)!.skill.id).toBe('might+3');
+  });
+
+  it('refuses missile weapons on every tower: nothing here shoots a bow', () => {
+    const sim = testSim();
+    expect(canWear(sim.data.items, item('tbw', []), 'weapon', 'paladin', {})).toBe(false);
+    expect(canWear(sim.data.items, item('tsw', []), 'weapon', 'paladin', {})).toBe(true);
   });
 
   it("adds the facets' +% to elemental skill damage to spells of that element", () => {
