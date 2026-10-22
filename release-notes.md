@@ -1,3 +1,9 @@
+0.3.7
+
+- Monsters are tougher from Normal Act 2 on, tuned so a regular monster takes two or three hits from the towers you have at that point, rather than dying to one. Bosses more.
+- The top tiers hit more per attack: T3 skills, evolved towers and their levels cover more ground, fire more arrows, bolts and jumps, swing more often, and set more traps.
+- Each tower you own raises the next build's price by 10%, so building wide costs more and upgrading holds its own.
+
 0.3.6
 
 - Gold on kill: each kill shows the gold it paid over the corpse, gold find and Find Item included. Options can turn it off.

@@ -2,7 +2,7 @@
   "name": "d2td",
   "productName": "D2 Tower Defense",
   "private": true,
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Non-commercial Diablo II fan tower defense. Bring your own D2R install.",
   "type": "module",
   "main": "dist-electron/main.cjs",
