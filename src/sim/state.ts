@@ -4,6 +4,7 @@
 import type { MonsterAuraFx, TowerBuff } from './archetypes/types.ts';
 import type { GameData } from './data.ts';
 import type { Gear } from './items/gear.ts';
+import type { Drop, InvItem } from './items/loot.ts';
 import type { GameMap } from './map.ts';
 import type { Rng } from './rng.ts';
 
@@ -66,7 +67,9 @@ export type CommandBody =
   | { type: 'setTargeting'; towerId: number; mode: Targeting }
   | { type: 'evolve'; towerA: number; towerB: number }
   | { type: 'sell'; towerId: number }
-  | { type: 'callWave' };
+  | { type: 'callWave' }
+  /** Picks up one of the player's drops into their inventory. */
+  | { type: 'pickup'; dropId: number };
 
 export interface TimedCommand {
   tick: number;
@@ -94,6 +97,8 @@ export interface Monster {
   lastHit: number;
   /** The tower that last hurt it: its gold find and magic find apply to the kill. */
   lastTower: number;
+  /** Rune drops multiplied (the cow level's five times); absent for one. */
+  runeBoost?: number;
   poisonTower: number;
   /** Timed statuses from on-hit control skills. */
   slowPct: number;
@@ -268,6 +273,12 @@ export interface SimState {
   corpses: Corpse[];
   spawns: Spawn[];
   waves: WaveProgress[];
+  /** Drops roll on their own stream, so loot never moves combat's rolls. */
+  dropRng: Rng;
+  /** Items on the ground, each its killer's. */
+  drops: Drop[];
+  /** Each player's inventory this game (D2's 10 x 4 grid). */
+  inventories: InvItem[][];
 }
 
 /** An aura source this tick, kept for the renderer's radius rings. */

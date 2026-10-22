@@ -322,6 +322,19 @@ Stat mapping (src/sim/items/gear.ts and tower.ts), D2's values throughout:
 
 Not yet built: chance to cast on hit and on attack (the stat is read and kept, but a tower casts only its own skills), open wounds and pierce; the worn weapon does not yet change the tower's weapon layer (the class composites are extracted with one weapon each).
 
+### Stage D: drops (Oct 22)
+
+Every kill rolls its drops as D2 does (src/sim/items/drops.ts), on a drop stream of the sim's RNG seeded from the run's seed, so loot never moves combat's rolls and every lockstep peer rolls the same items.
+
+- The treasure class is the monster's monstats TreasureClass, TreasureClassChamp or TreasureClassUnique for its difficulty (a superunique's own superuniques.txt TC; act bosses' rows name their boss classes), upgraded within its group to the highest class at or under the monster's level. Picks roll against NoDrop and the entries' Prob; negative picks drop each entry its Prob times in order; nested classes resolve down to an item code or an automatic class (weap3 to weap87, armo, bow, mele, abow: the bases of that type within three levels, weighted by their rarity column). At most six items a kill. Gold (bounty pays instead), potions, charms, scrolls, keys, ammo and quest items come up as nothing.
+- Quality is itemratio.txt's (the expansion rows; normal, exceptional and elite, class items): unique, set, rare, magic, superior in turn, each 128 in (ratio - (ilvl - qlvl) / divisor) x 128, divided by magic find (diminishing for unique 250, set 500, rare 600), floored at the minimum, less the treasure class's quality bonus in 1024ths. A unique with none of its base at the item level becomes rare, a set item magic, as in D2. Rings, amulets and jewels are never white. The item level is the monster's level; the magic find is the killing tower's.
+- Rune entries (rune codes and the Runes N classes) weigh balance.json drops.runeMultiplierPct, 125%, against everything else: D2R's rates otherwise.
+- Endless Tiers: each Tier multiplies the drop rate by 1.25, compounding (drops.tierDropPct 25: NoDrop is divided by 1.25 per Tier, so Tier 4 has 2.4x the drops and Tier 10 9.3x), and Smith's Hammer's chance with it.
+- Smith's Hammer (code xsh, ours, drawn as the Hellforge Hammer): its own roll on every kill, drops.smithsHammerPpm 10 in a million, the rate npm run drops measures for Um and Ist from Hell's monsters. Stackable.
+- A drop is the killer's (the player whose tower last hurt the monster). It lands at the kill spot with its item's D2 drop sound (weapons, armor and misc dropsound, extracted through sounds.txt) and D2R's name label in the quality's colour. Its owner clicks the label to pick it up (a pickup command); when the monster's wave is cleared, whatever is still on the ground goes to the owner's inventory if there is room (D2's 10 x 4 grid, placed column by column from the top left, consumables stacking) and is lost otherwise. Only your own drops show.
+
+npm run drops (all 75 campaign waves killed once a run, 20 runs, no magic find): Normal 128 items a run (79 white, 33 magic, 6 rare, about one set item and a unique every ten runs), 1.6 runes; Nightmare 89 items, 0.7 sets and 0.7 uniques, 4.7 runes up to Lem; Hell 73 items, 0.6 sets, 0.2 uniques, 1.6 runes, the odd Mal, Gul or Cham. A Smith's Hammer is rare in the campaign (about one in 100,000 Hell kills) and comes with the Tiers.
+
 ## Overnight decisions
 
 Calls made without asking, each the option closest to Diablo II's own rules.
@@ -335,6 +348,9 @@ Calls made without asking, each the option closest to Diablo II's own rules.
 - Oct 22: D2 adds weapon damage, enhanced damage and added elemental damage to attacks, never to spells. Towers follow it: only melee towers use them; the casters gain from +skills and faster cast rate, as a D2 caster does.
 - Oct 22: monsters never attack towers, so armour's durability is the tower's summons: monsters roll D2's chance to hit against the gear's defence and then its block.
 - Oct 22: items of the four classes without a tower (Amazon, Barbarian, Druid, Assassin) drop and sell but fit no tower.
+- Oct 22: D2's NoDrop shrinks with players in the game; the ring always rolls as one player (each kill's drop is one player's), so NoDrop is D2's single-player value.
+- Oct 22: minions of a unique or superunique drop from their own regular treasure class, as D2's minions do; only the leader uses the unique class.
+- Oct 22: Smith's Hammer needs art and D2 has none for it; it is drawn as the Hellforge Hammer, the quest hammer D2 already has.
 
 ## Open questions
 

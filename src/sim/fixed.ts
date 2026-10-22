@@ -38,3 +38,10 @@ export function isqrt(n: number): number {
 export function d2FramesToTicks(frames: number): number {
   return idiv(frames * TICKS_PER_SECOND, D2_FRAMES_PER_SECOND);
 }
+
+/** `pct` percent compounded `n` times, as a percent (compoundPct(103, 2) is 106). */
+export function compoundPct(pct: number, n: number): number {
+  let v = 10_000;
+  for (let i = 0; i < n; i++) v = idiv(v * pct, 100);
+  return idiv(v, 100);
+}

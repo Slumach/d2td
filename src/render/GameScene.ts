@@ -15,6 +15,7 @@ import { Lockstep } from '../net/lockstep.ts';
 import type { LobbyPlayer } from '../net/protocol.ts';
 import { actJustStarted, takeCheckpoint, type Checkpoint } from '../sim/checkpoint.ts';
 import { baseMonsterId, baseSkillId, buildGameData, MAX_TIER, MAX_TOWER_LEVEL, stageName, waveLabel as labelOf, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
+import { GroundDrops } from './drops.ts';
 import { standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
 import { aliveOf, arcOwner, ringOf, seatOf, type MatchMode } from '../sim/match.ts';
@@ -215,6 +216,7 @@ export class GameScene extends Phaser.Scene {
 
   private monsters = new Map<number, MonsterView>();
   private corpses = new Map<number, Phaser.GameObjects.Sprite>();
+  private drops?: GroundDrops;
   private towers = new Map<number, TowerView>();
   private missiles = new Map<number, MissileView>();
   private summons = new Map<number, SummonView>();
@@ -321,6 +323,7 @@ export class GameScene extends Phaser.Scene {
     menuMusic(this, false);
     this.sounds = new SoundBank(this);
     this.sounds.startLoops();
+    this.drops = new GroundDrops(this, DEPTH.overlay - 1, (c) => this.issue(c), (item) => this.sounds.item(this.sim.data.items.bases[item.code]?.dropSound), (make) => this.camera.asWorld(make));
 
     const hudArt = hudManifest(this);
     this.d2 = hudArt
@@ -512,6 +515,7 @@ export class GameScene extends Phaser.Scene {
     }
     for (const s of this.corpses.values()) s.destroy();
     this.corpses.clear();
+    this.drops?.clear();
     this.corpseSeen.clear();
     this.cursesSeen.clear();
     this.fx?.clear();
@@ -630,6 +634,7 @@ export class GameScene extends Phaser.Scene {
     this.syncTowers();
     this.syncMissiles();
     this.syncSummons();
+    this.drops?.sync(this.sim.data.items, s.drops, this.seat);
   }
 
   private syncMonsters(): void {
@@ -676,12 +681,12 @@ export class GameScene extends Phaser.Scene {
       const key = `m${m.id}`;
       riders.add(key);
       const curse = m.curses[0];
-      this.fx.ride(key, curse ? SKILL_ART[curse.skill]?.overlay : undefined, { x: px, y: py }, depth + 0.0005);
+      this.fx.ride(key, curse ? SKILL_ART[baseSkillId(curse.skill)]?.overlay : undefined, { x: px, y: py }, depth + 0.0005);
       riders.add(`${key}f`);
       this.fx.ride(`${key}f`, m.freezeTicks > 0 ? STATUS_OVERLAYS.frozen : undefined, { x: px, y: py }, depth + 0.0004);
       const before = this.cursesSeen.get(m.id);
-      for (const c of m.curses) if (!before?.has(c.skill) && !freshCurse.has(c.skill)) freshCurse.set(c.skill, { x: px, y: py });
-      this.cursesSeen.set(m.id, new Set(m.curses.map((c) => c.skill)));
+      for (const c of m.curses) if (!before?.has(baseSkillId(c.skill)) && !freshCurse.has(baseSkillId(c.skill))) freshCurse.set(baseSkillId(c.skill), { x: px, y: py });
+      this.cursesSeen.set(m.id, new Set(m.curses.map((c) => baseSkillId(c.skill))));
     }
     for (const [skill, at] of freshCurse) {
       const art = SKILL_ART[skill]?.area;
@@ -723,7 +728,7 @@ export class GameScene extends Phaser.Scene {
       if (seen.ticksLeft <= 1 || exploders.length === 0) continue;
       const near = exploders.find((t) => (t.x - seen.x) ** 2 + (t.y - seen.y) ** 2 <= (activeSkill(this.sim, t)!.skill.rangeUnits + 200) ** 2);
       if (!near) continue;
-      const art = SKILL_ART[activeSkill(this.sim, near)!.skill.id];
+      const art = SKILL_ART[baseSkillId(activeSkill(this.sim, near)!.skill.id)];
       const at = project(seen.x, seen.y);
       if (art?.corpse) this.effect(art.corpse, at.x, at.y);
       for (const a of art?.impact ?? []) this.effect(a, at.x, at.y);
@@ -820,9 +825,9 @@ export class GameScene extends Phaser.Scene {
    * tower, Chain Lightning's arcs from target to target, Static Field's burst.
    */
   private castEffects(t: Tower, skillId: string, lvl: number): void {
-    this.sounds.cast(skillId);
+    this.sounds.cast(baseSkillId(skillId));
     const skill = this.sim.data.skills[skillId];
-    const art = SKILL_ART[skillId];
+    const art = SKILL_ART[baseSkillId(skillId)];
     if (!skill || !art) return;
     const at = project(t.x, t.y);
     if (art.cast) this.effect(art.cast, at.x, at.y);

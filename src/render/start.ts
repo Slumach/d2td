@@ -74,6 +74,8 @@ export function startGame(opts: StartOptions = {}): Phaser.Game {
       },
     },
   });
+  // The dev server exposes the game for the screenshot scripts' probes
+  if (import.meta.env.DEV) (window as unknown as { __game?: Phaser.Game }).__game = game;
   game.sound.volume = (opts.volume ?? 80) / 100;
   window.addEventListener('resize', () => game.scale.setZoom(fitZoom(width, height)));
   if (opts.autoplay && !opts.m0) {

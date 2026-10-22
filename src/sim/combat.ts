@@ -1,5 +1,6 @@
 // Targeting, resistance and damage. Every hit in the sim goes through dealDamage.
 
+import { dropLoot } from './items/loot.ts';
 import { gearOf } from './items/tower.ts';
 import type { HitFilter, MonsterAuraFx, SkillCommon, TowerBuff } from './archetypes/types.ts';
 import { idiv } from './fixed.ts';
@@ -200,6 +201,7 @@ export function killMonster(sim: Sim, monster: Monster): void {
     maxHp: monster.maxHp,
     ticksLeft: sim.data.rules.corpseLifetimeTicks,
   });
+  dropLoot(sim, monster);
   removeMonster(sim, monster);
 }
 

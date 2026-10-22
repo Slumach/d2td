@@ -19,6 +19,7 @@ import { createRng } from './rng.ts';
 import type { Command, Sim, TimedCommand, Tower } from './state.ts';
 import { updateSummons } from './archetypes/summon.ts';
 import { geared, gearOf, withGear } from './items/tower.ts';
+import { collectCleared, pickup } from './items/loot.ts';
 import { build, evolve, pickBranch, pickSkill, sell, setTargeting, towerById, upgrade, upgradeTier } from './towers.ts';
 
 export type * from './state.ts';
@@ -63,6 +64,9 @@ export function createSim(data: GameData, seed: number, opts: SimOptions = {}): 
       missiles: [],
       summons: [],
       corpses: [],
+      dropRng: createRng((seed ^ 0x5eed_d209) >>> 0),
+      drops: [],
+      inventories: Array.from({ length: players }, () => []),
       spawns: [],
       waves: [],
     },
@@ -83,6 +87,7 @@ export function step(sim: Sim, commands: readonly Command[]): void {
     updateTowers(sim);
     updateMissiles(sim);
     decayCorpses(sim);
+    collectCleared(sim);
     s.alive = aliveWeight(sim);
     checkEnd(sim);
   }
@@ -112,6 +117,7 @@ function applyCommand(sim: Sim, command: Command): void {
   if (player < 0 || player >= sim.players) return;
   if (command.type === 'build') return build(sim, player, command.x, command.y, command.cls, command.skill);
   if (command.type === 'callWave') return sendEarly(sim);
+  if (command.type === 'pickup') return pickup(sim, player, command.dropId);
   if (command.type === 'evolve') {
     const a = towerById(sim, command.towerA);
     const b = towerById(sim, command.towerB);

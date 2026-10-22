@@ -51,6 +51,8 @@ export interface SoundManifest {
   travel: Record<string, string[]>;
   hit: Record<string, string[]>;
   death: Record<string, string[]>;
+  /** Item sounds by name (weapons, armor and misc dropsound and usesound): landing, and going into the inventory. */
+  items: Record<string, string[]>;
   /** The menus: button click and hover, and the title music. */
   ui: { click: string[]; hover: string[]; music: string | null };
   volumePct: { music: number; ambience: number; sfx: number };
@@ -103,9 +105,17 @@ export function soundJob(source: DataSource): SpriteJob {
     travel: Object.fromEntries(artMissiles().map((m) => [m, resolve(column(missiles.find((r) => r['Missile'] === m) ?? {}, 'TravelSound'))])),
     hit: Object.fromEntries(artMissiles().map((m) => [m, resolve(column(missiles.find((r) => r['Missile'] === m) ?? {}, 'HitSound'))])),
     death: {},
+    items: {},
     ui: { click: resolve(soundsJson.ui.click), hover: resolve(soundsJson.ui.hover), music: resolve(soundsJson.ui.music, 'global/music/')[0] ?? null },
     volumePct: soundsJson.volumePct,
   };
+  const itemTables = ['weapons.txt', 'armor.txt', 'misc.txt'].map((t) => readTable(source, t));
+  for (const row of itemTables.flat()) {
+    for (const col of ['dropsound', 'usesound']) {
+      const name = column(row, col);
+      if (name && !manifest.items[name]) manifest.items[name] = resolve(name);
+    }
+  }
   const ids = [...new Set([...MONSTER_ART, ...sprites.summons.ids])];
   for (const id of ids) {
     const mon = monstats.find((r) => r['Id'] === id);
@@ -113,7 +123,9 @@ export function soundJob(source: DataSource): SpriteJob {
     manifest.death[id] = snd ? resolve(column(snd, 'DeathSound')) : [];
   }
 
-  const tables = ['sounds.txt', 'skills.txt', 'missiles.txt', 'monstats.txt', 'monsounds.txt', 'levels.txt', 'soundenviron.txt'].map((t) => `global/excel/${t}`);
+  const tables = ['sounds.txt', 'skills.txt', 'missiles.txt', 'monstats.txt', 'monsounds.txt', 'levels.txt', 'soundenviron.txt', 'weapons.txt', 'armor.txt', 'misc.txt'].map(
+    (t) => `global/excel/${t}`,
+  );
   return {
     label: 'sounds',
     inputs: [...tables, ...files.values()],

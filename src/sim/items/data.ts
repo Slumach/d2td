@@ -70,6 +70,15 @@ export interface ItemBase {
   wclass: string;
   /** Can be magic or rare (itemtypes Magic/Rare), or only normal (gems, runes). */
   canMagic: boolean;
+  /** Rings, amulets and jewels: never normal (itemtypes Magic). */
+  alwaysMagic: boolean;
+  /** Sound names (dropsound, usesound): landing on the ground, going into the inventory. */
+  dropSound: string;
+  useSound: string;
+  /** weapons.txt / armor.txt rarity: its weight in an automatic treasure class. */
+  rarity: number;
+  /** Our own consumables: Smith's Hammer adds a socket, Wirt's Leg opens the cow portal. */
+  consumable?: 'socket' | 'cowPortal';
   canRare: boolean;
   stackable: boolean;
   maxStack: number;
@@ -181,8 +190,41 @@ export interface ItemData {
   runeOrder: string[];
   /** Rare names' two words (rareprefix.txt, raresuffix.txt). */
   rarePrefixes: string[];
+  /** treasureclassex.txt by name, and each group's classes by level (for D2's level upgrade). */
+  treasureClasses: Record<string, TreasureClass>;
+  tcGroups: Record<number, TreasureClass[]>;
+  /** Automatic treasure classes (weap3 ... armo87): bases of a type by level, built when first asked for. */
+  autoTc: Record<string, ItemBase[]>;
+  /** itemratio.txt, the expansion rows. */
+  itemRatios: ItemRatio[];
   rareSuffixes: string[];
 }
+
+/** treasureclassex.txt: a class's picks, its NoDrop weight, its quality bonuses and its entries. */
+export interface TreasureClass {
+  name: string;
+  picks: number;
+  noDrop: number;
+  group: number;
+  level: number;
+  /** Unique, Set, Rare, Magic columns: x/1024 off each quality's roll (higher is better). */
+  quality: { unique: number; set: number; rare: number; magic: number };
+  items: { name: string; prob: number }[];
+}
+
+/** itemratio.txt: the quality odds for normal, exceptional and elite, and class items. */
+export interface ItemRatio {
+  uber: boolean;
+  classSpecific: boolean;
+  unique: [number, number, number];
+  set: [number, number, number];
+  rare: [number, number, number];
+  magic: [number, number, number];
+  hiQuality: [number, number];
+}
+
+/** itemtypes.txt types with TreasureClass 1: the game builds weap3, armo87 and so on from them. */
+export const AUTO_TC_TYPES = ['weap', 'armo', 'bow', 'mele', 'abow'];
 
 /** Item types that never drop or equip here: charms, potions, scrolls, keys, quest items, gold. */
 const EXCLUDED_TYPES = new Set(['char', 'scha', 'mcha', 'lcha', 'hpot', 'mpot', 'rpot', 'spot', 'apot', 'wpot', 'scro', 'book', 'key', 'quest', 'gold', 'body', 'elix', 'herb', 'torch', 'tpot', 'play', 'ques']);
@@ -234,7 +276,7 @@ export function buildItemData(tables: Tables): ItemData {
   const addBase = (row: TableRow, kind: BaseKind) => {
     const code = str(row, 'code');
     const type = str(row, 'type');
-    if (!code || !type || num(row, 'spawnable') === 0 && kind !== 'misc') return;
+    if (!code || !type || (num(row, 'spawnable') === 0 && kind !== 'misc') || num(row, 'quest') > 0) return;
     const types = chainOf(type);
     if (types.some((t) => EXCLUDED_TYPES.has(t))) return;
     const typeRow = typeRows.get(type) ?? {};
@@ -276,6 +318,10 @@ export function buildItemData(tables: Tables): ItemData {
       block: num(row, 'block'),
       wclass: str(row, 'wclass'),
       canMagic: flag(types, 'Magic') || num(typeRow, 'Normal') !== 1,
+      alwaysMagic: flag(types, 'Magic'),
+      dropSound: str(row, 'dropsound'),
+      useSound: str(row, 'usesound'),
+      rarity: num(row, 'rarity') || 1,
       canRare: flag(types, 'Rare'),
       stackable: num(row, 'stackable') === 1,
       maxStack: num(row, 'maxstack') || 1,
@@ -397,6 +443,49 @@ export function buildItemData(tables: Tables): ItemData {
     properties[code] = { code, parts };
   }
 
+  // Our consumables, drawn with D2 art: Smith's Hammer as the Hellforge Hammer, Wirt's Leg as itself
+  const special = (code: string, from: string | undefined, name: string, consumable: ItemBase['consumable']) => {
+    const row = from ? (tables.weapons ?? []).find((r) => str(r, 'code') === from) : undefined;
+    bases[code] = {
+      ...emptyBase(code, name),
+      invFile: row ? str(row, 'invfile') : '',
+      dropSound: row ? str(row, 'dropsound') : '',
+      useSound: row ? str(row, 'usesound') : '',
+      width: row ? num(row, 'invwidth') || 1 : 1,
+      height: row ? num(row, 'invheight') || 1 : 1,
+      stackable: true,
+      maxStack: 99,
+      consumable,
+    };
+  };
+  special(SMITHS_HAMMER, 'hfh', "Smith's Hammer", 'socket');
+  const leg = (tables.weapons ?? []).find((r) => str(r, 'code') === 'leg');
+  special(WIRTS_LEG, 'leg', leg ? nameOf(str(leg, 'namestr') || 'leg') : "Wirt's Leg", 'cowPortal');
+
+  const treasureClasses: Record<string, TreasureClass> = {};
+  const tcGroups: Record<number, TreasureClass[]> = {};
+  for (const r of tables.treasureclassex ?? []) {
+    const name = str(r, 'Treasure Class');
+    if (!name) continue;
+    const items: TreasureClass['items'] = [];
+    for (let i = 1; i <= 10; i++) {
+      const item = str(r, `Item${i}`);
+      if (item) items.push({ name: item, prob: num(r, `Prob${i}`) });
+    }
+    const tc: TreasureClass = {
+      name,
+      picks: num(r, 'Picks') || 1,
+      noDrop: num(r, 'NoDrop'),
+      group: num(r, 'group'),
+      level: num(r, 'level'),
+      quality: { unique: num(r, 'Unique'), set: num(r, 'Set'), rare: num(r, 'Rare'), magic: num(r, 'Magic') },
+      items,
+    };
+    treasureClasses[name] = tc;
+    if (tc.group > 0) (tcGroups[tc.group] ??= []).push(tc);
+  }
+  for (const g of Object.values(tcGroups)) g.sort((a, b) => a.level - b.level);
+
   const runeOrder = Object.values(bases)
     .filter((b) => b.isRune)
     .map((b) => b.code)
@@ -417,7 +506,50 @@ export function buildItemData(tables: Tables): ItemData {
     runeOrder,
     rarePrefixes: (tables.rareprefix ?? []).map((r) => nameOf(str(r, 'name'))).filter((n) => n),
     rareSuffixes: (tables.raresuffix ?? []).map((r) => nameOf(str(r, 'name'))).filter((n) => n),
+    treasureClasses,
+    tcGroups,
+    autoTc: {},
+    itemRatios: (tables.itemratio ?? [])
+      .filter((r) => num(r, 'Version') === 1)
+      .map((r) => ({
+        uber: num(r, 'Uber') === 1,
+        classSpecific: num(r, 'Class Specific') === 1,
+        unique: [num(r, 'Unique'), Math.max(1, num(r, 'UniqueDivisor')), num(r, 'UniqueMin')],
+        set: [num(r, 'Set'), Math.max(1, num(r, 'SetDivisor')), num(r, 'SetMin')],
+        rare: [num(r, 'Rare'), Math.max(1, num(r, 'RareDivisor')), num(r, 'RareMin')],
+        magic: [num(r, 'Magic'), Math.max(1, num(r, 'MagicDivisor')), num(r, 'MagicMin')],
+        hiQuality: [num(r, 'HiQuality'), Math.max(1, num(r, 'HiQualityDivisor'))],
+      })),
   };
+}
+
+/** Our consumables' codes (not D2 items; drawn with D2 art). */
+export const SMITHS_HAMMER = 'xsh';
+export const WIRTS_LEG = 'leg';
+
+function emptyBase(code: string, name: string): ItemBase {
+  return {
+    code, name, kind: 'misc', type: code, types: [code], slots: [], twoHanded: false, tier: 0, level: 0, levelReq: 0, magicLevel: 0,
+    dropSound: '', useSound: '', cost: 0, gemSockets: 0, maxSockets: [0, 0, 0], socketLevels: [25, 40], width: 1, height: 1, invFile: '', minDamage: 0, maxDamage: 0,
+    speed: 0, rangeAdder: 0, minAc: 0, maxAc: 0, block: 0, wclass: '', canMagic: false, canRare: false, alwaysMagic: false, rarity: 0,
+    stackable: false, maxStack: 1, isGem: false, isRune: false, isJewel: false, autoPrefix: 0,
+  };
+}
+
+/**
+ * An automatic treasure class (weap33: weapons of levels 31 to 33), built from the bases
+ * the first time a drop asks for it. Undefined when the name is not one.
+ */
+export function autoTreasure(data: ItemData, name: string): ItemBase[] | undefined {
+  const hit = data.autoTc[name];
+  if (hit) return hit;
+  const m = /^([a-z]+)(\d+)$/.exec(name);
+  if (!m || !AUTO_TC_TYPES.includes(m[1]!)) return undefined;
+  const type = m[1]!;
+  const top = Number(m[2]);
+  const list = Object.values(data.bases).filter((b) => !b.consumable && b.types.includes(type) && b.level > top - 3 && b.level <= top && b.rarity > 0);
+  data.autoTc[name] = list;
+  return list;
 }
 
 /** True when an item of `base` is of type `t` (through its Equiv chain). */

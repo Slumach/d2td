@@ -40,7 +40,7 @@ const HAND_TABLES: Tables = {
     monster('fallenshaman1', 'fallen', { Level: 2, demon: 1, ResFi: 20, aidel: 15, aip1: 50, aip4: 24, minion1: 'fallen1' }),
     monster('zombie1', 'zombie', { Velocity: 2, lUndead: 1, ResPo: 50, 'ResCo(H)': 120 }),
     monster('skeleton1', 'skeleton', { Level: 2, lUndead: 1, 'ResLi(H)': 100 }),
-    monster('quillrat1', 'quillrat', { Velocity: 4 }),
+    monster('quillrat1', 'quillrat', { Velocity: 4, TreasureClass: 'Test Kill', TreasureClassChamp: 'Runes 1' }),
     monster('corruptrogue1', 'corruptrogue', { Level: 2, Velocity: 4, demon: 1, ResMa: 20 }),
     monster('fallen4', 'fallen', { Level: 5, Velocity: 6, demon: 1 }),
     monster('brute1', 'brute', { Level: 2, minHP: 200, maxHP: 250, 'Level(H)': 30, 'A1MinD(H)': 80, 'A1MaxD(H)': 120 }),

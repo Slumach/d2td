@@ -149,8 +149,27 @@ export const FIXTURE_ITEM_TABLES: ItemTables = {
     { code: 'r02', weaponMod1Code: 'dmg-max', weaponMod1Min: 2, weaponMod1Max: 2, helmMod1Code: 'hp', helmMod1Min: 5, helmMod1Max: 5, shieldMod1Code: 'hp', shieldMod1Min: 5, shieldMod1Max: 5 },
   ],
   itemstatcost: [],
-  treasureclassex: [],
-  itemratio: [],
+  treasureclassex: [
+    { 'Treasure Class': 'Runes 1', Picks: 1, Item1: 'r01', Prob1: 1 },
+    { 'Treasure Class': 'Test Equip', Picks: 1, Item1: 'weap3', Prob1: 1 },
+    { 'Treasure Class': 'Test Negative', Picks: -3, Item1: 'gsr', Prob1: 2, Item2: 'r01', Prob2: 5 },
+    { 'Treasure Class': 'Test Group Low', group: 1, level: 0, Picks: 1, Item1: 'r01', Prob1: 1 },
+    { 'Treasure Class': 'Test Group High', group: 1, level: 10, Picks: 1, Item1: 'r02', Prob1: 1 },
+    { 'Treasure Class': 'Test Mixed', Picks: 1, Item1: 'Runes 1', Prob1: 1, Item2: 'tsw', Prob2: 1 },
+    { 'Treasure Class': 'Test Nothing', Picks: 1, Item1: 'gld', Prob1: 3, Item2: 'hp1', Prob2: 3 },
+    { 'Treasure Class': 'Test Kill', Picks: 2, NoDrop: 1, Item1: 'Runes 1', Prob1: 3, Item2: 'Test Equip', Prob2: 3 },
+    { 'Treasure Class': 'Test Many', Picks: 9, Item1: 'r01', Prob1: 1 },
+  ],
+  itemratio: [
+    { Version: 0, Uber: 0, 'Class Specific': 0, Unique: 900, UniqueDivisor: 1, UniqueMin: 9000 },
+    ...[0, 1].flatMap((Uber) =>
+      [0, 1].map((cls) => ({
+        Version: 1, Uber, 'Class Specific': cls,
+        Unique: 100, UniqueDivisor: 1, UniqueMin: 3000, Set: 80, SetDivisor: 2, SetMin: 2000, Rare: 50, RareDivisor: 2, RareMin: 1000,
+        Magic: 10, MagicDivisor: 3, MagicMin: 100, HiQuality: 5, HiQualityDivisor: 4, Normal: 2, NormalDivisor: 2,
+      })),
+    ),
+  ],
   qualityitems: [],
   itemstrings: [
     { Key: 'tsw', enUS: 'Test Sword' },

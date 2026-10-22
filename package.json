@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tools && tsc --noEmit -p electron",
     "extract": "tsx tools/extract/index.ts",
     "items": "tsx tools/items-check.ts",
+    "drops": "tsx tools/drops.ts",
     "balance": "tsx tools/balance.ts",
     "ladders": "tsx tools/ladders.ts",
     "build:app": "tsc --noEmit && tsc --noEmit -p electron && vite build && vite build -c vite.electron.config.ts",

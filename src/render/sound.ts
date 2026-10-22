@@ -14,6 +14,8 @@ export interface SoundManifest {
   travel: Record<string, string[]>;
   hit: Record<string, string[]>;
   death: Record<string, string[]>;
+  /** Item drop and use sounds by name; absent in extractions from before items. */
+  items?: Record<string, string[]>;
   /** Menu sounds; absent in extractions from before the D2 menu. */
   ui?: { click: string[]; hover: string[]; music: string | null };
   volumePct: { music: number; ambience: number; sfx: number };
@@ -25,7 +27,7 @@ const REPEAT_MS = 90;
 export function preloadSounds(scene: Phaser.Scene): void {
   // The menus may have read the manifest already (for their own sounds); queue whatever is missing
   const queue = (m: SoundManifest) => {
-    const all = new Set<string>([...m.gold, ...[m.cast, m.travel, m.hit, m.death].flatMap((g) => Object.values(g).flat())]);
+    const all = new Set<string>([...m.gold, ...[m.cast, m.travel, m.hit, m.death, m.items ?? {}].flatMap((g) => Object.values(g).flat())]);
     if (m.music) all.add(m.music);
     if (m.ambience) all.add(m.ambience);
     for (const path of all) if (!scene.cache.audio.exists(path)) scene.load.audio(path, path);
@@ -86,5 +88,10 @@ export class SoundBank {
 
   gold(): void {
     this.play(this.manifest?.gold, 45);
+  }
+
+  /** An item sound by its table name (an item landing, or going into the inventory). */
+  item(name: string | undefined): void {
+    if (name) this.play(this.manifest?.items?.[name], 70);
   }
 }

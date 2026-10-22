@@ -5,7 +5,7 @@
 import { ARCHETYPES } from './archetypes/index.ts';
 import type { HitFilter, SkillDef, SkillJson } from './archetypes/types.ts';
 import { auraMultiplier, isAura, standardDps, withTierBonus } from './dps.ts';
-import { VELOCITY_TO_UNITS_PER_TICK, UNITS_PER_TILE, d2FramesToTicks, idiv } from './fixed.ts';
+import { VELOCITY_TO_UNITS_PER_TICK, UNITS_PER_TILE, compoundPct, d2FramesToTicks, idiv } from './fixed.ts';
 import { DIFFICULTIES, DIFFICULTY_NAMES, levelVariantId, variantId, type DifficultyName } from './difficulty.ts';
 import { ELEMENTS, MONSTER_MODS, type Element, type MonsterMod, type Rank } from './state.ts';
 import { createMap } from './map.ts';
@@ -135,6 +135,8 @@ export interface BalanceJson {
    * row), and HP and damage multiplied by hpPctPerWave and damagePctPerWave compounded n times.
    */
   endless: { tierWaves: number; startLevel: number; levelPerWave: number; hpPctPerWave: number; damagePctPerWave: number };
+  /** Drops (src/sim/items/drops.ts): the rune multiplier, endless Tier scaling and Smith's Hammer's rarity. */
+  drops: DropRules;
   /** Cost of the first level-up at T1, T2, T3. */
   levelCostBase: number[];
   /** Each further level-up within a tier costs this percent of the previous one. */
@@ -278,6 +280,8 @@ export interface MonsterDef {
   demon: boolean;
   /** D2 attack rating: A1TH percent of monlvl TH at the difficulty's level. Decides hits on armoured summons. */
   attackRating: number;
+  /** Treasure classes for the difficulty: as a normal monster, a champion, a unique (a superunique's own TC). */
+  treasure: [string, string, string];
   /** Ticks between AI decisions (monstats aidel). */
   aiDelayTicks: number;
   resurrect?: { monTypes: string[]; chancePct: number; radiusUnits: number; castTicks: number };
@@ -395,6 +399,8 @@ export interface GameData {
   rules: Rules;
   /** Every item the tables hold (src/sim/items/data.ts). */
   items: ItemData;
+  /** Drop tuning (balance.json drops). */
+  drops: DropRules;
   /** skills.txt skill name to its Id, for items that name a skill by number. */
   skillIds: Record<string, string>;
   /**
@@ -403,6 +409,15 @@ export interface GameData {
    * id, so missiles and curses look it up like any skill.
    */
   skillVariant: (id: string, plus: number, weapon?: { min: number; max: number }) => string;
+}
+
+export interface DropRules {
+  /** Weight of rune entries in a treasure class, percent of D2R's (125: a quarter more runes). */
+  runeMultiplierPct: number;
+  /** Each endless Tier multiplies the drop rate by this percent more, compounding (shrinks NoDrop). */
+  tierDropPct: number;
+  /** Smith's Hammer's chance per kill, parts per million, before Tier scaling. */
+  smithsHammerPpm: number;
 }
 
 /** The skill a variant id (blessed-hammer+3) was built from. */
@@ -559,6 +574,11 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
     undead: int(row, 'lUndead') === 1 || int(row, 'hUndead') === 1,
     demon: int(row, 'demon') === 1,
     attackRating: idiv(int(row, col('A1TH')) * int(lvlRow, lvlCol('TH')), 100),
+    treasure: [
+      str(row, col('TreasureClass')),
+      str(row, col('TreasureClassChamp')),
+      (su && str(su, `TC${sfx}`)) || str(row, col('TreasureClassUnique')),
+    ],
     aiDelayTicks: Math.max(1, d2FramesToTicks(int(row, col('aidel')))),
     resurrect: resurrect && {
       monTypes: [resurrect.monType].flat(),
@@ -715,12 +735,6 @@ export function campaignWaves(
 }
 
 /** Compounds a percent `n` times on 100, in integers: 103 three times is 109. */
-function compoundPct(pct: number, n: number): number {
-  let v = 10_000;
-  for (let i = 0; i < n; i++) v = idiv(v * pct, 100);
-  return idiv(v, 100);
-}
-
 /**
  * Endless wave `n` (1 for the run's wave 76), built from Hell's content (see BalanceJson
  * endless). Deterministic in `n` alone, so every sim builds the same wave.
@@ -1069,6 +1083,7 @@ export function buildGameData(
     economy: economyFrom(design.balance),
     rules,
     items: buildItemData(tables),
+    drops: design.balance.drops,
     skillIds,
     skillVariant,
     ...(extendWaves ? { extendWaves } : {}),

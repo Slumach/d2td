@@ -176,7 +176,8 @@ export function rollItem(data: ItemData, rng: Rng, opts: RollOptions): Item {
     for (const p of props) item.stats.push(...propertyStats(data, p, rng, opts.ilvl));
   };
   let quality = opts.quality;
-  if (base.isGem || base.isRune) quality = 'normal';
+  if (base.isGem || base.isRune || base.consumable) quality = 'normal';
+  if (base.alwaysMagic && (quality === 'normal' || quality === 'superior' || quality === 'low')) quality = 'magic';
 
   if (quality === 'unique') {
     const pick = weighted(rng, data.uniques.filter((u) => u.code === base.code && u.level <= opts.ilvl), (u) => u.rarity);
@@ -196,7 +197,7 @@ export function rollItem(data: ItemData, rng: Rng, opts: RollOptions): Item {
       addProps(pick.props);
       return finishSockets(data, item, base);
     }
-    quality = 'rare';
+    quality = 'magic';
   }
   if (quality === 'rare' && !base.canRare) quality = 'magic';
   if (quality === 'magic' && !base.canMagic) quality = 'normal';
