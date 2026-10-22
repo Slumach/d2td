@@ -1,6 +1,6 @@
 # Installing D2 Tower Defense
 
-D2 Tower Defense is a free fan game. It draws its monsters, heroes and skill icons from your own copy of Diablo II: Resurrected, so you need that game on the same PC.
+D2 Tower Defense is a free fan game. It draws its monsters, heroes, maps, menus and sounds from your own copy of Diablo II: Resurrected, so you need that game on the same PC.
 
 ## Before you start
 
@@ -19,26 +19,33 @@ D2 Tower Defense is a free fan game. It draws its monsters, heroes and skill ico
 
 ## The first time you start it
 
-The first start shows a setup screen. Setup copies the pictures the game needs out of your Diablo II: Resurrected folder. It only reads from that folder and never changes it.
+The first start shows a setup screen. Setup copies the pictures and sounds the game needs out of your Diablo II: Resurrected folder: every act's monsters and maps, the menus and the control panel. It only reads from that folder and never changes it.
 
 1. Check the folder shown under **Diablo II: Resurrected folder**. Usually it finds the right one by itself, for example `C:\Program Files (x86)\Diablo II Resurrected`.
 2. If it says **Not found**, click **Choose folder...** and pick the folder where you installed Diablo II: Resurrected. It is the folder that has a folder called **Data** inside it.
-3. Click **Extract game files** and wait. It takes less than a minute.
-4. The main menu appears. Click **Play**.
+3. Click **Extract game files** and wait. A bar shows how far it has got. It takes a few minutes.
+4. The main menu appears. Click **Single Player**.
 
 You only do this once. Next time the game opens straight to the main menu.
 
+## After an update
+
+A new version of the game may need a few more files from Diablo II: Resurrected. When it does, the setup screen appears by itself on the next start, copies only what is new or changed, and goes on to the main menu. You do not need to click anything, and it is usually done in seconds.
+
 ## Playing
 
-- Click a free square next to the path to build a tower, then pick its first skill.
+- Click a free square next to the path to build a tower, then pick its class and first skill.
 - Click a tower to upgrade it.
-- Press **Esc** to pause. From there you can resume, restart, or quit to the main menu.
+- The globe on the left shows your share of the current wave's kills; the globe on the right fills as monsters pile up on the ring. If it fills, the run is lost.
+- **Send Wave** brings the next wave early for extra gold.
+- Press **I** for the inventory, **Tab** for the map, and **Esc** for the menu. The menu has **Options**, **Save**, **Quit to Menu** and **Return to Game**.
+- The game saves itself at the start of every act. **Continue** in the main menu picks up from there.
 
 ## Playing together
 
 One person hosts and everyone else joins. Everyone needs the same version of this game and the same version of Diablo II: Resurrected.
 
-**To host:** click **Host** in the main menu. The first time, Windows may ask whether to let D2 Tower Defense through the firewall. Click **Allow**, otherwise friends cannot reach you. The lobby shows one or more codes; send your friends the right one:
+**To host:** click **Multiplayer** in the main menu, then **Host Game**. The first time, Windows may ask whether to let D2 Tower Defense through the firewall. Click **Allow**, otherwise friends cannot reach you. The lobby shows one or more codes; send your friends the right one:
 
 - **Internet**: for friends anywhere. It only appears when your router agreed to let the game in.
 - **Same network**: for people in your home, on the same Wi-Fi or router.
@@ -46,9 +53,9 @@ One person hosts and everyone else joins. Everyone needs the same version of thi
 
 If there is no Internet code, a friend elsewhere can still join if you forward TCP port **47310** to your PC in your router's settings, or if you both use Tailscale (free for small groups). Pick **Team** or **Free for all**, wait for everyone to show up in the list, then click **Start**.
 
-**To join:** click **Join**, type or paste the code, and press **Join**. Then wait for the host to start.
+**To join:** click **Multiplayer**, then **Join Game**, type or paste the code, and press **Join**. Then wait for the host to start.
 
-In a game, waves start when everyone has pressed **Call Wave**, or when the timer at the top runs out. The number keys show another player's area; press your own number to go back. **Esc** opens a menu, but the game keeps going for everyone. If the host leaves, the game ends.
+In a game, waves start on a timer; any player can press **Send Wave** to bring the next one early. The number keys show another player's area; press your own number to go back. **Esc** opens a menu, but the game keeps going for everyone. If the host leaves, the game ends.
 
 ## If something goes wrong
 
@@ -57,7 +64,7 @@ The game keeps a log, a small text file that says what happened. If setup fails 
 To find it:
 
 - On the setup screen, after an error, click **Open log folder**.
-- Or in the main menu, click **Settings**, then **Open log folder**.
+- Or in the main menu, click **Options**, then **Open log folder**.
 - Or press the **Windows key** and **R** together, type `%APPDATA%\D2 Tower Defense\logs` and press **Enter**.
 
 Send **main.log**. If there is also a **main.old.log**, send that too; it is the log from the time before.

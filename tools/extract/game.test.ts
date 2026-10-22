@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -41,6 +41,38 @@ describe('game extraction', () => {
     expect(Object.keys(list.files).sort()).toEqual([...TABLES, 'monstrings'].map((t) => `data/${t}.json`).sort());
     expect(progress.at(-1)).toBe(TABLES.length + 1);
     expect(verifyGame(out)).toEqual({ ok: true, bad: [] });
+  });
+
+  it('re-extracts only the jobs that changed, reusing the rest and dropping stale files', async () => {
+    const out = tempDir();
+    const source = fakeSource();
+    const runs: string[] = [];
+    const job = (label: string, path: string, inputs: string[], rev?: number) => ({
+      label,
+      inputs,
+      ...(rev !== undefined ? { rev } : {}),
+      run: () => {
+        runs.push(label);
+        return [{ path, bytes: new TextEncoder().encode(`${label}${rev ?? 0}`) }];
+      },
+    });
+    const a = INPUTS[0]!;
+    const b = INPUTS[1]!;
+    await extractGame(source, out, undefined, [job('a', 'a.txt', [a]), job('b', 'b.txt', [b]), job('old', 'old.txt', [a])]);
+    expect(runs).toEqual(['a', 'b', 'old']);
+    runs.length = 0;
+    // Same a; b reads one more file; c is new; old is gone
+    const second = await extractGame(source, out, undefined, [job('a', 'a.txt', [a]), job('b', 'b.txt', [b, a]), job('c', 'c.txt', [b])]);
+    expect(runs).toEqual(['b', 'c']);
+    expect(second.reused).toBe(1);
+    expect(Object.keys(second.files).sort()).toEqual(['a.txt', 'b.txt', 'c.txt']);
+    expect(existsSync(join(out, 'old.txt'))).toBe(false);
+    expect(verifyGame(out)).toEqual({ ok: true, bad: [] });
+    // A damaged output re-runs its job; a bumped rev does too
+    writeFileSync(join(out, 'a.txt'), 'broken');
+    runs.length = 0;
+    await extractGame(source, out, undefined, [job('a', 'a.txt', [a]), job('b', 'b.txt', [b, a], 1), job('c', 'c.txt', [b])]);
+    expect(runs).toEqual(['a', 'b']);
   });
 
   it('catches a changed or missing output', async () => {

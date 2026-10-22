@@ -50,7 +50,7 @@ try {
   } else {
     const t0 = Date.now();
     const list = await extractGame(source, args.out, (p) => p.file && console.log(`  ${p.done + 1}/${p.total} ${p.file}`));
-    console.log(`Wrote ${Object.keys(list.files).length} files to ${args.out} in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+    console.log(`${Object.keys(list.files).length} files in ${args.out} (${list.reused} of ${plan.jobs.length} jobs unchanged and reused) in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
   }
 } finally {
   source.close();

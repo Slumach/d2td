@@ -45,6 +45,11 @@ export interface OutputFile {
 export interface SpriteJob {
   label: string;
   inputs: string[];
+  /**
+   * Bumped when the job's code changes what it writes from the same inputs, so an update
+   * re-runs it; a job whose label, inputs and rev are unchanged is reused.
+   */
+  rev?: number;
   run(): OutputFile[];
 }
 

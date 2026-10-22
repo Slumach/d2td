@@ -5,7 +5,7 @@
 // later launch can verify the files.
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import sprites from '../../src/data/render/sprites.json';
@@ -52,6 +52,24 @@ export interface ChecksumList {
   source: string;
   version: number;
   files: Record<string, string>;
+  /** Each job's key (label, inputs and rev) and the files it wrote, so a later run can reuse it. */
+  jobs?: Record<string, { key: string; files: string[] }>;
+}
+
+/** What makes a job's output: its label, the game files it reads, and its rev. */
+function jobKey(job: SpriteJob): string {
+  return sha256(new TextEncoder().encode(JSON.stringify([job.label, [...job.inputs].sort(), job.rev ?? 0])));
+}
+
+/** The checksum list already in `outDir`, if any. */
+export function readChecksums(outDir: string): ChecksumList | undefined {
+  const path = join(outDir, CHECKSUM_FILE);
+  if (!existsSync(path)) return undefined;
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as ChecksumList;
+  } catch {
+    return undefined;
+  }
 }
 
 export interface GamePlan {
@@ -78,31 +96,58 @@ export function planGame(source: DataSource): GamePlan {
 /**
  * Runs `jobs` into `outDir`, then writes the checksum list over every output. Yields to the
  * event loop between jobs so the launcher window stays responsive and shows progress.
+ *
+ * An update re-extracts only what changed: a job whose label, inputs and rev match the
+ * previous run's, and whose files are all still there with their checksums, is reused as
+ * it is. Files the previous run wrote that no job writes any more are deleted.
  */
 export async function extractGame(
   source: DataSource,
   outDir: string,
   onProgress?: (p: Progress) => void,
   jobs?: SpriteJob[],
-): Promise<ChecksumList> {
+): Promise<ChecksumList & { reused: number }> {
   const plan = jobs ? { jobs, missing: [...new Set(jobs.flatMap((j) => j.inputs))].filter((p) => !source.exists(p)) } : planGame(source);
   if (plan.missing.length > 0) throw new Error(`Missing from ${source.label}: ${plan.missing.join(', ')}`);
+  const previous = readChecksums(outDir);
   const files: Record<string, string> = {};
+  const done: Record<string, { key: string; files: string[] }> = {};
+  let reused = 0;
+  const intact = (path: string) => {
+    const hash = previous?.files[path];
+    const full = join(outDir, path);
+    return hash !== undefined && existsSync(full) && sha256(readFileSync(full)) === hash;
+  };
   for (const [i, job] of plan.jobs.entries()) {
     onProgress?.({ done: i, total: plan.jobs.length, file: job.label });
     await new Promise((resolve) => setImmediate(resolve));
+    const key = jobKey(job);
+    const before = previous?.jobs?.[job.label];
+    if (before && before.key === key && before.files.every(intact)) {
+      for (const path of before.files) files[path] = previous!.files[path]!;
+      done[job.label] = before;
+      reused++;
+      continue;
+    }
+    const wrote: string[] = [];
     for (const file of job.run()) {
       const out = join(outDir, file.path);
       mkdirSync(dirname(out), { recursive: true });
       writeFileSync(out, file.bytes);
       files[file.path] = sha256(file.bytes);
+      wrote.push(file.path);
     }
+    done[job.label] = { key, files: wrote };
   }
-  const list: ChecksumList = { source: source.label, version: EXTRACT_VERSION, files };
+  // A file the last run wrote that no job writes now is stale
+  for (const path of Object.keys(previous?.files ?? {})) {
+    if (!(path in files)) rmSync(join(outDir, path), { force: true });
+  }
+  const list: ChecksumList = { source: source.label, version: EXTRACT_VERSION, files, jobs: done };
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, CHECKSUM_FILE), JSON.stringify(list, null, 2));
   onProgress?.({ done: plan.jobs.length, total: plan.jobs.length, file: '' });
-  return list;
+  return { ...list, reused };
 }
 
 export interface VerifyResult {

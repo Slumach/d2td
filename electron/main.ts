@@ -214,8 +214,7 @@ async function runSetup(win: BrowserWindow): Promise<SetupResult> {
   let source: CascSource | undefined;
   try {
     source = new CascSource(openCasc(path), path);
-    // Start clean so stale files from an older game build cannot survive
-    rmSync(assetsDir(), { recursive: true, force: true });
+    // An update re-extracts only the jobs that changed; the rest are reused as they are
     const list = await extractGame(source, assetsDir(), (p) => {
       if (p.file) log(`setup: ${p.done + 1}/${p.total} ${p.file}`);
       win.webContents.send('setup-progress', p);
@@ -225,7 +224,7 @@ async function runSetup(win: BrowserWindow): Promise<SetupResult> {
       log(`setup: checksum failed for ${verify.bad.join(', ')}`);
       return { ok: false, error: 'Some files did not come out right. Try again; if it keeps failing, send the log.', files: 0 };
     }
-    log(`setup: done, ${Object.keys(list.files).length} files`);
+    log(`setup: done, ${Object.keys(list.files).length} files, ${list.reused} jobs reused`);
     return { ok: true, files: Object.keys(list.files).length };
   } catch (e) {
     // The details are for the log; the screen gets something a player can act on

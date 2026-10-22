@@ -59,8 +59,18 @@ export class SetupScene extends Phaser.Scene {
       this.sound.volume = state.volume / 100;
       if (state.smoke) void this.smoke();
       else if (state.setupOk && !data?.force) this.scene.start('Menu');
-      else this.draw();
+      else if (!data?.force && this.needsRepair && this.folder) {
+        // An extraction from an older version, or with files missing: bring it up to date
+        // on the progress screen without waiting for a click
+        this.draw();
+        void this.onExtract();
+      } else this.draw();
     });
+  }
+
+  /** An earlier extraction exists but is outdated or damaged (not a first run). */
+  private get needsRepair(): boolean {
+    return this.state.bad.length > 0 && !this.state.bad.includes('checksums.json');
   }
 
   /** The folder setup will read: the one in settings, else what the registry found. */

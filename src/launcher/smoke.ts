@@ -1,5 +1,5 @@
 // The unattended part of the launcher's smoke run: once a tower stands, call wave 1, and
-// report when it is cleared, lost or taking too long. Towers come from the autoplay opening,
+// report when its monsters are all dead, the run is lost, or it takes too long. Towers come from the autoplay opening,
 // so every action is a normal player command.
 
 import { startAutoplay } from '../render/autoplay.ts';
@@ -26,7 +26,8 @@ export function playWaveOne(scene: GameScene, onDone: (r: Omit<SmokeResult, 'set
       called = true;
     } else if (s.status !== 'playing') {
       finish(false, `run ended: ${s.status}`);
-    } else if (s.wave >= 1 && s.monsters.length === 0 && s.spawns.length === 0) {
+    } else if (s.wave >= 1 && s.waves[0]!.remaining === 0) {
+      // Waves start on a timer, so later waves may already be out: wave 1's own monsters are all dead
       finish(true);
     } else if (tick > LIMIT_TICKS) {
       finish(false, 'wave 1 did not finish in time');

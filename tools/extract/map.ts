@@ -16,8 +16,11 @@
 // cells are D2's 160 x 80, two and a half sim tiles a side. Each act draws in its own
 // palette.
 
-import { readFileSync, readdirSync } from 'node:fs';
-
+import act1 from '../../src/data/map/act1.json';
+import act2 from '../../src/data/map/act2.json';
+import act3 from '../../src/data/map/act3.json';
+import act4 from '../../src/data/map/act4.json';
+import act5 from '../../src/data/map/act5.json';
 import { ORIGIN, WORLD_HEIGHT, WORLD_WIDTH, project } from '../../src/render/iso.ts';
 import { UNITS_PER_TILE } from '../../src/sim/fixed.ts';
 import { MAP_SIZE, ringWaypoints, sceneryTiles, type SceneryKind } from '../../src/sim/map.ts';
@@ -73,14 +76,12 @@ interface ActLayout {
 
 const tilePath = (file: string) => `global/tiles/${file}`.toLowerCase();
 
-/** Every act's layout, src/data/map/act<N>.json, in act order. */
+/**
+ * Every act's layout, src/data/map/act<N>.json, in act order. Imported, not read from disk,
+ * so the packaged app (which has no src folder) carries them in its bundle.
+ */
 export function actLayouts(): ActLayout[] {
-  const dir = new URL('../../src/data/map/', import.meta.url);
-  return readdirSync(dir)
-    .map((f) => /^act(\d)\.json$/.exec(f))
-    .filter((m): m is RegExpExecArray => m !== null)
-    .map((m) => ({ ...(JSON.parse(readFileSync(new URL(m[0], dir), 'utf8')) as Omit<ActLayout, 'act'>), act: Number(m[1]) }))
-    .sort((a, b) => a.act - b.act);
+  return ([act1, act2, act3, act4, act5] as unknown as Omit<ActLayout, 'act'>[]).map((layout, i) => ({ ...layout, act: i + 1 }));
 }
 
 /** Every game file the bake reads. */

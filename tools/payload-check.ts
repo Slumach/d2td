@@ -80,7 +80,9 @@ if (existsSync(CHECKSUMS)) {
   console.warn(`No ${CHECKSUMS}, so the byte-level comparison was skipped. Run npm run extract first.`);
 }
 
-const installer = readdirSync('release').find((n) => n.endsWith('.exe'));
+// This version's installer; release/ keeps older builds alongside
+const version = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version;
+const installer = readdirSync('release').find((n) => n.endsWith(`${version}.exe`)) ?? readdirSync('release').find((n) => n.endsWith('.exe'));
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 console.log(`App payload: ${files.length} files; ${compared} files hashed against extracted output.`);
 if (installer) console.log(`Installer: release/${installer}, ${mb(statSync(join('release', installer)).size)}`);
