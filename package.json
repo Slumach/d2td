@@ -49,18 +49,12 @@
     "directories": {
       "output": "release"
     },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "Slumach",
-        "repo": "d2td",
-        "releaseType": "release"
-      },
-      {
-        "provider": "generic",
-        "url": "https://d2td-updates.s3.amazonaws.com"
-      }
-    ],
+    "publish": {
+      "provider": "github",
+      "owner": "Slumach",
+      "repo": "d2td",
+      "releaseType": "release"
+    },
     "releaseInfo": {
       "releaseNotesFile": "release-notes.md"
     },
