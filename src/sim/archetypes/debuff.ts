@@ -24,6 +24,8 @@ interface DebuffJson {
   radiusTenths?: number;
   /** Blinds (Cloak of Shadows): monsters under it hit nothing, as D2's blind monsters attack nothing. */
   blind?: boolean;
+  /** Aura: a skills.txt column whose value is the extra gold, percent, from monsters killed in it (Find Item's calc1). */
+  goldPctCalc?: string;
   /** Curse: skills.txt column with the duration in frames. */
   durationCalc?: string;
   /** Pulse: skills.txt columns with the percent of current HP and the least it takes. */
@@ -84,6 +86,7 @@ export const debuff: ArchetypeModule<DebuffDef> = {
           damageDownPct: f.blind ? 100 : Math.max(0, -(stats['damagepercent'] ?? 0)),
           durationTicks: f.durationCalc ? Math.max(1, d2FramesToTicks(calcAt(ctx.skillRow, f.durationCalc, level))) : 0,
           hpPct: f.hpPctCalc ? calcAt(ctx.skillRow, f.hpPctCalc, level) : 0,
+          goldPct: f.goldPctCalc ? calcAt(ctx.skillRow, f.goldPctCalc, level) : 0,
           minDamage: f.minDamageCalc ? calcAt(ctx.skillRow, f.minDamageCalc, level) * shift : 0,
         };
       }),
@@ -92,8 +95,8 @@ export const debuff: ArchetypeModule<DebuffDef> = {
 
   aura(skill, lvl) {
     if (skill.mode !== 'aura') return { radiusUnits: 0 };
-    const { radiusUnits, resistDown, slowPct, damageDownPct } = skill.levels[lvl]!;
-    return { radiusUnits, monsters: { slowPct, resistDown, damageDownPct } };
+    const { radiusUnits, resistDown, slowPct, damageDownPct, goldPct } = skill.levels[lvl]!;
+    return { radiusUnits, monsters: { slowPct, resistDown, damageDownPct, ...(goldPct ? { goldPct } : {}) } };
   },
 
   act(sim, tower, skill, lvl) {

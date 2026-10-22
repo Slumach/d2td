@@ -18,6 +18,7 @@ export interface AuraEffect {
   fireMax: number;
   resistDown: Partial<Record<Element, number>>;
   slowPct: number;
+  goldPct: number;
   radiusUnits: number;
 }
 
@@ -32,6 +33,7 @@ export function projected(sim: Sim, tower: Tower): AuraEffect[] {
     fireMax: aura.towers?.fireMax ?? 0,
     resistDown: aura.monsters?.resistDown ?? {},
     slowPct: aura.monsters?.slowPct ?? 0,
+    goldPct: aura.monsters?.goldPct ?? 0,
     radiusUnits: aura.radiusUnits,
   }));
 }
@@ -72,6 +74,7 @@ export function terms(e: AuraEffect): string {
     out.push(same ? `-${e.resistDown[cuts[0]!]}% ${cuts.map(elementName).join(', ')} resistance on monsters hit` : cuts.map((el) => `-${e.resistDown[el]}% ${elementName(el)}`).join(', ') + ' resistance on monsters hit');
   }
   if (e.slowPct) out.push(`monsters ${e.slowPct}% slower`);
+  if (e.goldPct) out.push(`+${e.goldPct}% gold from monsters killed in reach, by any tower`);
   return out.join(', ');
 }
 

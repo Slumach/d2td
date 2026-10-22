@@ -71,6 +71,7 @@ function strongestTower(into: TowerBuff, add: TowerBuff): void {
 function strongestMonster(into: MonsterAuraFx, add: MonsterAuraFx): void {
   into.slowPct = Math.max(into.slowPct, add.slowPct);
   into.damageDownPct = Math.max(into.damageDownPct, add.damageDownPct);
+  if (add.goldPct) into.goldPct = Math.max(into.goldPct ?? 0, add.goldPct);
   for (const e of ELEMENTS) {
     const v = add.resistDown[e];
     if (v !== undefined) into.resistDown[e] = Math.max(into.resistDown[e] ?? 0, v);
@@ -141,6 +142,7 @@ export function computeAuras(sim: Sim): AuraField {
     for (const fx of Object.values(per)) {
       sum.slowPct += fx.slowPct;
       sum.damageDownPct += fx.damageDownPct;
+      if (fx.goldPct) sum.goldPct = (sum.goldPct ?? 0) + fx.goldPct;
       for (const e of ELEMENTS) {
         const v = fx.resistDown[e];
         if (v !== undefined) sum.resistDown[e] = (sum.resistDown[e] ?? 0) + v;

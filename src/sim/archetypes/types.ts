@@ -219,6 +219,8 @@ export interface DebuffDef extends SkillCommon {
     /** Pulse: percent of current HP, and the least it takes (1/256 HP). */
     hpPct: number;
     minDamage: number;
+    /** Aura: more gold from monsters killed in it (Find Item's chance, as a percent). */
+    goldPct: number;
   }[];
 }
 
@@ -262,8 +264,6 @@ export interface SummonDef extends SkillCommon {
 export interface CorpseDef extends SkillCommon {
   archetype: 'corpse';
   filter: HitFilter;
-  /** 'gold': the corpse is looted for a share of its bounty instead of exploded (Find Item). */
-  mode: 'explode' | 'gold';
   levels: { radiusUnits: number; minPct: number; maxPct: number; physicalPct: number }[];
 }
 
@@ -296,6 +296,8 @@ export interface MonsterAuraFx {
   resistDown: Partial<Record<Element, number>>;
   /** Less damage dealt to summons (Decrepify). */
   damageDownPct: number;
+  /** More gold when it is killed, by any tower (Find Item): added to the killer's gold find. */
+  goldPct?: number;
 }
 
 /** One emitter's contribution, before "same aura: strongest only". */

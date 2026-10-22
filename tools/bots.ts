@@ -217,8 +217,6 @@ function computeParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boole
       break;
     }
     case 'corpse': {
-      // Find Item loots for gold, not damage
-      if (skill.mode === 'gold') break;
       const l = skill.levels[lvl]!;
       // Half the casts find a corpse; the blast is a share of a wave monster's HP
       const blast = (hpCap * (l.minPct + l.maxPct)) / 200;
@@ -301,19 +299,28 @@ interface MonsterSource {
   radiusUnits: number;
   slowPct: number;
   resistDown: Partial<Record<Element, number>>;
+  /** Extra gold from kills in it (Find Item). */
+  goldPct: number;
 }
+
+/**
+ * What income is worth against damage: a gold aura covering a share of the attack is
+ * valued as that share of attack times its gold percent times this: the gold buys that
+ * much more power over the coming waves.
+ */
+const INCOME_WEIGHT = 1;
 
 function monsterSources(sim: Sim, towers: Tower[]): MonsterSource[] {
   const out: MonsterSource[] = [];
   for (const t of towers) {
     for (const { aura } of auraSources(sim, t)) {
-      if (aura.monsters) out.push({ tower: t, radiusUnits: aura.radiusUnits, slowPct: aura.monsters.slowPct, resistDown: aura.monsters.resistDown });
+      if (aura.monsters) out.push({ tower: t, radiusUnits: aura.radiusUnits, slowPct: aura.monsters.slowPct, resistDown: aura.monsters.resistDown, goldPct: aura.monsters.goldPct ?? 0 });
     }
     const active = activeSkill(sim, t);
     const curse = (s: SkillDef | undefined, lvl: number) => {
       if (s?.archetype !== 'debuff' || s.mode !== 'curse') return;
       const l = s.levels[lvl]!;
-      out.push({ tower: t, radiusUnits: s.rangeUnits + l.radiusUnits, slowPct: l.slowPct, resistDown: l.resistDown });
+      out.push({ tower: t, radiusUnits: s.rangeUnits + l.radiusUnits, slowPct: l.slowPct, resistDown: l.resistDown, goldPct: 0 });
     };
     if (active) curse(active.skill, active.lvl);
     if (t.evolved && t.partnerSkill) curse(sim.data.skills[t.partnerSkill], t.partnerLevel);
@@ -402,7 +409,7 @@ function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number, foe
         .filter((t) => (t.x - tower.x) ** 2 + (t.y - tower.y) ** 2 <= aura.radiusUnits ** 2)
         .reduce((n, t) => n + sum(attack.get(t.id) ?? {}), 0);
       const resist = Object.values(aura.monsters.resistDown).reduce((n, v) => n + (v ?? 0), 0) / 3;
-      total += (covered * (aura.monsters.slowPct / 2 + resist / 2)) / 100;
+      total += (covered * (aura.monsters.slowPct / 2 + resist / 2 + (aura.monsters.goldPct ?? 0) * INCOME_WEIGHT)) / 100;
     }
     return total;
   }
@@ -411,6 +418,7 @@ function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number, foe
   // Monster effects, each weighted by the share of attack it covers
   const cut: Partial<Record<Element, number>> = {};
   let slowBonus = 0;
+  let incomeBonus = 0;
   for (const src of monsterSources(sim, towers)) {
     const covered = towers
       .filter((t) => (t.x - src.tower.x) ** 2 + (t.y - src.tower.y) ** 2 <= src.radiusUnits ** 2)
@@ -418,6 +426,7 @@ function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number, foe
     const share = covered / allAttack;
     for (const [e, v] of Object.entries(src.resistDown) as [Element, number][]) cut[e] = Math.max(cut[e] ?? 0, v * share);
     slowBonus += (src.slowPct / 2 / 100) * share;
+    incomeBonus = Math.max(incomeBonus, ((src.goldPct * INCOME_WEIGHT) / 100) * share);
   }
 
   const byElement: Parts = {};
@@ -434,7 +443,7 @@ function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number, foe
     time += foe.weight / Math.max(power, 1e-9);
   }
   const total = foes.length === 0 ? allAttack : 1 / time;
-  return total * (1 + slowBonus);
+  return total * (1 + slowBonus) * (1 + incomeBonus);
 }
 
 // ---- options ----
@@ -511,7 +520,9 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
   for (const skill of towers.length < (config.maxTowers ?? Infinity) ? config.builds : []) {
     const archetype = sim.data.skills[skill]!.archetype;
     const list = archetype === 'melee' ? melee : ranged;
-    const candidates = list.filter((p) => canBuild(sim, p.x, p.y)).slice(0, archetype === 'buffAura' ? 16 : 1);
+    const def = sim.data.skills[skill]!;
+    const aura = archetype === 'buffAura' || (def.archetype === 'debuff' && def.mode === 'aura');
+    const candidates = list.filter((p) => canBuild(sim, p.x, p.y)).slice(0, aura ? 16 : 1);
     const { cls, line } = lineOf(sim, skill);
     for (const spot of candidates) {
       const c = tileCenter(spot);
@@ -760,7 +771,7 @@ CONFIGS.NECRO = { strategy: 'NECRO', builds: NECRO_BUILDS, tiers: true, evolve: 
 CONFIGS.AMAZON = { strategy: 'AMAZON', builds: ['magic-arrow', 'poison-javelin', 'critical-strike'], tiers: true, evolve: true, elements: true };
 CONFIGS.BARB = {
   strategy: 'BARB',
-  builds: ['bash', 'double-swing', 'battle-cry'],
+  builds: ['bash', 'double-swing', 'battle-cry', 'find-item'],
   tiers: true,
   evolve: true,
   elements: true,

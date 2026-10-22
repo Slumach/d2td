@@ -4,7 +4,6 @@ import { DESIGN } from '../data/design.ts';
 import { hasTables, loadTables } from '../../tools/lib/load-tables.ts';
 import type { DebuffDef } from './archetypes/types.ts';
 import { buildGameData, type GameData } from './data.ts';
-import { lootCorpse } from './items/loot.ts';
 import { createSim, step } from './sim.ts';
 import { addMonster, freeze, placeTower, ticks } from './testkit.ts';
 
@@ -33,20 +32,25 @@ describe.skipIf(!hasTables())('the Barbarian and the Assassin (real tables)', ()
     expect(shout.id).not.toBe(orders.id);
   });
 
-  it("Find Item loots any corpse in reach and, when it finds, pays the corpse's bounty again", () => {
-    const s = sim();
-    const tower = placeTower(s, 6, 5, 'find-item', { level: 5 });
-    const m = addMonster(s, 'zombie1', BESIDE, { hp: 1 });
-    const corpse = { id: 1, def: m.def, rank: 'normal' as const, x: m.x, y: m.y };
-    const gold = s.state.gold[0]!;
-    lootCorpse(s, corpse, tower);
-    const bounty = s.data.monsters[m.def]!.level * s.data.economy.bountyPerLevel;
-    expect(s.state.gold[0]! - gold).toBe(bounty);
-    // A corpse with no monster beside it is still taken
-    s.state.monsters = [];
-    s.state.corpses.push({ id: s.state.nextId++, def: m.def, rank: 'normal', dist: m.dist, x: m.x, y: m.y, maxHp: 256, ticksLeft: 200 });
-    ticks(s, 40);
-    expect(s.state.corpses).toEqual([]);
+  it('Find Item is a gold aura: kills in its reach, by any tower, pay its chance more, with gold find on top', () => {
+    const goldFrom = (findItem: boolean) => {
+      const s = sim();
+      if (findItem) placeTower(s, 7, 5, 'find-item', { level: 5 });
+      const killer = placeTower(s, 6, 4, 'sacrifice');
+      killer.gear = { ring1: { uid: 'r', code: 'rin', quality: 'magic', ilvl: 30, sockets: 0, socketed: [], stats: [{ stat: 'item_goldbonus', value: 100 }] } };
+      const m = addMonster(s, 'zombie1', BESIDE, { hp: 256 });
+      freeze(m);
+      const before = s.state.gold[0]!;
+      ticks(s, 10);
+      expect(m.hp).toBeLessThanOrEqual(0);
+      return { gold: s.state.gold[0]! - before, bounty: s.data.monsters[m.def]!.level * s.data.economy.bountyPerLevel };
+    };
+    const plain = goldFrom(false);
+    const found = goldFrom(true);
+    const pct = (real().skills['find-item'] as DebuffDef).levels[4]!.goldPct;
+    expect(pct).toBe(51);
+    expect(plain.gold).toBe(plain.bounty * 2);
+    expect(found.gold).toBe(found.bounty + Math.trunc((found.bounty * (100 + pct)) / 100));
   });
 
   it('Lightning Sentry sets traps on the path that fire their own shots, then are spent', () => {

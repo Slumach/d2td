@@ -211,6 +211,7 @@ export function withTierBonus(skill: SkillDef, permille: number): SkillDef {
           ...l,
           slowPct: Math.min(90, scalePct(l.slowPct, permille)),
           resistDown: Object.fromEntries(Object.entries(l.resistDown).map(([e, v]) => [e, scalePct(v ?? 0, permille)])),
+          goldPct: scalePct(l.goldPct, permille),
         })),
       };
     default:

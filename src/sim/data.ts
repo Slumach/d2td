@@ -1064,7 +1064,9 @@ function buildLadders(
 
           // Summons, corpse skills and pulses have no standard-target number; they climb
           // the whole range, as does anything replacing a tier that had none
-          const measurable = value(resolveAt(Array(MAX_TOWER_LEVEL).fill(cap)), 0) > 0;
+          // An aura whose effect the reference neighbour does not feel (Shout's defence for
+          // summons) has no number either: x1.000 at its cap
+          const measurable = value(resolveAt(Array(MAX_TOWER_LEVEL).fill(cap)), 0) > (metric === 'aura' ? 1000 : 0);
           let start = 0;
           for (let level = 1; level <= cap && previous > 0 && measurable; level++) {
             if (value(resolveAt(Array(MAX_TOWER_LEVEL).fill(level)), 0) >= floor) {

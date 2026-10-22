@@ -1,21 +1,18 @@
 {
   "id": "find-item",
   "skill": "Find Item",
-  "archetype": "corpse",
+  "archetype": "debuff",
   "damageType": "none",
-  "rangeTenths": 40,
-  "rateTicks": 30,
-  "corpse": {
-    "mode": "gold",
-    "radiusTenths": 20,
-    "minPctCalc": "calc1",
-    "maxPctCalc": "calc1"
-  },
   "skillLevels": [
     1,
     5,
     10,
     15,
     20
-  ]
+  ],
+  "debuff": {
+    "mode": "aura",
+    "radiusTenths": 40,
+    "goldPctCalc": "calc1"
+  }
 }

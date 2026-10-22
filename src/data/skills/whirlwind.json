@@ -3,9 +3,8 @@
   "skill": "Whirlwind",
   "archetype": "melee",
   "damageType": "phys",
-  "tierBonus": 1975,
   "rangeTenths": 15,
-  "rateTicks": 12,
+  "rateTicks": 3,
   "melee": {
     "hitsAll": true,
     "damagePctCalc": "calc1"

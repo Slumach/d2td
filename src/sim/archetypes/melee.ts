@@ -9,7 +9,7 @@ import type { TowerGear } from '../items/gear.ts';
 import { castItemSkill, OPEN_WOUNDS_TICKS, openWoundsDamage } from '../items/tower.ts';
 import { ELEMENTS, type Element, type Monster, type Sim, type Tower } from '../state.ts';
 import { findRow, int } from '../tables.ts';
-import { calcAt, common, fields, filterFrom, perLevel } from './common.ts';
+import { auraStats, calcAt, common, fields, filterFrom, perLevel } from './common.ts';
 import type { ArchetypeModule, MeleeDef } from './types.ts';
 
 interface MeleeJson {
@@ -23,6 +23,8 @@ interface MeleeJson {
   hitsAll?: boolean;
   /** The physical hit lands as this element (Berserk: magic). */
   convert?: Element;
+  /** An aurastat that is the skill's own attack speed (Frenzy's attackrate, its stacks at their height). */
+  speedStat?: string;
 }
 
 const ALL = filterFrom(undefined);
@@ -34,8 +36,14 @@ export const melee: ArchetypeModule<MeleeDef> = {
     const f = fields<MeleeJson>(json);
     if (!ctx.weapon) throw new Error(`${json.id}: melee skills need a class weapon`);
     const weapon = findRow(ctx.tables.weapons, 'name', ctx.weapon);
+    const base = common(json, ctx, true);
+    // A skill that speeds its own swings (Frenzy) attacks that much faster, as attack speed does
+    const rates = f.speedStat
+      ? base.skillLevels.map((l, i) => Math.max(1, idiv((base.rates[i] ?? base.rateTicks) * 100, 100 + Math.max(0, auraStats(ctx.skillRow, l)[f.speedStat!] ?? 0))))
+      : base.rates;
     return {
-      ...common(json, ctx, true),
+      ...base,
+      rates,
       archetype: 'melee',
       weapon: { min: int(weapon, 'mindam') * 256, max: int(weapon, 'maxdam') * 256 },
       stunTicks: f.stunTicks ?? 0,

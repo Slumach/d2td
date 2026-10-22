@@ -209,7 +209,8 @@ export function killMonster(sim: Sim, monster: Monster): void {
   // Gold find on the killing tower's gear adds to the bounty, as in D2
   const by = monster.lastTower ? s.towers.find((t) => t.id === monster.lastTower) : undefined;
   const gear = by ? gearOf(sim, by) : NO_GEAR;
-  const gold = bounty(sim, monster) + idiv(bounty(sim, monster) * gear.goldFindPct, 100);
+  // Find Item's aura on the monster adds to the killer's gold find
+  const gold = bounty(sim, monster) + idiv(bounty(sim, monster) * (gear.goldFindPct + (monsterFx(sim, monster).goldPct ?? 0)), 100);
   const killer = Math.min(monster.lastHit, s.gold.length - 1);
   s.gold[killer]! += gold;
   s.kills++;
