@@ -62,7 +62,10 @@
     "coldEnchanted": { "resist": { "cold": 75 } },
     "lightningEnchanted": { "resist": { "ltng": 75 } },
     "cursed": {},
-    "spectralHit": {}
+    "spectralHit": {},
+    "manaBurn": {},
+    "teleportation": {},
+    "auraEnchanted": {}
   },
   "skillOverrides": {
     "holy-bolt": { "fullDamageTo": "undead", "otherDamagePct": 40 }

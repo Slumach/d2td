@@ -94,7 +94,7 @@ function resurrect(sim: Sim, shaman: Monster): boolean {
   shaman.abilityCooldown = sim.data.monsters[shaman.def]!.aiDelayTicks;
   const corpse = s.corpses.find((c) => {
     const def = sim.data.monsters[c.def];
-    return def && def.monType === ability.monType && !def.resurrect && distSq(shaman, c) <= ability.radiusUnits * ability.radiusUnits;
+    return def && ability.monTypes.includes(def.monType) && !def.resurrect && distSq(shaman, c) <= ability.radiusUnits * ability.radiusUnits;
   });
   if (!corpse || rollInt(s.rng, 1, 100) > ability.chancePct) return false;
   shaman.castTicks = ability.castTicks;

@@ -26,7 +26,10 @@ export type MonsterMod =
   | 'coldEnchanted'
   | 'lightningEnchanted'
   | 'cursed'
-  | 'spectralHit';
+  | 'spectralHit'
+  | 'manaBurn'
+  | 'teleportation'
+  | 'auraEnchanted';
 export const MONSTER_MODS: readonly MonsterMod[] = [
   'extraFast',
   'extraStrong',
@@ -41,6 +44,9 @@ export const MONSTER_MODS: readonly MonsterMod[] = [
   'lightningEnchanted',
   'cursed',
   'spectralHit',
+  'manaBurn',
+  'teleportation',
+  'auraEnchanted',
 ];
 
 /**

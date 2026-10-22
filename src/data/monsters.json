@@ -1,7 +1,20 @@
 {
   "roster": {
     "fallenshaman1": {
-      "resurrect": { "monType": "fallen", "chanceColumn": "aip1", "rangeColumn": "aip4", "sequence": "seq_shamanresurrect" }
+      "resurrect": {
+        "monType": "fallen",
+        "chanceColumn": "aip1",
+        "rangeColumn": "aip4",
+        "sequence": "seq_shamanresurrect"
+      }
+    },
+    "unraveler1": {
+      "resurrect": {
+        "monType": ["mummy", "skeleton"],
+        "chanceColumn": "aip1",
+        "rangeColumn": "aip5",
+        "sequence": "seq_mummyres"
+      }
     }
   },
   "acts": [
@@ -11,31 +24,56 @@
     { "name": "Act 4", "waves": 3, "field": "Plains of Despair", "lair": "Chaos Sanctuary" },
     { "name": "Act 5", "waves": 6, "field": "Bloody Foothills", "lair": "Worldstone Chamber" }
   ],
-  "act1": {
-    "normal": [
-      { "monster": "fallen1", "kind": "swarm", "area": "Blood Moor" },
-      { "monster": "quillrat1", "kind": "swarm", "area": "Blood Moor" },
-      { "monster": "zombie1", "kind": "tank", "area": "Den of Evil", "superunique": "corpsefire" },
-      { "monster": "fallenshaman1", "kind": "swarm", "area": "Cold Plains", "superunique": "bishibosh" },
-      { "monster": "skeleton1", "kind": "tank", "area": "Burial Grounds", "superunique": "bonebreak" },
-      { "boss": "bloodraven", "area": "Burial Grounds" }
-    ],
-    "nightmare": [
-      { "monster": "cr_archer1", "kind": "tank", "area": "Stony Field", "superunique": "coldcrow" },
-      { "monster": "goatman1", "kind": "tank", "area": "Stony Field" },
-      { "monster": "fallen2", "kind": "swarm", "area": "Stony Field", "superunique": "rakanishu" },
-      { "monster": "brute2", "kind": "tank", "area": "Dark Wood", "superunique": "treehead" },
-      { "monster": "corruptrogue3", "kind": "swarm", "area": "Forgotten Tower", "superunique": "countess" },
-      { "boss": "andariel", "area": "Catacombs" }
-    ],
-    "hell": [
-      { "monster": "quillrat4", "kind": "swarm", "area": "Outer Cloister", "superunique": "flamespike" },
-      { "monster": "corruptrogue4", "kind": "swarm", "area": "Barracks", "superunique": "smith" },
-      { "monster": "skeleton2", "kind": "tank", "area": "Tristram", "superunique": "griswold" },
-      { "monster": "bighead2", "kind": "swarm", "area": "Jail", "superunique": "pitspawn" },
-      { "monster": "skmage_fire2", "kind": "tank", "area": "Cathedral", "superunique": "boneash" },
-      { "boss": "andariel", "area": "Catacombs" }
-    ]
+  "campaign": {
+    "1": {
+      "normal": [
+        { "monster": "fallen1", "kind": "swarm", "area": "Blood Moor" },
+        { "monster": "quillrat1", "kind": "swarm", "area": "Blood Moor" },
+        { "monster": "zombie1", "kind": "tank", "area": "Den of Evil", "superunique": "corpsefire" },
+        { "monster": "fallenshaman1", "kind": "swarm", "area": "Cold Plains", "superunique": "bishibosh" },
+        { "monster": "skeleton1", "kind": "tank", "area": "Burial Grounds", "superunique": "bonebreak" },
+        { "boss": "bloodraven", "area": "Burial Grounds" }
+      ],
+      "nightmare": [
+        { "monster": "cr_archer1", "kind": "tank", "area": "Stony Field", "superunique": "coldcrow" },
+        { "monster": "goatman1", "kind": "tank", "area": "Stony Field" },
+        { "monster": "fallen2", "kind": "swarm", "area": "Stony Field", "superunique": "rakanishu" },
+        { "monster": "brute2", "kind": "tank", "area": "Dark Wood", "superunique": "treehead" },
+        { "monster": "corruptrogue3", "kind": "swarm", "area": "Forgotten Tower", "superunique": "countess" },
+        { "boss": "andariel", "area": "Catacombs" }
+      ],
+      "hell": [
+        { "monster": "quillrat4", "kind": "swarm", "area": "Outer Cloister", "superunique": "flamespike" },
+        { "monster": "corruptrogue4", "kind": "swarm", "area": "Barracks", "superunique": "smith" },
+        { "monster": "skeleton2", "kind": "tank", "area": "Tristram", "superunique": "griswold" },
+        { "monster": "bighead2", "kind": "swarm", "area": "Jail", "superunique": "pitspawn" },
+        { "monster": "skmage_fire2", "kind": "tank", "area": "Cathedral", "superunique": "boneash" },
+        { "boss": "andariel", "area": "Catacombs" }
+      ]
+    },
+    "2": {
+      "normal": [
+        { "monster": "sandraider1", "kind": "swarm", "area": "Rocky Waste", "superunique": "fireeye" },
+        { "monster": "baboon1", "kind": "tank", "area": "Dry Hills" },
+        { "monster": "sandleaper1", "kind": "swarm", "area": "Far Oasis" },
+        { "monster": "scarab1", "kind": "tank", "area": "Far Oasis", "superunique": "beetleburst" },
+        { "boss": "duriel", "area": "Duriel's Lair" }
+      ],
+      "nightmare": [
+        { "monster": "mummy1", "kind": "tank", "area": "Rocky Waste", "superunique": "radament" },
+        { "monster": "unraveler1", "kind": "tank", "area": "Dry Hills", "superunique": "kaa" },
+        { "monster": "vulture1", "kind": "swarm", "area": "Far Oasis", "superunique": "creepingfeature" },
+        { "monster": "sandmaggot1", "kind": "tank", "area": "Far Oasis", "superunique": "coldworm" },
+        { "boss": "duriel", "area": "Duriel's Lair" }
+      ],
+      "hell": [
+        { "monster": "pantherwoman2", "kind": "swarm", "area": "Rocky Waste", "superunique": "bloodwitch" },
+        { "monster": "blunderbore1", "kind": "tank", "area": "Dry Hills" },
+        { "monster": "baboon2", "kind": "swarm", "area": "Far Oasis", "superunique": "fangskin" },
+        { "monster": "skmage_ltng4", "kind": "tank", "area": "Far Oasis" },
+        { "boss": "duriel", "area": "Duriel's Lair" }
+      ]
+    }
   },
   "placeholder": [
     { "monster": "zombie2", "kind": "tank" },
@@ -64,10 +102,24 @@
     { "id": "smith", "superunique": "The Smith", "class": "smith" },
     { "id": "griswold", "superunique": "Griswold", "class": "griswold" },
     { "id": "pitspawn", "superunique": "Pitspawn Fouldog", "class": "bighead2", "minion": "bighead2" },
-    { "id": "boneash", "superunique": "Boneash", "class": "skmage_pois3" }
+    { "id": "boneash", "superunique": "Boneash", "class": "skmage_pois3" },
+    { "id": "fireeye", "superunique": "Fire Eye", "class": "sandraider3", "minion": "sandraider3" },
+    { "id": "beetleburst", "superunique": "Beetleburst", "class": "scarab2", "minion": "scarab2" },
+    { "id": "radament", "superunique": "Radament", "class": "radament", "minion": "skeleton4" },
+    { "id": "kaa", "superunique": "Ancient Kaa the Soulless", "class": "unraveler3", "minion": "skeleton4" },
+    { "id": "creepingfeature", "superunique": "Leatherarm", "class": "mummy2", "minion": "mummy2" },
+    { "id": "coldworm", "superunique": "Coldworm the Burrower", "class": "maggotqueen1" },
+    {
+      "id": "bloodwitch",
+      "superunique": "Bloodwitch the Wild",
+      "class": "pantherwoman1",
+      "minion": "pantherwoman1"
+    },
+    { "id": "fangskin", "superunique": "Fangskin", "class": "clawviper3", "minion": "clawviper3" }
   ],
   "bosses": [
     { "id": "bloodraven", "class": "bloodraven", "minion": "zombie2" },
-    { "id": "andariel", "class": "andariel" }
+    { "id": "andariel", "class": "andariel" },
+    { "id": "duriel", "class": "duriel" }
   ]
 }

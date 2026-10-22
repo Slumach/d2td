@@ -209,7 +209,7 @@ describe('monsters', () => {
     const sim = testSim();
     // Fixture monstats: aidel 15, aip1 50, aip4 24; monseq: 15 frames
     expect(sim.data.monsters['fallenshaman1']!.resurrect).toEqual({
-      monType: 'fallen',
+      monTypes: ['fallen'],
       chancePct: 50,
       radiusUnits: (24 * 1000) / 8,
       castTicks: 12,

@@ -12,9 +12,11 @@ export interface Tables {
   weapons: TableRow[];
   superuniques: TableRow[];
   levels: TableRow[];
+  /** D2R's monster names (local/lng/strings/monsters.json): Key, the NameStr or superunique Name, and enUS. */
+  monstrings: TableRow[];
 }
 
-export const TABLE_NAMES: readonly (keyof Tables)[] = ['monstats', 'monlvl', 'monumod', 'monseq', 'skills', 'missiles', 'weapons', 'superuniques', 'levels'];
+export const TABLE_NAMES: readonly (keyof Tables)[] = ['monstats', 'monlvl', 'monumod', 'monseq', 'skills', 'missiles', 'weapons', 'superuniques', 'levels', 'monstrings'];
 
 /** An integer column; empty cells are 0. Throws on text so a typo in a column name fails loudly. */
 export function int(row: TableRow, key: string): number {

@@ -27,6 +27,8 @@ export interface StartOptions {
   plan?: string;
   /** Dev: ticks per frame multiplier, for previews. */
   speed?: number;
+  /** Browser preview: start the run at this wave of the campaign. */
+  startWave?: number;
   /** 0 to 100. */
   volume?: number;
   /** Inside Electron: setup and the main menu come before the game. */
@@ -67,6 +69,7 @@ export function startGame(opts: StartOptions = {}): Phaser.Game {
       preBoot: (g) => {
         g.registry.set(DESIGN_KEY, design);
         g.registry.set('speed', Math.max(1, Math.min(16, opts.speed ?? 1)));
+        if (opts.startWave && opts.startWave > 1) g.registry.set('startWave', Math.floor(opts.startWave));
         if (opts.launcher) g.registry.set(LAUNCHER_KEY, opts.launcher);
       },
     },

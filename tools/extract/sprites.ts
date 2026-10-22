@@ -27,7 +27,7 @@ import { composite, isGlowEffect, layerAlpha, type CompositeLayer } from './comp
 import { column, readTable } from './paths.ts';
 import type { DataSource } from './source.ts';
 
-import { NAMED_ART, MONSTER_ART, SUPERUNIQUE_ART } from '../../src/data/monsterArt.ts';
+import { ART_ACT, NAMED_ART, MONSTER_ART, SUPERUNIQUE_ART } from '../../src/data/monsterArt.ts';
 import sprites from '../../src/data/render/sprites.json';
 import { MISSILE_INDEX, artMissiles, artOverlays } from '../../src/render/art.ts';
 
@@ -238,22 +238,36 @@ interface Shared {
   source: DataSource;
   palette: Uint8Array;
   pl2: Pl2;
+  /** Each act's palette and colour shifts: a monster draws in the act it first walks in. */
+  acts: Map<number, { palette: Uint8Array; pl2: Pl2 }>;
   animdata: AnimData;
   monstats: TxtRow[];
   monstats2: TxtRow[];
 }
 
 /** monstats2 lists allowed part variants, e.g. "lit,med,hvy"; the first keeps output stable. */
-function firstVariant(row: TxtRow, code: string): string {
-  return column(row, `${code}v`).replace(/"/g, '').split(',')[0]?.trim().toLowerCase() || 'lit';
+function variantsOf(row: TxtRow, code: string): string[] {
+  const listed = column(row, `${code}v`).replace(/"/g, '').split(',').map((v) => v.trim().toLowerCase()).filter((v) => v !== '');
+  return listed.length > 0 ? listed : ['lit'];
 }
+
+function firstVariant(row: TxtRow, code: string): string {
+  return variantsOf(row, code)[0]!;
+}
+
+/** What a monster plays for a mode it has no COF for: a stationary one stands, a caster casts. */
+const MODE_FALLBACK: Record<string, string[]> = { WL: ['NU', 'S1'], A1: ['S1', 'A2', 'SC'], DT: ['DD'], DD: ['DT'] };
 
 interface CompositeSpec {
   folder: string;
   token: string;
   mode: string;
+  /** The animation it is saved as, when it stands in for a mode the monster lacks. */
+  as?: string;
   weaponClass: string;
   variant: (code: string) => string;
+  /** A monster's other variants for a layer, tried when the first is not drawn for this mode. */
+  alternatives?: (code: string) => string[];
   /** Heroes: a layer with no file for this pose (a left hand with no bow) draws nothing. */
   lenient?: boolean;
 }
@@ -269,8 +283,16 @@ function compositeInputs(source: DataSource, spec: CompositeSpec): { cofPath: st
     const variant = spec.variant(code);
     // "nil" is an empty slot (no shield, no pads): D2 draws nothing for that layer
     if (variant === 'nil') continue;
-    const path = `global/${spec.folder}/${code}/${spec.token}${code}${variant}${spec.mode}${layer.weaponClass}.dcc`.toLowerCase();
+    const at = (v: string) => `global/${spec.folder}/${code}/${spec.token}${code}${v}${spec.mode}${layer.weaponClass}.dcc`.toLowerCase();
+    const path = at(variant);
     if (spec.lenient && !source.exists(path)) continue;
+    if (spec.alternatives && !source.exists(path)) {
+      // A layer the monster does not draw in this mode (a Huntress's pads as she dies) is
+      // another of its variants, or nothing, as D2 draws it
+      const other = spec.alternatives(code).map(at).find((p) => source.exists(p));
+      if (other) layers[code] = other;
+      continue;
+    }
     layers[code] = path;
   }
   return { cofPath, layers };
@@ -290,7 +312,7 @@ function compositeMode(shared: Shared, spec: CompositeSpec, palette: Uint8Array)
   const result = composite(cof, layers, palette);
   const anim = shared.animdata.get(`${spec.token}${spec.mode}${spec.weaponClass}`.toUpperCase())?.[0];
   return {
-    mode: spec.mode,
+    mode: spec.as ?? spec.mode,
     fps: anim ? animFps(anim) : 25,
     frames: result.frames,
     frameWidth: result.frameWidth,
@@ -301,7 +323,7 @@ function compositeMode(shared: Shared, spec: CompositeSpec, palette: Uint8Array)
 }
 
 function monsterJobs(shared: Shared): SpriteJob[] {
-  const { source, pl2 } = shared;
+  const { source } = shared;
   const bosses = new Set(NAMED_ART);
   const summons = new Set(sprites.summons.ids);
   const ids = [...new Set([...MONSTER_ART, ...summons])];
@@ -319,7 +341,19 @@ function monsterJobs(shared: Shared): SpriteJob[] {
     // A mode the base weapon class lacks plays hand to hand (a Goatman's death is hth)
     const cofFor = (mode: string, wc: string) => `global/${folder}/cof/${token}${mode}${wc}.cof`.toLowerCase();
     const classFor = (mode: string) => (!source.exists(cofFor(mode, weaponClass)) && source.exists(cofFor(mode, 'hth')) ? 'hth' : weaponClass);
-    const specs = modes.map((mode) => ({ folder, token, mode, weaponClass: classFor(mode), variant: (c: string) => firstVariant(ex, c) }));
+    const specFor = (mode: string, want: string) => ({
+      folder,
+      token,
+      mode,
+      ...(mode !== want ? { as: want } : {}),
+      weaponClass: classFor(mode),
+      variant: (c: string) => firstVariant(ex, c),
+      alternatives: (c: string) => variantsOf(ex, c).slice(1),
+    });
+    // A mode counts when its COF exists and at least one of its layers is a DCC (the Sand
+    // Maggot Queen's death is a DC6, which a composite cannot use)
+    const has = (mode: string) => Object.keys(compositeInputs(source, specFor(mode, mode))?.layers ?? {}).length > 0;
+    const specs = modes.map((want) => specFor(has(want) ? want : ((MODE_FALLBACK[want] ?? []).find(has) ?? want), want));
     const transLvl = Number(row['TransLvl'] || 0);
     const palshift = `global/${folder}/cof/palshift.dat`;
     const inputs = [...(transLvl > 0 ? [palshift] : [])];
@@ -342,6 +376,8 @@ function monsterJobs(shared: Shared): SpriteJob[] {
     });
     if (named.length > 0) inputs.push('global/excel/superuniques.txt');
     if (named.some((n) => n.utrans > 0) && !inputs.includes(palshift) && source.exists(palshift)) inputs.push(palshift);
+    const act = summons.has(id) ? 1 : (ART_ACT[id] ?? 1);
+    const { palette: actPalette, pl2 } = shared.acts.get(act) ?? { palette: shared.palette, pl2: shared.pl2 };
     jobs.push({
       label: `monster ${id}`,
       inputs,
@@ -349,7 +385,7 @@ function monsterJobs(shared: Shared): SpriteJob[] {
         const own = transLvl > 0 ? [source.read(palshift).slice(transLvl * 256, transLvl * 256 + 256)] : [];
         const out: OutputFile[] = [];
         for (const [variant, shift] of variants) {
-          const palette = remapped(shared.palette, shift ? [...own, pl2Shift(pl2, shift)] : own);
+          const palette = remapped(actPalette, shift ? [...own, pl2Shift(pl2, shift)] : own);
           const modes = specs.map((s) => compositeMode(shared, s, palette));
           out.push(...atlasFrom(`monsters/${id}/${variant}`, modes, DIRECTION_NAMES_8, { monster: id, variant }));
         }
@@ -357,7 +393,7 @@ function monsterJobs(shared: Shared): SpriteJob[] {
           // Utrans picks a row of the class's palshift.dat in place of its own TransLvl row
           const rows = utrans > 0 && source.exists(palshift) ? source.read(palshift) : undefined;
           const shiftRow = rows && rows.length >= (utrans + 1) * 256 ? [rows.slice(utrans * 256, utrans * 256 + 256)] : own;
-          const modes = specs.map((s) => compositeMode(shared, s, remapped(shared.palette, shiftRow)));
+          const modes = specs.map((s) => compositeMode(shared, s, remapped(actPalette, shiftRow)));
           out.push(...atlasFrom(`monsters/${id}/${name}`, modes, DIRECTION_NAMES_8, { monster: id, variant: name }));
         }
         return out;
@@ -563,11 +599,12 @@ function overlayJobs(shared: Shared): SpriteJob[] {
   });
 }
 
+const ACTS = [1, 2, 3, 4, 5];
+
 /** Every sprite job, with its inputs known up front (COFs are read to list their layers). */
 export function spriteJobs(source: DataSource): { jobs: SpriteJob[]; sharedInputs: string[]; missing: string[] } {
   const sharedInputs = [
-    'global/palette/act1/pal.dat',
-    'global/palette/act1/pal.pl2',
+    ...ACTS.flatMap((a) => [`global/palette/act${a}/pal.dat`, `global/palette/act${a}/pal.pl2`]),
     'global/animdata.d2',
     'global/excel/monstats.txt',
     'global/excel/monstats2.txt',
@@ -585,6 +622,7 @@ export function spriteJobs(source: DataSource): { jobs: SpriteJob[]; sharedInput
       source,
       palette: decodePalDat(source.read('global/palette/act1/pal.dat')),
       pl2: decodePl2(source.read('global/palette/act1/pal.pl2')),
+      acts: new Map(ACTS.map((a) => [a, { palette: decodePalDat(source.read(`global/palette/act${a}/pal.dat`)), pl2: decodePl2(source.read(`global/palette/act${a}/pal.pl2`)) }])),
       animdata: decodeAnimData(source.read('global/animdata.d2')),
       monstats: readTable(source, 'monstats.txt'),
       monstats2: readTable(source, 'monstats2.txt'),

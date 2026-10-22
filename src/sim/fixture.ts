@@ -32,7 +32,7 @@ const monster = (Id: string, MonType: string, extra: TableRow): TableRow => ({
   ...extra,
 });
 
-export const FIXTURE_TABLES: Tables = {
+const HAND_TABLES: Tables = {
   monstats: [
     // Hell columns on a few rows give the difficulty tests immunities to find
     monster('fallen1', 'fallen', { Velocity: 5, demon: 1, 'ResFi(H)': 100 }),
@@ -73,6 +73,8 @@ export const FIXTURE_TABLES: Tables = {
     monster('griswold', 'zombie', { Level: 5, minHP: 500, maxHP: 500, lUndead: 1, boss: 1, ResPo: 50 }),
     monster('smith', 'smith', { Level: 8, minHP: 300, maxHP: 300, demon: 1 }),
     monster('skmage_pois3', 'skeleton', { Level: 11, lUndead: 1, ResPo: 70 }),
+    // Weaker in its table than the act it walks in, so the act's floor lifts it
+    monster('sandraider1', 'sandraider', { Level: 3, Velocity: 4 }),
     monster('necroskeleton', 'skeleton', { minHP: 20, maxHP: 20, A1MinD: 2, A1MaxD: 4, lUndead: 1 }),
     monster('necromage', 'skeleton', { minHP: 40, maxHP: 40, A1MinD: 1, A1MaxD: 2, lUndead: 1 }),
   ],
@@ -85,6 +87,7 @@ export const FIXTURE_TABLES: Tables = {
   ],
   monseq: Array.from({ length: 15 }, (_, frame) => ({ sequence: 'seq_shamanresurrect', mode: 'A2', frame })),
   weapons: [{ name: 'Crystal Sword', mindam: 4, maxdam: 12 }],
+  monstrings: [],
   levels: [2, 3, 4, 5].flatMap((act) =>
     [0, 1, 2].map((i) => ({ Name: `act${act}-${i}`, Act: act - 1, mon1: 'zombie1', MonLvlEx: act * 5 + i, 'MonLvlEx(N)': 30 + act * 3 + i, 'MonLvlEx(H)': 34 + act * 2 + i })),
   ),
@@ -275,6 +278,37 @@ export const FIXTURE_TABLES: Tables = {
 };
 
 /** Design data pointed at the fixture's missile names where they differ from the real ones. */
+/**
+ * The schedule names monsters across five acts; a test only needs them to resolve. Every
+ * monster and superunique monsters.json names that the rows above leave out gets a plain row
+ * (level 20, no mods), with the minion monsters.json gives it so the pack check agrees.
+ */
+function fillSchedule(tables: Tables): Tables {
+  const m = DESIGN.monsters;
+  const have = new Set(tables.monstats.map((r) => r['Id']));
+  const rows: TableRow[] = [];
+  const add = (id: string, extra: TableRow = {}) => {
+    if (have.has(id)) return;
+    have.add(id);
+    rows.push(monster(id, id, { Level: 20, ...extra }));
+  };
+  for (const b of [...m.superuniques, ...m.bosses]) add(b.class, b.minion && b.minion !== b.class ? { minion1: b.minion } : {});
+  for (const id of [
+    ...Object.values(m.campaign).flatMap((byDifficulty) => Object.values(byDifficulty).flatMap((ws) => ws.flatMap((w) => ('monster' in w ? [w.monster] : [])))),
+    ...m.superuniques.flatMap((b) => (b.minion ? [b.minion] : [])),
+    ...Object.keys(m.roster),
+  ]) {
+    add(id);
+  }
+  const named = new Set(tables.superuniques.map((r) => r['Superunique']));
+  const superuniques = m.superuniques
+    .filter((b) => b.superunique && !named.has(b.superunique))
+    .map((b) => ({ Superunique: b.superunique!, Name: b.superunique!, Class: b.class, MinGrp: b.minion ? 2 : 0, MaxGrp: b.minion ? 2 : 0 }));
+  return { ...tables, monstats: [...tables.monstats, ...rows], superuniques: [...tables.superuniques, ...superuniques] };
+}
+
+export const FIXTURE_TABLES: Tables = fillSchedule(HAND_TABLES);
+
 export function fixtureDesign(design: DesignData = DESIGN): DesignData {
   return {
     ...design,

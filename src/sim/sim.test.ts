@@ -76,9 +76,12 @@ describe('data', () => {
         }
       });
     }
-    // Act 1 closes on Blood Raven on Normal and Andariel after; the placeholder acts repeat that boss
+    // Each act closes on its own boss; Act 1 on Blood Raven on Normal and Andariel after, and
+    // an act without content repeats that difficulty's Act 1 boss
     const boss = (w: (typeof waves)[number]) => baseMonsterId(w.groups.find((g) => g.rank === 'boss')!.monster);
-    expect(waves.filter((w) => w.final).map(boss)).toEqual([...Array(5).fill('bloodraven'), ...Array(10).fill('andariel')]);
+    const own = ['', 'duriel'];
+    const expected = [0, 1, 2].flatMap((d) => [1, 2, 3, 4, 5].map((a) => (a === 1 ? (d === 0 ? 'bloodraven' : 'andariel') : own[a - 1] || (d === 0 ? 'bloodraven' : 'andariel'))));
+    expect(waves.filter((w) => w.final).map(boss)).toEqual(expected);
     // Act 1 shows different monsters on each difficulty
     const act1 = (d: number) => new Set(waves.filter((w) => w.difficulty === d && w.act === 1 && !w.final).map((w) => baseMonsterId(w.groups[0]!.monster)));
     for (const [a, b] of [[0, 1], [0, 2], [1, 2]] as const) for (const id of act1(a)) expect(act1(b).has(id)).toBe(false);
@@ -141,15 +144,18 @@ describe('data', () => {
   it("takes monster HP and bounty from its level through monlvl, with no wave curve; placeholder acts raise Act 1's monsters to their act's levels", () => {
     const data = fixtureGameData();
     const sim = createSim(data, 1);
-    // Act 2 on Normal: the fixture's levels.txt has its areas at 10, 11 and 12; the 20th to
-    // 80th percentile is 10 to 11, climbed over the act's five waves
-    const act2 = data.waves.filter((w) => w.difficulty === 0 && w.act === 2);
-    expect(act2.map((w) => w.level)).toEqual([10, 10, 10, 10, 11]);
-    const def = data.monsters[act2[0]!.groups[0]!.monster]!;
-    expect(def.level).toBe(10);
-    expect(def.id).toBe(`${def.base}@normal:10`);
+    // The fixture's levels.txt has act A's areas at 5A, 5A+1 and 5A+2 on Normal; the 20th
+    // to 80th percentile is 5A to 5A+1, climbed over the act's waves
+    const act = DESIGN.monsters.acts.findIndex((_, a) => !DESIGN.monsters.campaign[String(a + 1)]) + 1;
+    if (act === 0) return;
+    const waves = data.waves.filter((w) => w.difficulty === 0 && w.act === act);
+    const n = waves.length;
+    expect(waves.map((w) => w.level)).toEqual(waves.map((_, i) => 5 * act + Math.trunc(i / (n - 1))));
+    const def = data.monsters[waves[0]!.groups[0]!.monster]!;
+    expect(def.level).toBe(5 * act);
+    expect(def.id).toBe(`${def.base}@normal:${5 * act}`);
     // A spawned monster rolls within its own HP: nothing scales it by wave
-    sim.state.wave = act2[0]!.number - 1;
+    sim.state.wave = waves[0]!.number - 1;
     sim.state.waves = Array.from({ length: sim.state.wave }, () => ({ remaining: 0 }));
     step(sim, [{ type: 'callWave' }]);
     sim.state.spawns = sim.state.spawns.slice(0, 1).map((sp) => ({ ...sp, tick: sim.state.tick }));
@@ -157,7 +163,16 @@ describe('data', () => {
     const m = sim.state.monsters[0]!;
     expect(m.maxHp).toBeGreaterThanOrEqual(def.minHp);
     expect(m.maxHp).toBeLessThanOrEqual(def.maxHp);
-    expect(m.level).toBe(10);
+    expect(m.level).toBe(5 * act);
+  });
+
+  it("lifts an act's own monster to the act's floor when its table level is lower, and leaves a stronger one alone", () => {
+    const data = fixtureGameData();
+    // The fixture's Sand Raider is level 3; Normal Act 2's floor is 10. Its Dune Beast is 20.
+    const act2 = data.waves.filter((w) => w.difficulty === 0 && w.act === 2);
+    const lead = (base: string) => data.monsters[act2.find((w) => baseMonsterId(w.groups[0]!.monster) === base)!.groups[0]!.monster]!;
+    expect(lead('sandraider1')).toMatchObject({ level: 10, id: 'sandraider1@normal:10' });
+    expect(lead('baboon1')).toMatchObject({ level: 20, id: 'baboon1' });
   });
 
   it('builds tier ladders: every tier-up reaches the floor, five rising steps to the cap', () => {
@@ -302,7 +317,7 @@ describe.skipIf(!hasTables())('real tables', () => {
     expect(m['zombie1']!.undead && m['skeleton1']!.undead).toBe(true);
     expect(m['fallen1']!.demon && m['fallenshaman1']!.demon && m['andariel']!.demon).toBe(true);
     expect(m['quillrat1']!.undead || m['quillrat1']!.demon).toBe(false);
-    expect(m['fallenshaman1']!.resurrect).toMatchObject({ monType: 'fallen', chancePct: 45 });
+    expect(m['fallenshaman1']!.resurrect).toMatchObject({ monTypes: ['fallen'], chancePct: 45 });
   });
 });
 

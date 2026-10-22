@@ -291,6 +291,9 @@ export class GameScene extends Phaser.Scene {
     const design = (this.registry.get('design') as DesignData | undefined) ?? DESIGN;
     // The campaign: five acts on Normal, then Nightmare, then Hell
     this.gameData = buildGameData(tables, design);
+    // Browser preview (?wave=N): the run starts at wave N, the schedule before it dropped
+    const startAt = Number(this.registry.get('startWave') ?? 1);
+    if (startAt > 1) this.gameData = { ...this.gameData, waves: this.gameData.waves.slice(startAt - 1) };
     this.saves = undefined;
     if (start && 'players' in start) {
       const session = MpSession.of(this.registry.get('launcher') as LauncherApi);
@@ -1064,22 +1067,23 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Act 1's baked map for the stage (the Blood Moor, or Catacombs 4 on the boss wave), its
+   * The act's baked map for the stage (its field, or its boss lair on the final wave), its
    * scenery depth-sorted with the units. False when the act has no art (or none was
    * extracted), and the grey box shows instead.
    */
   private drawBakedMap(stage: { act: number; lair: boolean }): boolean {
     const manifest = this.cache.json.get(MAP_KEY) as MapManifest | undefined;
     const name = stage.lair ? 'lair' : 'field';
-    const baked = stage.act === 1 ? manifest?.maps[name] : undefined;
-    const want = baked && this.textures.exists(groundKey(name)) ? name : '';
+    const baked = manifest?.acts[String(stage.act)]?.[name];
+    const key = groundKey(stage.act, name);
+    const want = baked && this.textures.exists(key) ? key : '';
     if (want === this.mapShown) return want !== '';
     for (const o of this.mapParts) o.destroy();
     this.mapParts = [];
     this.mapShown = want;
     if (!baked || !want || !manifest) return false;
     // The bake's world origin and ours line up unless the layout changed since
-    const ground = this.add.image(ORIGIN.x - baked.ground.originX, ORIGIN.y - baked.ground.originY, groundKey(name)).setOrigin(0).setDepth(DEPTH.ground - 0.5);
+    const ground = this.add.image(ORIGIN.x - baked.ground.originX, ORIGIN.y - baked.ground.originY, key).setOrigin(0).setDepth(DEPTH.ground - 0.5);
     this.mapParts.push(ground);
     for (const obj of baked.objects) {
       const prefab = manifest.prefabs[obj.prefab];
@@ -1248,7 +1252,10 @@ export class GameScene extends Phaser.Scene {
   /** "Normal Act 1 3/6": the stage of the last wave started and its number in its act. */
   private waveLabel(called: number): string {
     const last = this.sim.data.waves[called - 1];
-    if (!last) return 'Normal Act 1 0/6';
+    if (!last) {
+      const first = this.sim.data.waves[0];
+      return first ? `${stageName(first.difficulty, first.act)} 0/${first.actWaves}` : '';
+    }
     return `${stageName(last.difficulty, last.act)} ${last.actWave}/${last.actWaves}`;
   }
 

@@ -19,13 +19,19 @@ export interface AtlasMeta {
   explosion?: string;
 }
 
-/** Act 1's baked maps for the ring (tools/extract/map.ts): grounds, scenery prefabs and where each stands. */
-export const MAP_KEY = 'map:act1';
-export const groundKey = (map: string) => `map:act1:${map}`;
+/** Each act's baked maps for the ring (tools/extract/map.ts): grounds, scenery prefabs and where each stands. */
+export const MAP_KEY = 'map:manifest';
+export const groundKey = (act: number | string, map: string) => `map:act${act}:${map}`;
 export const sceneryKey = (prefab: string) => `scenery:${prefab}`;
 
+export interface BakedMap {
+  ground: { image: string; originX: number; originY: number };
+  objects: { prefab: string; at: number[] }[];
+}
+
 export interface MapManifest {
-  maps: Record<string, { ground: { image: string; originX: number; originY: number }; objects: { prefab: string; at: number[] }[] }>;
+  /** By act number, then field or lair. */
+  acts: Record<string, Record<string, BakedMap>>;
   prefabs: Record<string, { image: string; anchorX: number; anchorY: number }>;
 }
 
@@ -108,9 +114,9 @@ export function preloadAssets(scene: Phaser.Scene): void {
     });
   }
   if (!scene.cache.json.exists(MAP_KEY)) {
-    scene.load.json(MAP_KEY, 'map/act1.json');
+    scene.load.json(MAP_KEY, 'map/maps.json');
     scene.load.once(`filecomplete-json-${MAP_KEY}`, (_k: string, _t: string, m: MapManifest) => {
-      for (const [name, map] of Object.entries(m.maps)) scene.load.image(groundKey(name), map.ground.image);
+      for (const [act, maps] of Object.entries(m.acts)) for (const [name, map] of Object.entries(maps)) scene.load.image(groundKey(act, name), map.ground.image);
       for (const [name, p] of Object.entries(m.prefabs)) scene.load.image(sceneryKey(name), p.image);
     });
   }

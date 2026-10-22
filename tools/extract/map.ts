@@ -1,20 +1,23 @@
-// Act 1's maps for the ring, baked at extraction from the player's own tiles and our layout
-// (src/data/map/act1.json, src/data/map/ring.json):
+// Each act's maps for the ring, baked at extraction from the player's own tiles and our
+// layouts (src/data/map/act<N>.json, one per act, and src/data/map/ring.json):
 //
-//   map/act1-<map>.png        the whole world: floor tiles, the road along the ring blended
-//                             in, and every scenery object's shadow
-//   map/scenery/<prefab>.png  one image per scenery prefab (trees, rocks, bushes, the
-//                             cottage, Andariel's throne)
-//   map/act1.json             where each ground sits and where each object stands, so the
-//                             renderer can place and depth-sort scenery with the units
+//   map/act<N>-<map>.png            the whole world: floor tiles, the road along the ring
+//                                   blended in, and every scenery object's shadow
+//   map/scenery/act<N>/<prefab>.png one image per scenery prefab (trees, rocks, bushes,
+//                                   the centrepiece)
+//   map/maps.json                   for every act, where each ground sits and where each
+//                                   object stands, so the renderer can place and depth-sort
+//                                   scenery with the units
 //
-// Two maps share the ring's grid, path and buildable mask: the Blood Moor (the field) and
-// Catacombs 4 (the lair, for Act 1's boss waves). Scenery stands exactly on the tiles
-// ring.json gives each kind: a treeline round the edge, rocks on the arc boundaries,
-// bushes, and the cottage (D2's own Cott4 preset, read as a DS1) or the throne in the
-// middle. Floor cells are D2's 160 x 80, two and a half sim tiles a side.
+// Each act has two maps on the ring's grid, path and buildable mask: its field and its boss
+// lair (for the act's final wave). Scenery stands exactly on the tiles ring.json gives each
+// kind: a treeline round the edge, rocks on the arc boundaries, bushes, and a centrepiece (a
+// D2 preset read as a DS1, or a prefab with others on its corners) in the middle. Floor
+// cells are D2's 160 x 80, two and a half sim tiles a side. Each act draws in its own
+// palette.
 
-import layout from '../../src/data/map/act1.json';
+import { readFileSync, readdirSync } from 'node:fs';
+
 import { ORIGIN, WORLD_HEIGHT, WORLD_WIDTH, project } from '../../src/render/iso.ts';
 import { UNITS_PER_TILE } from '../../src/sim/fixed.ts';
 import { MAP_SIZE, ringWaypoints, sceneryTiles, type SceneryKind } from '../../src/sim/map.ts';
@@ -38,30 +41,68 @@ interface Piece {
   o: number;
   key: string;
   at: number[];
+  /** Which of the tiles sharing this orientation and key (D2's random variants), 0 by default. */
+  v?: number;
 }
 
-type MapName = keyof typeof layout.maps;
-type MapLayout = (typeof layout.maps)[MapName];
+interface TileSet {
+  file: string;
+  tiles: string[];
+}
+
+interface MapLayout {
+  floor: { file: string; ground: string[]; sprinkle?: TileSet & { chancePct: number } };
+  road: TileSet & { halfWidth: number; wobble: number; edge: number };
+  scenery: {
+    treeline: { prefabs: string[]; every: number; outside: number; front: TileSet };
+    rocks: { prefabs: string[] };
+    bushes: { prefabs: string[] };
+    cottage: { ds1: string; files: string[]; centreCell: number[] } | { centre: string; corners: string };
+  };
+}
+
+type MapName = 'field' | 'lair';
+
+interface ActLayout {
+  act: number;
+  palette: string;
+  seed: number;
+  maps: Record<MapName, MapLayout>;
+  prefabs: Record<string, { pieces: Piece[] }>;
+}
 
 const tilePath = (file: string) => `global/tiles/${file}`.toLowerCase();
-const prefabs = layout.prefabs as Record<string, { pieces: Piece[] }>;
+
+/** Every act's layout, src/data/map/act<N>.json, in act order. */
+export function actLayouts(): ActLayout[] {
+  const dir = new URL('../../src/data/map/', import.meta.url);
+  return readdirSync(dir)
+    .map((f) => /^act(\d)\.json$/.exec(f))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => ({ ...(JSON.parse(readFileSync(new URL(m[0], dir), 'utf8')) as Omit<ActLayout, 'act'>), act: Number(m[1]) }))
+    .sort((a, b) => a.act - b.act);
+}
 
 /** Every game file the bake reads. */
-export function mapInputs(): string[] {
+export function mapInputs(layouts = actLayouts()): string[] {
   const files = new Set<string>();
-  for (const map of Object.values(layout.maps) as MapLayout[]) {
-    files.add(map.floor.file);
-    files.add(map.road.file);
-    files.add(map.scenery.treeline.front.file);
-    if ('sprinkle' in map.floor) files.add(map.floor.sprinkle.file);
-    const cottage = map.scenery.cottage;
-    if ('ds1' in cottage) {
-      files.add(cottage.ds1);
-      for (const f of cottage.files) files.add(f);
+  const palettes = new Set<string>();
+  for (const layout of layouts) {
+    palettes.add(layout.palette);
+    for (const map of Object.values(layout.maps)) {
+      files.add(map.floor.file);
+      files.add(map.road.file);
+      files.add(map.scenery.treeline.front.file);
+      if (map.floor.sprinkle) files.add(map.floor.sprinkle.file);
+      const cottage = map.scenery.cottage;
+      if ('ds1' in cottage) {
+        files.add(cottage.ds1);
+        for (const f of cottage.files) files.add(f);
+      }
     }
+    for (const p of Object.values(layout.prefabs)) for (const piece of p.pieces) files.add(piece.file);
   }
-  for (const p of Object.values(prefabs)) for (const piece of p.pieces) files.add(piece.file);
-  return [layout.palette, ...[...files].map(tilePath)];
+  return [...palettes, ...[...files].map(tilePath)];
 }
 
 /** A hash of a lattice point to 0..1, for value noise and per-cell picks. */
@@ -223,12 +264,14 @@ interface PrefabOut {
 }
 
 export interface MapManifest {
-  maps: Record<MapName, { ground: { image: string; originX: number; originY: number }; objects: { prefab: string; at: number[] }[] }>;
+  /** By act number, then field or lair. Prefab names are `act<N>/<name>`. */
+  acts: Record<string, Record<MapName, { ground: { image: string; originX: number; originY: number }; objects: { prefab: string; at: number[] }[] }>>;
   prefabs: Record<string, PrefabOut>;
 }
 
 export function mapJob(source: DataSource): SpriteJob {
-  return { label: 'map act 1', inputs: mapInputs(), run: () => bake(source) };
+  const layouts = actLayouts();
+  return { label: 'maps', inputs: mapInputs(layouts), run: () => bake(source, layouts) };
 }
 
 /** A built prefab: its image, the floor centre of its cell (0, 0) in it, and its foot. */
@@ -240,10 +283,10 @@ interface Built {
   anchorY: number;
 }
 
-function buildPieces(name: string, tiles: Tiles, palette: Palette): Built {
-  const placed = prefabs[name]!.pieces.map((piece) => {
-    const t = tiles.variants(piece.file, piece.o, piece.key)[0];
-    if (!t) throw new Error(`${piece.file} has no orientation ${piece.o} tile ${piece.key}`);
+function buildPieces(pieces: Piece[], tiles: Tiles, palette: Palette): Built {
+  const placed = pieces.map((piece) => {
+    const t = tiles.variants(piece.file, piece.o, piece.key)[piece.v ?? 0];
+    if (!t) throw new Error(`${piece.file} has no orientation ${piece.o} tile ${piece.key} variant ${piece.v ?? 0}`);
     const [cx, cy] = piece.at as [number, number];
     // Floor-diamond top-left of this cell, relative to cell (0,0)'s
     return { img: tiles.image(t), x: (cx - cy) * 80, y: (cx + cy) * 40 };
@@ -258,16 +301,29 @@ function buildPieces(name: string, tiles: Tiles, palette: Palette): Built {
   return { canvas, cellX: 80 - minX, cellY: 40 - minY, anchorX: foot.footX, anchorY: foot.footY };
 }
 
-function bake(source: DataSource): OutputFile[] {
-  const palette = decodePalDat(source.read(layout.palette));
+function bake(source: DataSource, layouts: ActLayout[]): OutputFile[] {
   const tiles = new Tiles(source);
-  const seed = layout.seed;
   const out: OutputFile[] = [];
-  const manifest: MapManifest = { maps: {} as MapManifest['maps'], prefabs: {} };
+  const manifest: MapManifest = { acts: {}, prefabs: {} };
+  for (const layout of layouts) bakeAct(source, tiles, layout, out, manifest);
+  out.push({ path: 'map/maps.json', bytes: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) });
+  return out;
+}
+
+function bakeAct(source: DataSource, tiles: Tiles, layout: ActLayout, out: OutputFile[], manifest: MapManifest): void {
+  const palette = decodePalDat(source.read(layout.palette));
+  const seed = layout.seed;
+  const prefabs = layout.prefabs;
+  const act = `act${layout.act}`;
+  const maps = {} as MapManifest['acts'][string];
   const built = new Map<string, Built>();
   const prefab = (name: string): Built => {
     let b = built.get(name);
-    if (!b) built.set(name, (b = buildPieces(name, tiles, palette)));
+    if (!b) {
+      const def = prefabs[name];
+      if (!def) throw new Error(`${act}.json: no prefab ${name}`);
+      built.set(name, (b = buildPieces(def.pieces, tiles, palette)));
+    }
     return b;
   };
 
@@ -287,7 +343,7 @@ function bake(source: DataSource): OutputFile[] {
         const tl = { x: c.x - 80, y: c.y };
         if (tl.x > W || tl.x + 160 < 0 || tl.y > H || tl.y + 80 < 0) continue;
         const r = hash2(i, j, seed);
-        const sprinkle = 'sprinkle' in map.floor ? map.floor.sprinkle : undefined;
+        const sprinkle = map.floor.sprinkle;
         const g =
           sprinkle && hash2(i, j, seed + 1) * 100 < sprinkle.chancePct
             ? tiles.pick(sprinkle.file, 0, sprinkle.tiles, r)
@@ -333,7 +389,7 @@ function bake(source: DataSource): OutputFile[] {
     const s = map.scenery;
     const kinds: SceneryKind[] = ['treeline', 'rocks', 'bushes'];
     for (const kind of kinds) {
-      const spec = s[kind] as { prefabs: string[]; every?: number; outside?: number };
+      const spec = s[kind] as { prefabs: string[]; every?: number };
       for (const t of sceneryTiles(kind)) {
         // The treeline thins to one every `every` tiles along the edge
         if (kind === 'treeline' && spec.every && (t.x + t.y) % Math.round(spec.every) !== 0) continue;
@@ -342,7 +398,7 @@ function bake(source: DataSource): OutputFile[] {
       }
     }
     // A second row of the treeline just off the two back edges, so the border reads as woods
-    const line = s.treeline as { prefabs: string[]; every: number; outside: number };
+    const line = s.treeline;
     for (let i = 0; i <= MAP_SIZE; i += line.every) {
       for (const [x, y] of [[i, -line.outside], [-line.outside, MAP_SIZE - i]] as const) {
         objects.push({ prefab: choose(line.prefabs, x, y, 9), at: [x, y] });
@@ -352,16 +408,16 @@ function bake(source: DataSource): OutputFile[] {
     const block = sceneryTiles('cottage');
     const cx = (Math.min(...block.map((t) => t.x)) + Math.max(...block.map((t) => t.x)) + 1) / 2;
     const cy = (Math.min(...block.map((t) => t.y)) + Math.max(...block.map((t) => t.y)) + 1) / 2;
-    const middle = s.cottage as { ds1?: string; files?: string[]; centreCell?: number[]; centre?: string; corners?: string };
-    if (middle.ds1) {
+    const middle = s.cottage;
+    if ('ds1' in middle) {
       const cottage = `cottage-${name}`;
-      built.set(cottage, cottageOf(middle as { ds1: string; files: string[]; centreCell: number[] }, source, tiles, palette, ground, at(cx, cy)));
+      built.set(cottage, cottageOf(middle, source, tiles, palette, ground, at(cx, cy)));
       objects.push({ prefab: cottage, at: [cx, cy] });
     } else {
-      objects.push({ prefab: middle.centre!, at: [cx, cy] });
+      objects.push({ prefab: middle.centre, at: [cx, cy] });
       const x0 = Math.min(...block.map((t) => t.x)) + 0.5;
       const x1 = Math.max(...block.map((t) => t.x)) + 0.5;
-      for (const [x, y] of [[x0, x0], [x1, x0], [x0, x1], [x1, x1]] as const) objects.push({ prefab: middle.corners!, at: [x, y] });
+      for (const [x, y] of [[x0, x0], [x1, x0], [x0, x1], [x1, x1]] as const) objects.push({ prefab: middle.corners, at: [x, y] });
     }
 
     // Shadows of the piece prefabs into the ground, under each object's foot
@@ -383,18 +439,19 @@ function bake(source: DataSource): OutputFile[] {
       }
     }
 
-    const image = `map/act1-${name}.png`;
+    const image = `map/${act}-${name}.png`;
     out.push({ path: image, bytes: encodePng(W, H, ground.rgba) });
-    manifest.maps[name] = { ground: { image, originX: ORIGIN.x, originY: ORIGIN.y }, objects };
+    // Every object's prefab is built, so a centrepiece made of pieces has its image too
+    for (const obj of objects) if (!built.has(obj.prefab)) prefab(obj.prefab);
+    maps[name] = { ground: { image, originX: ORIGIN.x, originY: ORIGIN.y }, objects: objects.map((o) => ({ ...o, prefab: `${act}/${o.prefab}` })) };
   }
 
   for (const [name, b] of built) {
-    const image = `map/scenery/${name}.png`;
+    const image = `map/scenery/${act}/${name}.png`;
     out.push({ path: image, bytes: encodePng(b.canvas.width, b.canvas.height, b.canvas.rgba) });
-    manifest.prefabs[name] = { image, anchorX: b.anchorX, anchorY: b.anchorY };
+    manifest.prefabs[`${act}/${name}`] = { image, anchorX: b.anchorX, anchorY: b.anchorY };
   }
-  out.push({ path: 'map/act1.json', bytes: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) });
-  return out;
+  manifest.acts[String(layout.act)] = maps;
 }
 
 /**

@@ -38,21 +38,22 @@ export interface EvolutionJson {
 }
 
 export interface ResurrectJson {
-  /** Corpses of this monstats MonType can be raised (never other raisers). */
-  monType: string;
+  /** Corpses of this monstats MonType, or these, can be raised (never other raisers). */
+  monType: string | string[];
   /** monstats AI parameter columns: percent chance per AI decision, and corpse search range. */
   chanceColumn: string;
   rangeColumn: string;
-  /** monseq.txt sequence the raiser plays, standing still, before the corpse rises. */
-  sequence: string;
+  /** monseq.txt sequence the raiser plays, standing still, before the corpse rises; a second without one. */
+  sequence?: string;
 }
 
 /**
  * One wave of the schedule: a stream of one monster (swarms 1 s apart, tanks 1.5 s), with
- * a superunique's pack inside it when it names one, or an act boss behind its pack.
+ * a superunique's pack inside it when it names one (several walk one after another, as
+ * the Council or the Ancients do), or an act boss behind its pack.
  */
 export type WaveJson =
-  | { monster: string; kind: 'swarm' | 'tank'; area?: string; superunique?: string }
+  | { monster: string; kind: 'swarm' | 'tank'; area?: string; superunique?: string | string[] }
   | { boss: string; area?: string };
 
 /**
@@ -81,11 +82,11 @@ export interface MonstersJson {
   roster: Record<string, { resurrect?: ResurrectJson }>;
   /** The five acts; the run plays all of them on Normal, then Nightmare, then Hell. */
   acts: ActJson[];
-  /** Act 1 on each difficulty: its waves in order, the last its act boss. */
-  act1: Record<DifficultyName, WaveJson[]>;
-  /** Acts 2 to 5 have no content yet: their waves cycle these Act 1 monsters at the act's own levels. */
+  /** Each act with content, by act number, on each difficulty: its waves in order, the last its act boss. */
+  campaign: Record<string, Record<DifficultyName, WaveJson[]>>;
+  /** An act without content cycles these Act 1 monsters at the act's own levels. */
   placeholder: { monster: string; kind: 'swarm' | 'tank' }[];
-  /** Act 1's superuniques: each appears as the unique pack inside a wave. */
+  /** Superuniques and other named monsters: each appears as a unique pack inside a wave. */
   superuniques: NamedJson[];
   /** Act bosses: each closes its act behind its pack. */
   bosses: NamedJson[];
@@ -248,7 +249,7 @@ export interface MonsterDef {
   demon: boolean;
   /** Ticks between AI decisions (monstats aidel). */
   aiDelayTicks: number;
-  resurrect?: { monType: string; chancePct: number; radiusUnits: number; castTicks: number };
+  resurrect?: { monTypes: string[]; chancePct: number; radiusUnits: number; castTicks: number };
 }
 
 export interface ClassDef {
@@ -378,7 +379,24 @@ const UNIQUE_MODS: Record<string, MonsterMod> = {
   cold: 'coldEnchanted',
   lightning: 'lightningEnchanted',
   stoneskin: 'stoneSkin',
+  manahit: 'manaBurn',
+  teleport: 'teleportation',
+  aura: 'auraEnchanted',
 };
+
+/** monumod rows a superunique may carry that mean nothing here: a random name, stealing potions. */
+const NO_EFFECT_MODS = new Set(['rndname', 'thief']);
+
+/** A monster's name as D2R shows it: monstats NameStr and superunique Name are string keys. */
+const namesOf = new WeakMap<Tables, Map<string, string>>();
+function displayName(tables: Tables, key: string): string {
+  let names = namesOf.get(tables);
+  if (!names) namesOf.set(tables, (names = new Map((tables.monstrings ?? []).map((r) => [str(r, 'Key'), str(r, 'enUS')]))));
+  return names.get(key) ?? key;
+}
+
+/** A raiser with no monseq.txt sequence stands this long before the corpse rises: a second. */
+const RAISE_TICKS = 20;
 
 /** Midway through a min-max range of two table columns. */
 const midway = (row: TableRow, min: string, max: string) => idiv(int(row, min) + int(row, max), 2);
@@ -415,6 +433,7 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
     const modId = su ? int(su, column) : 0;
     if (modId === 0) continue;
     const name = str(findRow(tables.monumod, 'id', modId), 'uniquemod');
+    if (NO_EFFECT_MODS.has(name)) continue;
     const mod = UNIQUE_MODS[name];
     if (!mod) throw new Error(`${id}: superuniques.txt ${column} is monumod ${name}, which the sim does not know`);
     mods.push(mod);
@@ -434,7 +453,7 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
     id: atLevel === undefined ? variantId(id, difficulty) : levelVariantId(id, difficulty, atLevel),
     base,
     difficulty,
-    name: su ? str(su, 'Name') : str(row, 'NameStr') || id,
+    name: displayName(tables, su ? str(su, 'Name') : str(row, 'NameStr') || id),
     ...(su ? { artVariant: `su_${id}` } : {}),
     flying: int(row, 'flying') === 1,
     mods,
@@ -451,11 +470,11 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
     demon: int(row, 'demon') === 1,
     aiDelayTicks: Math.max(1, d2FramesToTicks(int(row, col('aidel')))),
     resurrect: resurrect && {
-      monType: resurrect.monType,
-      chancePct: int(row, resurrect.chanceColumn),
-      radiusUnits: idiv(int(row, resurrect.rangeColumn) * UNITS_PER_TILE, auraRangePerTile),
+      monTypes: [resurrect.monType].flat(),
+      chancePct: int(row, col(resurrect.chanceColumn)),
+      radiusUnits: idiv(int(row, col(resurrect.rangeColumn)) * UNITS_PER_TILE, auraRangePerTile),
       // The sequence plays at 25 fps, one row per frame
-      castTicks: Math.max(1, d2FramesToTicks(tables.monseq.filter((r) => r['sequence'] === resurrect.sequence).length)),
+      castTicks: resurrect.sequence ? Math.max(1, d2FramesToTicks(tables.monseq.filter((r) => r['sequence'] === resurrect.sequence).length)) : RAISE_TICKS,
     },
   };
 }
@@ -482,9 +501,11 @@ export type DefOf = (id: string, difficulty: number, level?: number) => MonsterD
 
 /**
  * The campaign: five acts on Normal, then Nightmare, then Hell (monsters.json acts), each
- * act's last wave its act boss. Act 1's waves are its own on each difficulty; Acts 2 to 5
- * have no content yet, so their waves cycle the placeholder monsters at the act's own levels
- * (`actLevels`) and end on that difficulty's Act 1 boss.
+ * act's last wave its act boss. An act with content (monsters.json campaign) plays its own
+ * waves on each difficulty, every monster at its monstats level for the difficulty, lifted
+ * to the act's floor (the low end of `actLevels`) when the table has it weaker than the act
+ * it walks in. An act without content cycles the placeholder monsters at the act's own
+ * levels and ends on that difficulty's Act 1 boss.
  *
  * A wave is a stream of one monster for waves.streamTicks: swarms a monster a second, tanks
  * one every 1.5 s. A superunique's pack (it, and its minions) walks in the middle of its
@@ -505,47 +526,60 @@ export function campaignWaves(
   let number = 0;
   for (let d = 0; d < DIFFICULTIES.length; d++) {
     const added = schedule.added[DIFFICULTIES[d]!] ?? {};
-    const act1 = monsters.act1[DIFFICULTIES[d]!];
-    const boss = act1.at(-1);
-    if (!boss || !('boss' in boss)) throw new Error(`monsters.json act1.${DIFFICULTIES[d]} must end on its act boss`);
-    if (act1.length !== monsters.acts[0]!.waves) throw new Error(`monsters.json act1.${DIFFICULTIES[d]} has ${act1.length} waves, Act 1 ${monsters.acts[0]!.waves}`);
+    /** An act's own waves on this difficulty, checked: one per wave of the act, the last its boss. */
+    const content = (a: number): WaveJson[] | undefined => {
+      const own = monsters.campaign[String(a + 1)]?.[DIFFICULTIES[d]!];
+      if (!own) return undefined;
+      const where = `monsters.json campaign.${a + 1}.${DIFFICULTIES[d]}`;
+      const last = own.at(-1);
+      if (!last || !('boss' in last)) throw new Error(`${where} must end on its act boss`);
+      if (own.length !== monsters.acts[a]!.waves) throw new Error(`${where} has ${own.length} waves, Act ${a + 1} ${monsters.acts[a]!.waves}`);
+      return own;
+    };
+    const act1 = content(0);
+    if (!act1) throw new Error(`monsters.json campaign.1.${DIFFICULTIES[d]} is missing`);
+    const boss = act1.at(-1)!;
     // The placeholder cycle starts at a different monster on each difficulty
     let cursor = d * 5;
     // A named monster's mods: its table's, Normal's schedule, the difficulty's on top, resolved
     const namedMods = (id: string, own: MonsterMod[]) => resolveMods(balance, [...own, ...(schedule.named[id] ?? []), ...(added.named?.[id] ?? [])]);
-    /** A named monster and its pack, as groups `spacing` apart. */
-    const pack = (id: string, rank: Rank, spacing: number, level?: number): WaveGroup[] => {
-      const def = defOf(id, d, level);
+    /** A named monster and its pack, as groups `spacing` apart, each at `levelOf` its id. */
+    const pack = (id: string, rank: Rank, spacing: number, levelOf: (id: string) => number | undefined): WaveGroup[] => {
+      const def = defOf(id, d, levelOf(id));
       const out: WaveGroup[] = [];
-      if (def.minion) out.push({ monster: defOf(def.minion.monster, d, level).id, count: def.minion.count, spacingTicks: spacing, rank: 'normal', mods: [] });
+      if (def.minion) out.push({ monster: defOf(def.minion.monster, d, levelOf(def.minion.monster)).id, count: def.minion.count, spacingTicks: spacing, rank: 'normal', mods: [] });
       out.push({ monster: def.id, count: 1, spacingTicks: spacing, rank, mods: namedMods(id, def.mods) });
       return out;
     };
 
     monsters.acts.forEach((act, a) => {
       const n = act.waves;
+      const own = content(a);
       const [lo, hi] = a === 0 ? [0, 0] : actLevels(a + 1, d);
       for (let i = 0; i < n; i++) {
         number++;
-        // Act 1's own wave, or a placeholder: the cycle's next monster, the boss last
-        const entry: WaveJson = a === 0 ? act1[i]! : i === n - 1 ? boss : monsters.placeholder[cursor++ % monsters.placeholder.length]!;
-        const level = a === 0 ? undefined : lo + idiv((hi - lo) * i, Math.max(1, n - 1));
+        // The act's own wave, or a placeholder: the cycle's next monster, the boss last
+        const entry: WaveJson = own ? own[i]! : i === n - 1 ? boss : monsters.placeholder[cursor++ % monsters.placeholder.length]!;
+        // A placeholder walks at the act's levels; an act's own monster at its table level,
+        // lifted to the act's floor when the table has it weaker than the act
+        const placeholderLevel = lo + idiv((hi - lo) * i, Math.max(1, n - 1));
+        const levelOf = (id: string): number | undefined => (!own ? placeholderLevel : a > 0 && defOf(id, d).level < lo ? lo : undefined);
         let groups: WaveGroup[];
         let kind: WaveDef['kind'];
         let lead: MonsterDef;
         if ('boss' in entry) {
           kind = 'boss';
-          groups = pack(entry.boss, 'boss', w.swarm.spacingTicks, level);
-          lead = defOf(entry.boss, d, level);
+          groups = pack(entry.boss, 'boss', w.swarm.spacingTicks, levelOf);
+          lead = defOf(entry.boss, d, levelOf(entry.boss));
         } else {
           kind = entry.kind;
           const spacing = w[kind].spacingTicks;
-          lead = defOf(entry.monster, d, level);
+          lead = defOf(entry.monster, d, levelOf(entry.monster));
           const monster = lead.id;
           const size = Math.max(1, idiv(w.streamTicks, spacing));
           const half = idiv(size, 2);
           const specials: WaveGroup[] = [];
-          if (entry.superunique) specials.push(...pack(entry.superunique, 'unique', spacing, level));
+          for (const su of [entry.superunique ?? []].flat()) specials.push(...pack(su, 'unique', spacing, levelOf));
           if (i === n - 2) {
             const mods = resolveMods(balance, [...(schedule.champions[String(a + 1)] ?? []), ...(added.champions ?? [])]);
             specials.push({ monster, count: w.championPackSize, spacingTicks: spacing, rank: 'champion', mods });
@@ -555,7 +589,7 @@ export function campaignWaves(
         }
         waves.push({
           kind,
-          area: entry.area ?? `${a === 0 ? '' : 'placeholder: '}${i === n - 1 ? act.lair : act.field}`,
+          area: entry.area ?? `${own ? '' : 'placeholder: '}${i === n - 1 ? act.lair : act.field}`,
           difficulty: d,
           act: a + 1,
           actWave: i + 1,
@@ -816,7 +850,7 @@ export function buildGameData(
   // Every monster of the roster at its own level on every difficulty (tests and tools look them up)
   const everyone = [
     ...Object.keys(m.roster),
-    ...Object.values(m.act1).flatMap((ws) => ws.flatMap((w) => ('monster' in w ? [w.monster] : []))),
+    ...Object.values(m.campaign).flatMap((byDifficulty) => Object.values(byDifficulty).flatMap((ws) => ws.flatMap((w) => ('monster' in w ? [w.monster] : [])))),
     ...m.placeholder.map((p) => p.monster),
     ...[...m.superuniques, ...m.bosses].flatMap((b) => [b.id, ...(b.minion ? [b.minion] : [])]),
   ];
