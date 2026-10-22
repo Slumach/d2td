@@ -14,7 +14,7 @@ import { GameScene } from './GameScene.ts';
 import { PauseScene } from './PauseScene.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from './layout.ts';
 import { ZombieWalkScene } from './ZombieWalkScene.ts';
-import { integerZoom } from './zoom.ts';
+import { letterbox } from './zoom.ts';
 
 export interface StartOptions {
   /** The M0 zombie and icons proof instead of the game. */
@@ -41,11 +41,23 @@ export const DESIGN_KEY = 'design';
 
 /**
  * Phaser zooms in CSS pixels. Counting the window in device pixels and dividing back keeps
- * the zoom whole on the actual screen, even under Windows display scaling.
+ * the zoom whole on the actual screen, even under Windows display scaling; the canvas is
+ * then placed on a device pixel boundary, so nothing resamples it (zoom.ts letterbox).
  */
-function fitZoom(width: number, height: number): number {
-  const dpr = window.devicePixelRatio || 1;
-  return integerZoom(window.innerWidth * dpr, window.innerHeight * dpr, width, height) / dpr;
+function fit(width: number, height: number) {
+  return letterbox(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, width, height);
+}
+
+/** Puts the canvas's parent at the letterbox margins, whole device pixels from the window's edge. */
+function place(parent: string, width: number, height: number): number {
+  const box = fit(width, height);
+  const el = document.getElementById(parent);
+  if (el) {
+    el.style.margin = '0';
+    el.style.marginLeft = `${box.left}px`;
+    el.style.marginTop = `${box.top}px`;
+  }
+  return box.cssZoom;
 }
 
 export function startGame(opts: StartOptions = {}): Phaser.Game {
@@ -62,7 +74,7 @@ export function startGame(opts: StartOptions = {}): Phaser.Game {
     // Nearest-neighbour sampling and whole-pixel positions for classic sprites at 1x
     pixelArt: true,
     // No Scale.FIT: the whole canvas zooms by a whole number and the page letterboxes it
-    scale: { mode: Phaser.Scale.NONE, zoom: fitZoom(width, height) },
+    scale: { mode: Phaser.Scale.NONE, zoom: place(opts.parent ?? 'game', width, height) },
     // Only the first scene starts on its own; the launcher's scenes start the rest
     scene: opts.m0 ? [ZombieWalkScene] : opts.launcher ? [SetupScene, MenuScene, LobbyScene, GameScene, PauseScene] : [GameScene, PauseScene],
     callbacks: {
@@ -77,7 +89,7 @@ export function startGame(opts: StartOptions = {}): Phaser.Game {
   // The dev server exposes the game for the screenshot scripts' probes
   if (import.meta.env.DEV) (window as unknown as { __game?: Phaser.Game }).__game = game;
   game.sound.volume = (opts.volume ?? 80) / 100;
-  window.addEventListener('resize', () => game.scale.setZoom(fitZoom(width, height)));
+  window.addEventListener('resize', () => game.scale.setZoom(place(opts.parent ?? 'game', width, height)));
   if (opts.autoplay && !opts.m0) {
     game.events.once(Phaser.Core.Events.READY, () => {
       const scene = game.scene.getScene('Game') as GameScene;

@@ -241,6 +241,8 @@ First files to pull for M0: data\\global\\monsters\\zm, data\\global\\palette\\a
 
 HD 3D experiment, after M2: export one monster's .model (Granny GR2) and textures, convert with lslib, render 8 directions from Blender by script. If the zombie comes out clean, the pipeline swaps in HD sheets and the game never notices.
 
+Screen fit (Oct 22 afternoon): the canvas is drawn at the game's 1440 x 1000 and shown at the largest whole number of device pixels a game pixel that fits the window, placed on a device pixel boundary (src/render/zoom.ts letterbox), with nearest-neighbour upscaling, so Windows display scaling never resamples it. The fit is the same at 100%, 125% and 150% scaling because device pixels do not change with it: 1080p shows 1x with a 480 x 80 device pixel letterbox, 1440p 1x with 1120 x 440 (1.5x would fit the width but is not whole; the game sits in the middle 56% of a 1440p screen), 4K 2x with 960 x 160. The world camera's wheel steps are 1x, 1.5x, 2x and 3x; 1.5x draws every sprite with alternate pixels doubled (nearest neighbour, no blur), which reads uneven on diagonal edges and dithers.
+
 ## Multiplayer
 
 FFA on a ring each and team mode on one shared ring, built as lockstep from M1 and shipped at M4 with host-and-play. No cloud server needed for a handful of friends.

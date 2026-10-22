@@ -14,13 +14,15 @@
       body {
         display: flex;
       }
-      /* Auto margins letterbox the canvas, and drop to 0 so it scrolls when the window is too small */
+      /* start.ts sets the margins: the letterbox, on device pixel boundaries (auto until it does) */
       #game {
         margin: auto;
       }
-      /* Block, so no text-baseline gap below the canvas makes the page taller than the window */
+      /* Block, so no text-baseline gap below the canvas makes the page taller than the window;
+         nearest neighbour for the whole-number upscale to the screen */
       #game canvas {
         display: block;
+        image-rendering: pixelated;
       }
     </style>
   </head>
