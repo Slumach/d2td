@@ -6,7 +6,7 @@
 
 import Phaser from 'phaser';
 
-import { isBlocked, isPathTile } from '../sim/map.ts';
+import { isBlocked, isPathTile, positionAt } from '../sim/map.ts';
 import type { Sim } from '../sim/state.ts';
 import { WORLD_HEIGHT, WORLD_WIDTH, project, tileDiamond } from './iso.ts';
 import type { WorldView } from './view.ts';
@@ -90,6 +90,14 @@ export class Minimap {
     // The map's edge, as D2 draws a level's walls
     const edge = [corner(0, 0)[0]!, corner(map.width - 1, 0)[1]!, corner(map.width - 1, map.height - 1)[2]!, corner(0, map.height - 1)[3]!];
     g.lineStyle(1, WALL, 0.9).strokePoints(edge, true);
+    // Alone, the monsters' one spawn: a red mark where they come in, the suggested place to build near
+    if (sim.players === 1) {
+      const sp = positionAt(map, map.arcs[0]!.spawn);
+      const w = project(sp.x, sp.y);
+      const p = { x: this.x + w.x / SCALE, y: this.y + w.y / SCALE };
+      g.fillStyle(0xe84838, 1).fillTriangle(p.x, p.y - 7, p.x - 5, p.y + 3, p.x + 5, p.y + 3);
+      g.lineStyle(1, 0xffffff, 0.9).strokeCircle(p.x, p.y, 8);
+    }
     for (let ty = 0; ty < map.height; ty++) {
       for (let tx = 0; tx < map.width; tx++) {
         if (isPathTile(map, tx, ty)) {
