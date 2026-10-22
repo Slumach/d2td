@@ -5,6 +5,7 @@
   "buildCost": 150,
   "buildCostGrowthPct": 220,
   "bossHpPct": { "first": 60, "last": 900 },
+  "endless": { "tierWaves": 10, "startLevel": 85, "levelPerWave": 1, "hpPctPerWave": 3, "damagePctPerWave": 3 },
   "levelCostBase": [60, 240, 300],
   "levelCostPctPerLevel": 220,
   "tierCosts": [400, 8000],

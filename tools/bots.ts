@@ -21,7 +21,7 @@ import type { HitFilter, SkillDef } from '../src/sim/archetypes/types.ts';
 import { auraSources } from '../src/sim/auras.ts';
 import { EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, type GameData } from '../src/sim/data.ts';
 import { tileCenter, isPathTile } from '../src/sim/map.ts';
-import { activeSkill, buildCostFor, canBuild, createSim, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
+import { activeSkill, buildCostFor, canBuild, createSim, waveAt, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
 import { withMods } from '../src/sim/combat.ts';
 import { ELEMENTS, type Command, type Element, type Sim, type TimedCommand, type Tower } from '../src/sim/state.ts';
 
@@ -75,7 +75,7 @@ function rankSpots(sim: Sim, radiusTenths: number): Spot[] {
 
 function callWaveIfClear(sim: Sim): Command[] {
   const s = sim.state;
-  return s.monsters.length === 0 && s.spawns.length === 0 && s.wave < sim.data.waves.length ? [{ type: 'callWave' }] : [];
+  return s.monsters.length === 0 && s.spawns.length === 0 && waveAt(sim, s.wave) ? [{ type: 'callWave' }] : [];
 }
 
 function progress(t: Tower): number {
@@ -240,6 +240,7 @@ interface Foe {
 function comingFoes(sim: Sim): Foe[] {
   const byKey = new Map<string, { hp: number; resist: Record<Element, number> }>();
   const rules = sim.data.rules;
+  waveAt(sim, sim.state.wave + BOSS_LOOKAHEAD_WAVES - 1);
   for (let w = sim.state.wave; w < Math.min(sim.data.waves.length, sim.state.wave + BOSS_LOOKAHEAD_WAVES); w++) {
     const wave = sim.data.waves[w]!;
     for (const g of wave.groups) {
@@ -260,7 +261,7 @@ function comingFoes(sim: Sim): Foe[] {
 
 /** Average HP of the next wave's normal monsters, in 1/256 HP. */
 function nextWaveHp(sim: Sim): number {
-  const wave = sim.data.waves[Math.min(sim.state.wave, sim.data.waves.length - 1)]!;
+  const wave = waveAt(sim, sim.state.wave) ?? sim.data.waves.at(-1)!;
   let total = 0;
   let count = 0;
   for (const g of wave.groups) {

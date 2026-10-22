@@ -166,6 +166,32 @@ describe('data', () => {
     for (let k = 1; k < pcts.length; k++) expect(pcts[k]!).toBeGreaterThan(pcts[k - 1]!);
   });
 
+  it('goes on past Hell Baal in endless Tiers of ten: Hell waves round the acts, a boss last, levels and HP climbing', () => {
+    const data = buildGameData(FIXTURE_TABLES, fixtureDesign(), Infinity, FIXTURE_BUILD);
+    expect(data.waves).toHaveLength(75);
+    data.extendWaves!(95);
+    const tier1 = data.waves.slice(75, 85);
+    const e = DESIGN.balance.endless;
+    expect(tier1.map((w) => w.tier)).toEqual(Array(10).fill(1));
+    expect(data.waves[85]!.tier).toBe(2);
+    expect(tier1.map((w) => w.final)).toEqual([...Array(9).fill(false), true]);
+    // Tier 1's boss is Andariel, Tier 2's Duriel
+    const bossOf = (w: (typeof tier1)[number]) => baseMonsterId(w.groups.find((g) => g.rank === 'boss')!.monster);
+    expect(bossOf(data.waves[84]!)).toBe('andariel');
+    expect(bossOf(data.waves[94]!)).toBe('duriel');
+    // Levels climb a level a wave from startLevel; HP compounds
+    expect(tier1[0]!.level).toBeGreaterThanOrEqual(e.startLevel + e.levelPerWave);
+    expect(tier1[9]!.level).toBeGreaterThanOrEqual(e.startLevel + 10 * e.levelPerWave);
+    expect(tier1[0]!.hpPct).toBe(100 + e.hpPctPerWave);
+    expect(tier1[1]!.hpPct).toBe(Math.trunc(Math.trunc(10_000 * (100 + e.hpPctPerWave) / 100) * (100 + e.hpPctPerWave) / 100 / 100));
+    // An endless run never ends in a win
+    const sim = createSim(data, 1);
+    sim.state.wave = 200;
+    sim.state.waves = Array.from({ length: 200 }, () => ({ remaining: 0 }));
+    step(sim, []);
+    expect(sim.state.status).toBe('playing');
+  });
+
   it('walks a raiser with its party, its monstats minion1, in the middle of its wave, ahead of its pack', () => {
     const data = fixtureGameData();
     // Nightmare Act 3, wave 4: Fetish Shamans with their Fetishes (the fixture's PartyMin-PartyMax 2-4, so 3), then Endugu's pack

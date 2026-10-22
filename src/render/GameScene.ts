@@ -14,7 +14,7 @@ import { MpSession } from '../launcher/session.ts';
 import { Lockstep } from '../net/lockstep.ts';
 import type { LobbyPlayer } from '../net/protocol.ts';
 import { actJustStarted, takeCheckpoint, type Checkpoint } from '../sim/checkpoint.ts';
-import { baseMonsterId, buildGameData, MAX_TIER, MAX_TOWER_LEVEL, stageName, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
+import { baseMonsterId, buildGameData, MAX_TIER, MAX_TOWER_LEVEL, stageName, waveLabel as labelOf, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
 import { standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
 import { aliveOf, arcOwner, ringOf, seatOf, type MatchMode } from '../sim/match.ts';
@@ -36,6 +36,7 @@ import {
   type Monster,
   type Sim,
   type Tower,
+  waveAt,
 } from '../sim/sim.ts';
 import { TABLE_NAMES, type Tables } from '../sim/tables.ts';
 import { TARGETING_MODES } from '../sim/state.ts';
@@ -1169,7 +1170,7 @@ export class GameScene extends Phaser.Scene {
     const { state, data } = this.sim;
     if (this.driver?.online) return this.drawOnlineHud();
     this.drawAlive(state.alive);
-    this.hud.setText(`Gold ${this.gold}   Wave ${state.wave}/${data.waves.length}   Kills ${state.kills}`);
+    this.hud.setText(`Gold ${this.gold}   Wave ${state.wave}   Kills ${state.kills}`);
     this.hud2.setText(this.d2 ? '' : this.waveTimer());
     this.d2?.update(this.hudNumbers(data.rules.aliveLimit));
     if (state.status !== 'playing' && !this.endOverlay.visible) {
@@ -1183,10 +1184,9 @@ export class GameScene extends Phaser.Scene {
     const match = driver.match;
     const m = match.state;
     const s = this.sim.state;
-    const waves = match.data.waves.length;
-    const watching = !this.onOwnRing ? `   (watching ${this.nameOf(this.view)})` : '';
+        const watching = !this.onOwnRing ? `   (watching ${this.nameOf(this.view)})` : '';
     this.drawAlive(s.alive);
-    this.hud.setText(`Gold ${this.onOwnRing ? this.gold : '-'}   Alive ${s.alive}   Wave ${s.wave}/${waves}   Kills ${s.kills}${watching}`);
+    this.hud.setText(`Gold ${this.onOwnRing ? this.gold : '-'}   Alive ${s.alive}   Wave ${s.wave}   Kills ${s.kills}${watching}`);
     this.d2?.update(this.hudNumbers(match.data.rules.aliveLimit));
 
     const parts: string[] = [];
@@ -1217,7 +1217,7 @@ export class GameScene extends Phaser.Scene {
     const s = sim.state;
     const seat = this.onOwnRing ? this.seat : 0;
     const last = sim.data.waves[s.wave - 1];
-    const left = s.status === 'playing' && s.wave < sim.data.waves.length ? (s.nextWaveTick - s.tick) / sim.data.economy.waveTicks : 0;
+    const left = s.status === 'playing' && waveAt(sim, s.wave) ? (s.nextWaveTick - s.tick) / sim.data.economy.waveTicks : 0;
     this.inventory?.setGold(this.gold);
     return {
       gold: this.onOwnRing ? this.gold : 0,
@@ -1237,7 +1237,7 @@ export class GameScene extends Phaser.Scene {
   private waveTimer(): string {
     const sim = this.sim;
     const s = sim.state;
-    if (s.status !== 'playing' || s.wave >= sim.data.waves.length) return '';
+    if (s.status !== 'playing' || !waveAt(sim, s.wave)) return '';
     const secs = Math.max(0, Math.ceil((s.nextWaveTick - s.tick) / TICKS_PER_SECOND));
     return `Next wave in ${secs} s, send now for ${earlySendBonus(sim)} gold`;
   }
@@ -1249,13 +1249,13 @@ export class GameScene extends Phaser.Scene {
       const first = this.sim.data.waves[0];
       return first ? `${stageName(first.difficulty, first.act)} 0/${first.actWaves}` : '';
     }
-    return `${stageName(last.difficulty, last.act)} ${last.actWave}/${last.actWaves}`;
+    return labelOf(last);
   }
 
   /** The next wave's monsters as a D2 tooltip: counts by type, then champions, uniques and bosses. */
   private nextWaveTip(index: number): { title: string; body: string } | undefined {
     const data = this.sim.data;
-    const def: WaveDef | undefined = data.waves[index];
+    const def: WaveDef | undefined = waveAt(this.sim, index);
     if (!def) return undefined;
     const nice = (id: string) => (data.monsters[id]?.name ?? id).replace(/([a-z])([A-Z])/g, '$1 $2');
     const mod = (m: string) => m.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
@@ -1271,7 +1271,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     const lines = [...[...normal].map(([id, n]) => `${n} ${nice(id)}`), ...special, '', `Kills so far: ${this.sim.state.kills}`];
-    return { title: `Next: ${stageName(def.difficulty, def.act)}, wave ${def.actWave}/${def.actWaves}${def.final ? ', act boss' : ''}`, body: lines.join('\n') };
+    return { title: `Next: ${labelOf(def)}${def.final ? ', act boss' : ''}`, body: lines.join('\n') };
   }
 
   private skillName(id: string): string {

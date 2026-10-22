@@ -24,9 +24,13 @@ export function createMonster(sim: Sim, def: string, wave: number, rank: Rank, m
   const d = sim.data.monsters[def]!;
   const rules = sim.data.rules;
   // HP is the monster's own at its level (monlvl), with its rank's bonus: no per-wave curve
-  const maxHp = hp ?? Math.max(256, idiv(rollInt(s.rng, d.minHp, d.maxHp) * (100 + rankHpPct(sim, rank, wave)), 100));
+  // An endless wave scales its monsters' HP and damage on top (WaveDef hpPct, damagePct)
+  const waveDef = sim.data.waves[wave];
+  const waveHp = waveDef?.hpPct ?? 100;
+  const maxHp = hp ?? Math.max(256, idiv(idiv(rollInt(s.rng, d.minHp, d.maxHp) * (100 + rankHpPct(sim, rank, wave)), 100) * waveHp, 100));
   let damagePct = rank === 'champion' || rank === 'unique' ? rules.championDamagePct : 0;
   for (const mod of mods) damagePct += rules.mods[mod].damagePct;
+  damagePct += (waveDef?.damagePct ?? 100) - 100;
   const at = positionAt(sim.map, dist);
   return {
     id: s.nextId++,

@@ -11,7 +11,7 @@
 import { archetypeOf } from './archetypes/index.ts';
 import type { SkillDef, TowerBuff } from './archetypes/types.ts';
 import { activeSkill, computeAuras, EMPTY_FIELD } from './auras.ts';
-import type { GameData } from './data.ts';
+import type { GameData, WaveDef } from './data.ts';
 import { TICKS_PER_SECOND, idiv } from './fixed.ts';
 import { ARC_COUNT, createMap } from './map.ts';
 import { decayCorpses, spawnMonsters, updateMonsters } from './monsters.ts';
@@ -139,9 +139,15 @@ function applyCommand(sim: Sim, command: Command): void {
  * player on the ring is paid for the time it skipped (economy.earlySendGoldPerTenLevels a
  * second, per ten levels of the wave's monster).
  */
+/** The wave at an index, building endless waves as the run reaches them. */
+export function waveAt(sim: Sim, index: number): WaveDef | undefined {
+  sim.data.extendWaves?.(index + 1);
+  return sim.data.waves[index];
+}
+
 function sendEarly(sim: Sim): void {
   const s = sim.state;
-  if (!sim.data.waves[s.wave]) return;
+  if (!waveAt(sim, s.wave)) return;
   const bonus = earlySendBonus(sim);
   for (let p = 0; p < s.gold.length; p++) s.gold[p]! += bonus;
   startWave(sim);
@@ -150,7 +156,7 @@ function sendEarly(sim: Sim): void {
 /** Gold Send Next Wave would pay each player right now. */
 export function earlySendBonus(sim: Sim): number {
   const s = sim.state;
-  const waveDef = sim.data.waves[s.wave];
+  const waveDef = waveAt(sim, s.wave);
   if (!waveDef) return 0;
   const seconds = idiv(Math.max(0, s.nextWaveTick - s.tick), TICKS_PER_SECOND);
   return idiv(seconds * sim.data.economy.earlySendGoldPerTenLevels * waveDef.level, 10);
@@ -163,7 +169,7 @@ export function earlySendBonus(sim: Sim): number {
  */
 function startWave(sim: Sim): void {
   const s = sim.state;
-  const waveDef = sim.data.waves[s.wave];
+  const waveDef = waveAt(sim, s.wave);
   s.nextWaveTick = s.tick + sim.data.economy.waveTicks;
   if (!waveDef) return;
   const wave = s.wave;
@@ -244,7 +250,8 @@ function checkEnd(sim: Sim): void {
   const s = sim.state;
   if (s.alive >= sim.data.rules.aliveLimit) {
     s.status = 'lost';
-  } else if (s.wave >= sim.data.waves.length && s.monsters.length === 0 && s.spawns.length === 0) {
+  } else if (!sim.data.extendWaves && s.wave >= sim.data.waves.length && s.monsters.length === 0 && s.spawns.length === 0) {
+    // A run with endless waves never ends in a win: only a fixed-length run (tests, tools) does
     s.status = 'won';
   }
 }

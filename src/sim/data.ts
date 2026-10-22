@@ -125,6 +125,15 @@ export interface BalanceJson {
    * wave: early bosses are easier than the tables, late ones harder.
    */
   bossHpPct: { first: number; last: number };
+  /**
+   * Past Hell Baal the run goes on forever. Every `tierWaves` waves is a Tier (Tier 1 is
+   * waves 76 to 85). Waves 1 to 9 of a Tier walk Hell's regular waves in campaign order,
+   * round all five acts; wave 10 brings an act boss back with its pack (Andariel, Duriel,
+   * Mephisto, Diablo, Baal in turn), at bossHpPct.last. Endless wave n (from 1) has its
+   * monsters at level startLevel + n x levelPerWave (monlvl.txt extrapolated past its last
+   * row), and HP and damage multiplied by hpPctPerWave and damagePctPerWave compounded n times.
+   */
+  endless: { tierWaves: number; startLevel: number; levelPerWave: number; hpPctPerWave: number; damagePctPerWave: number };
   /** Cost of the first level-up at T1, T2, T3. */
   levelCostBase: number[];
   /** Each further level-up within a tier costs this percent of the previous one. */
@@ -314,6 +323,10 @@ export interface WaveDef {
   /** The level of the wave's monster: it sets HP, damage and bounty through monlvl. */
   level: number;
   groups: WaveGroup[];
+  /** Endless waves: the Tier (1 for waves 76 to 85), and the percent on its monsters' HP and damage. */
+  tier?: number;
+  hpPct?: number;
+  damagePct?: number;
 }
 
 export interface Economy {
@@ -362,6 +375,11 @@ export interface Rules {
 }
 
 export interface GameData {
+  /**
+   * Builds the endless waves on demand: makes data.waves at least `upTo` long. Missing when
+   * the run was built with a fixed wave count (tests, tools).
+   */
+  extendWaves?: (upTo: number) => void;
   /** The five acts, for the map and the HUD. */
   acts: ActJson[];
   skills: Record<string, SkillDef>;
@@ -422,6 +440,25 @@ function displayName(tables: Tables, key: string): string {
 /** A raiser with no monseq.txt sequence stands this long before the corpse rises: a second. */
 const RAISE_TICKS = 20;
 
+/**
+ * monlvl.txt's row for a level; past its last row (110) every number climbs on in a straight
+ * line from the last two rows, which is how the endless Tiers keep scaling.
+ */
+function monlvlRow(tables: Tables, level: number): TableRow {
+  const rows = tables.monlvl;
+  const top = rows.reduce((n, r) => Math.max(n, int(r, 'Level')), 0);
+  if (level <= top) return findRow(rows, 'Level', level);
+  const last = findRow(rows, 'Level', top);
+  const prev = findRow(rows, 'Level', top - 1);
+  const out: TableRow = { Level: level };
+  for (const [k, v] of Object.entries(last)) {
+    if (k === 'Level' || typeof v !== 'number') continue;
+    const p = prev[k];
+    out[k] = v + (typeof p === 'number' ? (v - p) * (level - top) : 0);
+  }
+  return out;
+}
+
 /** Midway through a min-max range of two table columns. */
 const midway = (row: TableRow, min: string, max: string) => idiv(int(row, min) + int(row, max), 2);
 
@@ -443,7 +480,7 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
   // D2: monstats HP and damage are percentages of the monlvl values for the monster's level
   // (its difficulty's Level column, or its act's floor), at the difficulty's columns
   const level = atLevel ?? int(row, col('Level'));
-  const lvlRow = findRow(tables.monlvl, 'Level', level);
+  const lvlRow = monlvlRow(tables, level);
   const lvlCol = (name: string) => (lvlRow[`${name}${sfx}`] !== undefined ? `${name}${sfx}` : name);
   const pct = (column: string, of: string) => Math.max(1, idiv(int(row, column) * int(lvlRow, of), 100)) * 256;
   const [minCol, maxCol] = HP_COLUMNS[difficulty]!;
@@ -540,73 +577,99 @@ export type DefOf = (id: string, difficulty: number, level?: number) => MonsterD
  * special's mods come from its table row and the schedule, with the difficulty's additions
  * and the immune-over-resistant rule.
  */
+/** What one wave needs to build its groups. */
+interface WaveBuild {
+  balance: BalanceJson;
+  defOf: DefOf;
+  difficulty: number;
+  /** The act whose champion mods it takes (1 to 5). */
+  act: number;
+  entry: WaveJson;
+  /** True for an act's last wave before its boss: it carries the champion pack. */
+  championPack: boolean;
+  /** A monster's level, or undefined for its own table level. */
+  levelOf: (id: string) => number | undefined;
+}
+
+/**
+ * One wave's groups. A regular wave is a stream of one monster for waves.streamTicks, with
+ * a raiser's party, any superunique packs and the act's champion pack in its middle; an
+ * act boss's wave is its pack, then the boss.
+ */
+function buildWave(b: WaveBuild): { kind: WaveDef['kind']; groups: WaveGroup[]; lead: MonsterDef } {
+  const { balance, defOf, difficulty: d, entry, levelOf } = b;
+  const w = balance.waves;
+  const schedule = balance.modSchedule;
+  const added = schedule.added[DIFFICULTIES[d]!] ?? {};
+  // A named monster's mods: its table's, Normal's schedule, the difficulty's on top, resolved
+  const namedMods = (id: string, own: MonsterMod[]) => resolveMods(balance, [...own, ...(schedule.named[id] ?? []), ...(added.named?.[id] ?? [])]);
+  /** A named monster and its pack, as groups `spacing` apart. */
+  const pack = (id: string, rank: Rank, spacing: number): WaveGroup[] => {
+    const def = defOf(id, d, levelOf(id));
+    const out: WaveGroup[] = [];
+    if (def.minion) out.push({ monster: defOf(def.minion.monster, d, levelOf(def.minion.monster)).id, count: def.minion.count, spacingTicks: spacing, rank: 'normal', mods: [] });
+    out.push({ monster: def.id, count: 1, spacingTicks: spacing, rank, mods: namedMods(id, def.mods) });
+    return out;
+  };
+  if ('boss' in entry) {
+    return { kind: 'boss', groups: pack(entry.boss, 'boss', w.swarm.spacingTicks), lead: defOf(entry.boss, d, levelOf(entry.boss)) };
+  }
+  const kind = entry.kind;
+  const spacing = w[kind].spacingTicks;
+  const lead = defOf(entry.monster, d, levelOf(entry.monster));
+  const monster = lead.id;
+  const size = Math.max(1, idiv(w.streamTicks, spacing));
+  const half = idiv(size, 2);
+  const specials: WaveGroup[] = [];
+  // A raiser's party walks first, then the packs
+  if (lead.party) specials.push({ monster: defOf(lead.party.monster, d, levelOf(lead.party.monster)).id, count: lead.party.count, spacingTicks: spacing, rank: 'normal', mods: [] });
+  for (const su of [entry.superunique ?? []].flat()) specials.push(...pack(su, 'unique', spacing));
+  if (b.championPack) {
+    const mods = resolveMods(balance, [...(schedule.champions[String(b.act)] ?? []), ...(added.champions ?? [])]);
+    specials.push({ monster, count: w.championPackSize, spacingTicks: spacing, rank: 'champion', mods });
+  }
+  const stream = (c: number): WaveGroup => ({ monster, count: c, spacingTicks: spacing, rank: 'normal', mods: [] });
+  return { kind, groups: [stream(half), ...specials, stream(size - half)].filter((g) => g.count > 0), lead };
+}
+
+/** An act's own waves on a difficulty, checked: one per wave of the act, the last its boss. */
+function actContent(monsters: MonstersJson, a: number, d: number): WaveJson[] {
+  const where = `monsters.json campaign.${a + 1}.${DIFFICULTIES[d]}`;
+  const own = monsters.campaign[String(a + 1)]?.[DIFFICULTIES[d]!];
+  if (!own) throw new Error(`${where} is missing`);
+  const last = own.at(-1);
+  if (!last || !('boss' in last)) throw new Error(`${where} must end on its act boss`);
+  if (own.length !== monsters.acts[a]!.waves) throw new Error(`${where} has ${own.length} waves, Act ${a + 1} ${monsters.acts[a]!.waves}`);
+  return own;
+}
+
+/**
+ * The campaign: five acts on Normal, then Nightmare, then Hell (monsters.json acts), each
+ * act's last wave its act boss. Every act plays its own waves (monsters.json campaign) on
+ * each difficulty, every monster at its monstats level for the difficulty, lifted to the
+ * act's floor (`actFloor`) when the table has it weaker than the act it walks in. Every
+ * special's mods come from its table row and the schedule, with the difficulty's additions
+ * and the immune-over-resistant rule.
+ */
 export function campaignWaves(
   balance: BalanceJson,
   monsters: MonstersJson,
   defOf: DefOf,
   actFloor: (act: number, difficulty: number) => number,
 ): WaveDef[] {
-  const w = balance.waves;
-  const schedule = balance.modSchedule;
   const waves: WaveDef[] = [];
   let number = 0;
   for (let d = 0; d < DIFFICULTIES.length; d++) {
-    const added = schedule.added[DIFFICULTIES[d]!] ?? {};
-    /** An act's own waves on this difficulty, checked: one per wave of the act, the last its boss. */
-    const content = (a: number): WaveJson[] => {
-      const where = `monsters.json campaign.${a + 1}.${DIFFICULTIES[d]}`;
-      const own = monsters.campaign[String(a + 1)]?.[DIFFICULTIES[d]!];
-      if (!own) throw new Error(`${where} is missing`);
-      const last = own.at(-1);
-      if (!last || !('boss' in last)) throw new Error(`${where} must end on its act boss`);
-      if (own.length !== monsters.acts[a]!.waves) throw new Error(`${where} has ${own.length} waves, Act ${a + 1} ${monsters.acts[a]!.waves}`);
-      return own;
-    };
-    // A named monster's mods: its table's, Normal's schedule, the difficulty's on top, resolved
-    const namedMods = (id: string, own: MonsterMod[]) => resolveMods(balance, [...own, ...(schedule.named[id] ?? []), ...(added.named?.[id] ?? [])]);
-    /** A named monster and its pack, as groups `spacing` apart, each at `levelOf` its id. */
-    const pack = (id: string, rank: Rank, spacing: number, levelOf: (id: string) => number | undefined): WaveGroup[] => {
-      const def = defOf(id, d, levelOf(id));
-      const out: WaveGroup[] = [];
-      if (def.minion) out.push({ monster: defOf(def.minion.monster, d, levelOf(def.minion.monster)).id, count: def.minion.count, spacingTicks: spacing, rank: 'normal', mods: [] });
-      out.push({ monster: def.id, count: 1, spacingTicks: spacing, rank, mods: namedMods(id, def.mods) });
-      return out;
-    };
-
     monsters.acts.forEach((act, a) => {
       const n = act.waves;
-      const own = content(a);
+      const own = actContent(monsters, a, d);
       const floor = a === 0 ? 0 : actFloor(a + 1, d);
       for (let i = 0; i < n; i++) {
         number++;
         const entry = own[i]!;
         // A monster at its table level, lifted to the act's floor when the table has it weaker than the act
         const levelOf = (id: string): number | undefined => (defOf(id, d).level < floor ? floor : undefined);
-        let groups: WaveGroup[];
-        let kind: WaveDef['kind'];
-        let lead: MonsterDef;
-        if ('boss' in entry) {
-          kind = 'boss';
-          groups = pack(entry.boss, 'boss', w.swarm.spacingTicks, levelOf);
-          lead = defOf(entry.boss, d, levelOf(entry.boss));
-        } else {
-          kind = entry.kind;
-          const spacing = w[kind].spacingTicks;
-          lead = defOf(entry.monster, d, levelOf(entry.monster));
-          const monster = lead.id;
-          const size = Math.max(1, idiv(w.streamTicks, spacing));
-          const half = idiv(size, 2);
-          const specials: WaveGroup[] = [];
-          // A raiser's party walks first, then the packs
-          if (lead.party) specials.push({ monster: defOf(lead.party.monster, d, levelOf(lead.party.monster)).id, count: lead.party.count, spacingTicks: spacing, rank: 'normal', mods: [] });
-          for (const su of [entry.superunique ?? []].flat()) specials.push(...pack(su, 'unique', spacing, levelOf));
-          if (i === n - 2) {
-            const mods = resolveMods(balance, [...(schedule.champions[String(a + 1)] ?? []), ...(added.champions ?? [])]);
-            specials.push({ monster, count: w.championPackSize, spacingTicks: spacing, rank: 'champion', mods });
-          }
-          const stream = (c: number): WaveGroup => ({ monster, count: c, spacingTicks: spacing, rank: 'normal', mods: [] });
-          groups = [stream(half), ...specials, stream(size - half)].filter((g) => g.count > 0);
-        }
+        const { kind, groups, lead } = buildWave({ balance, defOf, difficulty: d, act: a + 1, entry, championPack: i === n - 2, levelOf });
         waves.push({
           kind,
           area: entry.area ?? (i === n - 1 ? act.lair : act.field),
@@ -625,6 +688,52 @@ export function campaignWaves(
   return waves;
 }
 
+/** Compounds a percent `n` times on 100, in integers: 103 three times is 109. */
+function compoundPct(pct: number, n: number): number {
+  let v = 10_000;
+  for (let i = 0; i < n; i++) v = idiv(v * pct, 100);
+  return idiv(v, 100);
+}
+
+/**
+ * Endless wave `n` (1 for the run's wave 76), built from Hell's content (see BalanceJson
+ * endless). Deterministic in `n` alone, so every sim builds the same wave.
+ */
+export function endlessWave(balance: BalanceJson, monsters: MonstersJson, defOf: DefOf, campaignLength: number, n: number): WaveDef {
+  const e = balance.endless;
+  const d = DIFFICULTIES.length - 1;
+  const tier = Math.floor((n - 1) / e.tierWaves) + 1;
+  const inTier = ((n - 1) % e.tierWaves) + 1;
+  const level = e.startLevel + n * e.levelPerWave;
+  const levelOf = (id: string) => Math.max(level, defOf(id, d).level);
+  // Hell's regular waves in campaign order, and its bosses, act by act
+  const regular: { entry: WaveJson; act: number }[] = [];
+  const bosses: { entry: WaveJson; act: number }[] = [];
+  monsters.acts.forEach((_, a) => {
+    const own = actContent(monsters, a, d);
+    for (const entry of own) ('boss' in entry ? bosses : regular).push({ entry, act: a + 1 });
+  });
+  const final = inTier === e.tierWaves;
+  const pick = final ? bosses[(tier - 1) % bosses.length]! : regular[((tier - 1) * (e.tierWaves - 1) + inTier - 1) % regular.length]!;
+  const { kind, groups, lead } = buildWave({ balance, defOf, difficulty: d, act: pick.act, entry: pick.entry, championPack: inTier === e.tierWaves - 1, levelOf });
+  const act = monsters.acts[pick.act - 1]!;
+  return {
+    kind,
+    area: pick.entry.area ?? (final ? act.lair : act.field),
+    difficulty: d,
+    act: pick.act,
+    actWave: inTier,
+    actWaves: e.tierWaves,
+    final,
+    number: campaignLength + n,
+    level: lead.level,
+    groups,
+    tier,
+    hpPct: compoundPct(100 + e.hpPctPerWave, n),
+    damagePct: compoundPct(100 + e.damagePctPerWave, n),
+  };
+}
+
 /** Each boss wave's boss HP percent: a straight line by wave index from the first boss wave to the last. */
 export function bossHpPctFrom(balance: BalanceJson, waves: WaveDef[]): Record<number, number> {
   const bosses = waves.map((w, i) => (w.final ? i : -1)).filter((i) => i >= 0);
@@ -637,6 +746,11 @@ export function bossHpPctFrom(balance: BalanceJson, waves: WaveDef[]): Record<nu
 /** "Normal Act 2": a stage's name. */
 export function stageName(difficulty: number, act: number): string {
   return `${DIFFICULTY_NAMES[difficulty]} Act ${act}`;
+}
+
+/** "Hell Act 3 2/5", or "Endless Tier 2 4/10" past Hell Baal: where a wave stands in the run. */
+export function waveLabel(wave: WaveDef): string {
+  return wave.tier ? `Endless Tier ${wave.tier} ${wave.actWave}/${wave.actWaves}` : `${stageName(wave.difficulty, wave.act)} ${wave.actWave}/${wave.actWaves}`;
 }
 
 export function economyFrom(balance: BalanceJson): Economy {
@@ -883,7 +997,20 @@ export function buildGameData(
   ];
   for (let d = 0; d < DIFFICULTIES.length; d++) for (const id of new Set(everyone)) defOf(id, d);
   const levels = actFloorFrom(tables, design.balance.actFloorPercentile);
-  const waves = campaignWaves(design.balance, m, defOf, levels).slice(0, waveCount);
+  const campaign = campaignWaves(design.balance, m, defOf, levels);
+  const waves = campaign.slice(0, waveCount);
+  const rules = { ...rulesFrom(tables, design.balance), bossHpPct: bossHpPctFrom(design.balance, waves) };
+  // The run goes on past Hell Baal: endless waves are built as the run reaches them
+  const extendWaves =
+    waveCount === Infinity
+      ? (upTo: number) => {
+          while (waves.length < upTo) {
+            const wave = endlessWave(design.balance, m, defOf, campaign.length, waves.length - campaign.length + 1);
+            if (wave.final) rules.bossHpPct[waves.length] = design.balance.bossHpPct.last;
+            waves.push(wave);
+          }
+        }
+      : undefined;
 
   return {
     acts: m.acts,
@@ -894,6 +1021,7 @@ export function buildGameData(
     waves,
     ladders,
     economy: economyFrom(design.balance),
-    rules: { ...rulesFrom(tables, design.balance), bossHpPct: bossHpPctFrom(design.balance, waves) },
+    rules,
+    ...(extendWaves ? { extendWaves } : {}),
   };
 }

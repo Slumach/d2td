@@ -287,6 +287,12 @@ Harness (npm run report, seeds 1 and 2, the ordinary bots TWOLINE, PALADIN, NECR
 - Tier timing: first T2 on waves 9 to 12 (Normal Act 2 to 3, met), first T3 on waves 21 to 33 (median about 24, late Normal; target Nightmare Act 1, close), first evolution on waves 45 to 52 (late Nightmare to Hell Act 1; target Hell Act 3, early). T5 does not exist yet: the design's three-tower evolutions are still to be built, so its timing is not measured.
 - Unspent gold: the bots hold 10k to 60k at Hell's boss waves, saving for the next tower or the evolution, both now very dear. With T3 the top tier and T5 not built there is little else to buy; the item stages add the sinks.
 
+### Stage B: endless Tiers past Hell Baal (Oct 22)
+
+After wave 75 the run goes on forever and never ends in a win. Every 10 waves is a Tier (Tier 1 is waves 76 to 85). Waves 1 to 9 of a Tier walk Hell's 20 regular waves in campaign order, round all five acts, with their packs and the Tier's champion pack on wave 9; wave 10 brings an act boss back with its pack (Andariel, Duriel, Mephisto, Diablo, Baal in turn) at bossHpPct.last. Endless wave n has its monsters at level 85 + n (monlvl.txt extrapolated in a straight line past its last row, 110), and HP and damage multiplied by 3% compounded n times (balance.json endless). The waves are built as the run reaches them, from their index alone, so every sim in a lockstep game builds the same ones. Each Tier also raises the drop rate (Stage D).
+
+Harness: the itemless ordinary bots now all lose by early Tier 1 (TWOLINE and PALADIN on wave 77 with Hell Baal still lapping; NECRO and MIXED3 in Hell Act 2), so nothing stalls on Baal any more. The target for a bot in best-in-slot items (dies between waves 175 and 225) is tuned in Stage F, with the item bots.
+
 ## Overnight decisions
 
 Calls made without asking, each the option closest to Diablo II's own rules.

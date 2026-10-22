@@ -23,7 +23,7 @@ import { parseArgs } from 'node:util';
 
 import ring from '../src/data/map/ring.json';
 import { DESIGN } from '../src/data/design.ts';
-import { buildGameData, stageName, type GameData } from '../src/sim/data.ts';
+import { buildGameData, stageName, waveLabel, type GameData } from '../src/sim/data.ts';
 import { ARC_COUNT, createMap, isBlocked, isPathTile, ringWaypoints, type Point } from '../src/sim/map.ts';
 import type { Sim } from '../src/sim/sim.ts';
 import { median } from './balance.ts';
@@ -177,6 +177,7 @@ async function main(): Promise<void> {
   if (args.set.length) console.log(`balance overrides: ${args.set.join('  ')}`);
   const seeds = args.seeds.split(',').map(Number);
   const bots = args.bots ? (args.bots.split(',') as Strategy[]) : [...new Set([...STRATEGIES, ...HELL_STRATEGIES])];
+  // The campaign's waves; endless waves past it are reported by the wave a run ends on
   const total = data.waves.length;
   const queue = bots.flatMap((strategy) => seeds.map((seed) => ({ strategy, seed })));
   const runs: RingRun[] = [];
@@ -193,8 +194,9 @@ async function main(): Promise<void> {
   // Children finish in any order; report in the order asked
   runs.sort((a, b) => bots.indexOf(a.strategy) - bots.indexOf(b.strategy) || a.seed - b.seed);
   const stage = (wave: number) => {
+    data.extendWaves?.(wave);
     const w = data.waves[wave - 1]!;
-    return `${stageName(w.difficulty, w.act)} ${w.actWave}/${w.actWaves}${w.final ? ' boss' : ''}`;
+    return `${waveLabel(w)}${w.final ? ' boss' : ''}`;
   };
   const pad = (s: string | number, n: number) => String(s).padStart(n);
 
