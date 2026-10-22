@@ -249,6 +249,17 @@ describe('evolution', () => {
     expect(sellValue(sim, evolved)).toBe(Math.trunc((evolved.spent * 60) / 100));
   });
 
+  it('flattens the build price past buildCostTail.fromTowers towers', () => {
+    const sim = testSim();
+    const e = sim.data.economy;
+    let expected = e.buildCost;
+    for (let n = 0; n < 8; n++) {
+      expect(buildCostFor(sim, 0)).toBe(expected);
+      placeTower(sim, 2 + 2 * n, 1, 'holy-bolt');
+      expected = Math.trunc((expected * (n < e.buildCostTail.fromTowers ? e.buildCostGrowthPct : e.buildCostTail.growthPct)) / 100);
+    }
+  });
+
   it('raises the price of each build by buildCostGrowthPct for every tower the player owns', () => {
     const sim = testSim();
     const e = sim.data.economy;

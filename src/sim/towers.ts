@@ -121,7 +121,8 @@ export function buildCostFor(sim: Sim, player: number): number {
   const e = sim.data.economy;
   const owned = sim.state.towers.filter((t) => t.owner === player).length;
   let cost = e.buildCost;
-  for (let i = 0; i < owned; i++) cost = idiv(cost * e.buildCostGrowthPct, 100);
+  // Steep for the first towers, then a flatter tail so a new tower stays an option late
+  for (let i = 0; i < owned; i++) cost = idiv(cost * (i < e.buildCostTail.fromTowers ? e.buildCostGrowthPct : e.buildCostTail.growthPct), 100);
   return cost;
 }
 

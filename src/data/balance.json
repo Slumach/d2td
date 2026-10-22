@@ -4,6 +4,7 @@
   "aliveWeight": { "normal": 1, "champion": 2, "unique": 3, "boss": 10 },
   "buildCost": 150,
   "buildCostGrowthPct": 220,
+  "buildCostTail": { "fromTowers": 5, "growthPct": 130 },
   "bossHpPct": { "first": 60, "last": 450 },
   "endless": { "tierWaves": 10, "startLevel": 85, "levelPerWave": 1, "hpPctPerWave": 3, "damagePctPerWave": 3 },
   "drops": { "dropPct": 15, "gemRunePct": 40, "runeMultiplierPct": 125, "tierDropPct": 25, "smithsHammerPpm": 11 },

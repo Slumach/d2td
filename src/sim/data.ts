@@ -147,6 +147,7 @@ export interface BalanceJson {
    * on the number of towers.
    */
   buildCostGrowthPct: number;
+  buildCostTail: { fromTowers: number; growthPct: number };
   /**
    * An act boss's HP is this percent of its monstats HP, climbing in a straight line by wave
    * number from `first` on the run's first boss wave to `last` on its last campaign boss
@@ -383,6 +384,8 @@ export interface Economy {
   startingGold: number;
   buildCost: number;
   buildCostGrowthPct: number;
+  /** From the fromTowers-th tower owned on, each tower raises the next build's price by growthPct instead. */
+  buildCostTail: { fromTowers: number; growthPct: number };
   /** levelCosts[tier - 1][n] is the gold to go from level n + 1 to n + 2 in that tier. */
   levelCosts: number[][];
   /** tierCosts[0] reaches T2, tierCosts[1] reaches T3. */
@@ -905,6 +908,7 @@ export function economyFrom(balance: BalanceJson): Economy {
     startingGold: balance.startingGold,
     buildCost: balance.buildCost,
     buildCostGrowthPct: balance.buildCostGrowthPct,
+    buildCostTail: balance.buildCostTail,
     levelCosts: balance.levelCostBase.map((base) => steps.map((permille) => idiv(base * permille, 1000))),
     tierCosts: balance.tierCosts,
     evolveCost: balance.evolveCost,

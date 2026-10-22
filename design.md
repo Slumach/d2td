@@ -221,13 +221,15 @@ First run on real content (Oct 22, all five acts, before the Stage A economy reb
 
 | Action | Gold |
 | --- | --- |
-| Build a class tower | 150 for the first, then each tower owned multiplies the next by 220% (balance.json buildCostGrowthPct): 150, 330, 726, 1597, 3513, 7729, 17004, 37409, 82299, ... |
+| Build a class tower | 150 for the first, then each tower owned multiplies the next by 220% for the first five (balance.json buildCostGrowthPct) and by 130% after (buildCostTail, Oct 23): 150, 330, 726, 1597, 3513, 7729, 10047, 13061, 16979, 22072, 28693, ... A 10th tower cost 400,000 on the old curve, out of reach late in Hell; now a new tower is always an option. |
 | T1 skill pick | free |
 | Skill level +1 | Geometric from a base of 60 at T1, 240 at T2, 300 at T3; the per-level multiplier is harness-tuned (see src/data/balance.json) |
 | Upgrade to T2 | 400 |
 | Upgrade to T3 | 8000 |
 | Evolve to T4 | 30000 |
 | Sell | 60% of everything spent on the tower |
+
+The build cost's tail (Oct 23, npm run report, seeds 1 and 2, TWOLINE, PALADIN, NECRO, MIXED3; towers as each act's boss wave starts, median): with 220% all the way the bots held 5 to 6 towers at the end of Normal, 6 to 7 through Nightmare and 7 in Hell; with the tail from the fifth tower at 130%, Normal is unchanged (5 to 6), Nightmare ends at 7 to 8 and Hell runs at 8 to 9, against the targets of about 4, 7 and 10. Tails of 145% from the fifth and 150% from the fourth were tried: 145% left Hell at 7 to 8, and 150% from the fourth moved Nightmare to 8 and the Normal end to 6 to 7. Where the bots die barely moved (MIXED3 Hell Act 1, TWOLINE Hell Act 2 to 3, PALADIN endless Tier 3; one NECRO seed reached Hell Baal's wave instead of Hell Act 3).
 
 A Hammerdin therefore costs both parents built, levelled and tiered, plus the evolution fee (totals follow from the multipliers; see src/data/balance.json), and two tiles before it costs one.
 
