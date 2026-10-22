@@ -1,0 +1,12 @@
+{
+  "id": "frenzy",
+  "skill": "Frenzy",
+  "archetype": "melee",
+  "damageType": "phys",
+  "rangeTenths": 11,
+  "rateTicks": 16,
+  "melee": {
+    "swings": 2,
+    "damagePctCalc": "calc1"
+  }
+}

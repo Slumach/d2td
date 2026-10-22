@@ -1,0 +1,12 @@
+{
+  "id": "berserk",
+  "skill": "Berserk",
+  "archetype": "melee",
+  "damageType": "mag",
+  "rangeTenths": 11,
+  "rateTicks": 20,
+  "melee": {
+    "damagePctCalc": "calc1",
+    "convert": "mag"
+  }
+}

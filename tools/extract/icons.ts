@@ -11,7 +11,7 @@ import type { OutputFile, SpriteJob } from './sprites.ts';
 
 /** skills.txt charclass to the D2R icon folder and file prefix. */
 const CLASS_ICON_FILES: Record<string, { folder: string; prefix: string }> = {
-  ama: { folder: 'amazon', prefix: 'aa' },
+  ama: { folder: 'amazon', prefix: 'am' },
   sor: { folder: 'sorceress', prefix: 'so' },
   nec: { folder: 'necromancer', prefix: 'ne' },
   pal: { folder: 'paladin', prefix: 'pa' },

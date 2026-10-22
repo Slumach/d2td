@@ -1,0 +1,19 @@
+{
+  "id": "double-swing",
+  "skill": "Double Swing",
+  "archetype": "melee",
+  "damageType": "phys",
+  "skillLevels": [
+    1,
+    5,
+    10,
+    15,
+    20
+  ],
+  "rangeTenths": 11,
+  "rateTicks": 20,
+  "melee": {
+    "swings": 2,
+    "damagePctCalc": "calc1"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "id": "barbarian",
+  "name": "Barbarian",
+  "weapon": "Hand Axe",
+  "lines": {
+    "combat": {
+      "name": "Combat",
+      "tiers": [
+        [
+          "bash"
+        ],
+        [
+          "concentrate"
+        ],
+        [
+          "berserk"
+        ]
+      ]
+    },
+    "whirlwind": {
+      "name": "Whirlwind",
+      "tiers": [
+        [
+          "double-swing"
+        ],
+        [
+          "frenzy"
+        ],
+        [
+          "whirlwind"
+        ]
+      ]
+    },
+    "cries": {
+      "name": "War Cries",
+      "tiers": [
+        [
+          "battle-cry"
+        ],
+        [
+          "war-cry"
+        ],
+        [
+          "find-item"
+        ]
+      ]
+    }
+  }
+}

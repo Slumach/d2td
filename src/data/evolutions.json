@@ -153,5 +153,38 @@
       "skill": "multiple-shot",
       "minTier": 2
     }
+  },
+  "whirlwind-barb": {
+    "name": "Whirlwind Barb",
+    "attack": {
+      "skill": "whirlwind",
+      "minTier": 3
+    },
+    "partner": {
+      "skill": "war-cry",
+      "minTier": 2
+    }
+  },
+  "frenzy-barb": {
+    "name": "Frenzy Barb",
+    "attack": {
+      "skill": "frenzy",
+      "minTier": 2
+    },
+    "partner": {
+      "skill": "battle-cry",
+      "minTier": 1
+    }
+  },
+  "singer": {
+    "name": "Singer",
+    "attack": {
+      "skill": "war-cry",
+      "minTier": 2
+    },
+    "partner": {
+      "skill": "find-item",
+      "minTier": 3
+    }
   }
 }

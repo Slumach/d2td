@@ -1,0 +1,20 @@
+{
+  "id": "battle-cry",
+  "skill": "Battle Cry",
+  "archetype": "debuff",
+  "damageType": "none",
+  "skillLevels": [
+    1,
+    5,
+    10,
+    15,
+    20
+  ],
+  "rangeTenths": 30,
+  "rateTicks": 40,
+  "debuff": {
+    "mode": "curse",
+    "radiusTenths": 25,
+    "durationCalc": "auralencalc"
+  }
+}

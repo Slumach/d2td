@@ -1,0 +1,13 @@
+{
+  "id": "whirlwind",
+  "skill": "Whirlwind",
+  "archetype": "melee",
+  "damageType": "phys",
+  "tierBonus": 1974,
+  "rangeTenths": 15,
+  "rateTicks": 12,
+  "melee": {
+    "hitsAll": true,
+    "damagePctCalc": "calc1"
+  }
+}

@@ -31,6 +31,15 @@
         "passive": {}
       }
     },
+    "barbarian": {
+      "token": "BA",
+      "attackMode": "A1",
+      "lines": {
+        "combat": { "weapon": "Hand Axe", "shield": "Buckler" },
+        "whirlwind": { "weapon": "Double Axe" },
+        "cries": { "weapon": "War Hammer" }
+      }
+    },
     "necromancer": {
       "token": "NE",
       "attackMode": "SC",
@@ -85,6 +94,8 @@
     "poison-javelin": { "fly": "poisonjav" },
     "lightning-fury": { "fly": "lightningfury", "impact": ["furylightning"] },
     "plague-javelin": { "fly": "plaguejavelin", "impact": ["plaguejavcloud"] },
+    "battle-cry": { "ring": "battlecry" },
+    "war-cry": { "ring": "warcry" },
     "might": { "overlay": "aura_might_front" },
     "concentration": { "overlay": "concentrationfront" },
     "fanaticism": { "overlay": "fanaticismfront" },
@@ -95,7 +106,7 @@
   },
   "summonBolts": { "pois": "necromage1", "cold": "necromage2", "fire": "necromage3", "ltng": "necromage4" },
   "statusOverlays": { "frozen": "frozenarmor", "poison": "poisonhit" },
-  "iconClasses": ["pal", "sor", "nec", "ama"],
+  "iconClasses": ["pal", "sor", "nec", "ama", "bar"],
   "palettes": ["act1/pal.dat", "act1/pal.pl2"],
   "strings": ["skills.json"]
 }

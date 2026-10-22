@@ -6,13 +6,23 @@ import type { SkillJson } from '../sim/archetypes/types.ts';
 import type { BalanceJson, ClassJson, DesignData, EvolutionJson, MonstersJson } from '../sim/data.ts';
 import balance from './balance.json';
 import amazon from './classes/amazon.json';
+import barbarian from './classes/barbarian.json';
 import necromancer from './classes/necromancer.json';
 import paladin from './classes/paladin.json';
 import sorceress from './classes/sorceress.json';
 import evolutions from './evolutions.json';
 import monsters from './monsters.json';
 import amplifyDamage from './skills/amplify-damage.json';
+import bash from './skills/bash.json';
+import battleCry from './skills/battle-cry.json';
+import berserk from './skills/berserk.json';
+import concentrate from './skills/concentrate.json';
 import criticalStrike from './skills/critical-strike.json';
+import doubleSwing from './skills/double-swing.json';
+import findItem from './skills/find-item.json';
+import frenzy from './skills/frenzy.json';
+import warCry from './skills/war-cry.json';
+import whirlwind from './skills/whirlwind.json';
 import decoy from './skills/decoy.json';
 import lightningFury from './skills/lightning-fury.json';
 import magicArrow from './skills/magic-arrow.json';
@@ -67,6 +77,16 @@ export const SKILL_JSON = [
   criticalStrike,
   pierceSkill,
   decoy,
+  // Barbarian
+  bash,
+  concentrate,
+  berserk,
+  doubleSwing,
+  frenzy,
+  whirlwind,
+  battleCry,
+  warCry,
+  findItem,
   // Paladin
   sacrifice,
   zeal,
@@ -109,7 +129,7 @@ export const SKILL_JSON = [
 
 export const DESIGN: DesignData = {
   skills: SKILL_JSON,
-  classes: [paladin as ClassJson, sorceress as ClassJson, necromancer as ClassJson, amazon as ClassJson],
+  classes: [paladin as ClassJson, sorceress as ClassJson, necromancer as ClassJson, amazon as ClassJson, barbarian as ClassJson],
   evolutions: evolutions as Record<string, EvolutionJson>,
   monsters: monsters as MonstersJson,
   balance: balance as unknown as BalanceJson,

@@ -1,0 +1,14 @@
+{
+  "id": "find-item",
+  "skill": "Find Item",
+  "archetype": "corpse",
+  "damageType": "none",
+  "rangeTenths": 40,
+  "rateTicks": 30,
+  "corpse": {
+    "mode": "gold",
+    "radiusTenths": 20,
+    "minPctCalc": "calc1",
+    "maxPctCalc": "calc1"
+  }
+}

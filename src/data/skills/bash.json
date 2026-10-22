@@ -1,0 +1,18 @@
+{
+  "id": "bash",
+  "skill": "Bash",
+  "archetype": "melee",
+  "damageType": "phys",
+  "skillLevels": [
+    1,
+    5,
+    10,
+    15,
+    20
+  ],
+  "rangeTenths": 11,
+  "rateTicks": 20,
+  "melee": {
+    "damagePctCalc": "calc1"
+  }
+}

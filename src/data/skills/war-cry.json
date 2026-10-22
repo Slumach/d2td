@@ -1,0 +1,12 @@
+{
+  "id": "war-cry",
+  "skill": "War Cry",
+  "archetype": "splash",
+  "damageType": "phys",
+  "rangeTenths": 25,
+  "rateTicks": 40,
+  "splash": {
+    "delivery": "nova",
+    "stunCalc": "calc4"
+  }
+}
