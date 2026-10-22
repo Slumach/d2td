@@ -31,8 +31,12 @@ export interface JoinCode {
   code: string;
 }
 
-/** How asking the router to open the game port went, once it is known. */
-export type UpnpStatus = { state: 'ok'; code: JoinCode } | { state: 'failed' } | { state: 'doubleNat' };
+/**
+ * How opening the game to the internet went, once it is known: through the relay server
+ * (via 'relay'), or by asking the router to open the game port. 'trying' again when the
+ * relay server is lost and the router is asked instead.
+ */
+export type UpnpStatus = { state: 'ok'; code: JoinCode; via?: 'relay' } | { state: 'failed' } | { state: 'doubleNat' } | { state: 'trying' };
 
 export type MpEvent =
   | { kind: 'message'; message: HostMessage }

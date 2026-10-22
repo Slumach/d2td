@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { decodeJoinCode, encodeJoinCode } from './codes.ts';
+import { decodeJoinCode, decodeRelayCode, encodeJoinCode, encodeRelayCode } from './codes.ts';
 
 describe('join codes', () => {
   it('round-trips an address and port', () => {
@@ -35,5 +35,28 @@ describe('join codes', () => {
     expect(caught).toBe(code.length * 31);
     expect(decodeJoinCode('ABCD')).toBeNull();
     expect(decodeJoinCode('UUUU-UUUU-UUUU')).toBeNull();
+  });
+});
+
+describe('relay codes', () => {
+  it('round-trip the relay address, port and room in 16 characters', () => {
+    for (const addr of [
+      { ip: '3.98.12.200', port: 47311, room: 1 },
+      { ip: '54.1.2.3', port: 47311, room: 0xfffff },
+      { ip: '203.0.113.7', port: 65535, room: 123456 },
+    ]) {
+      const code = encodeRelayCode(addr);
+      expect(code).toMatch(/^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/);
+      expect(decodeRelayCode(code)).toEqual(addr);
+      expect(decodeJoinCode(code)).toBeNull();
+    }
+  });
+
+  it('are not mistaken for direct codes, and catch a typo', () => {
+    const direct = encodeJoinCode({ ip: '10.0.0.1', port: 47310 });
+    expect(decodeRelayCode(direct)).toBeNull();
+    const code = encodeRelayCode({ ip: '3.98.12.200', port: 47311, room: 4242 });
+    const typo = (code[0] === 'A' ? 'B' : 'A') + code.slice(1);
+    expect(decodeRelayCode(typo)).toBeNull();
   });
 });

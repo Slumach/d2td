@@ -77,7 +77,7 @@ export class LobbyScene extends Phaser.Scene {
 
   private onEvent(e: MpEvent): void {
     if (e.kind === 'upnp') {
-      this.upnp = e.status;
+      this.upnp = e.status.state === 'trying' ? 'trying' : e.status;
     } else if (e.kind === 'closed') {
       this.message = e.reason;
       this.players = [];
@@ -138,10 +138,10 @@ export class LobbyScene extends Phaser.Scene {
       this.field?.destroy();
       add(this.add.text(LEFT, y, 'Type the code the host gave you.', TEXT));
       y += 50;
-      this.field = new TextField(this, LEFT, y, 360, {
+      this.field = new TextField(this, LEFT, y, 480, {
         value: this.code,
-        placeholder: 'XXXX-XXXX-XXXX',
-        maxLength: 16,
+        placeholder: 'XXXX-XXXX-XXXX(-XXXX)',
+        maxLength: 22,
         allowed: /[0-9A-Za-z -]/,
         onChange: (v) => (this.code = v.toUpperCase()),
         onEnter: () => this.connect(),
@@ -229,14 +229,16 @@ export class LobbyScene extends Phaser.Scene {
     for (const c of codes) {
       add(this.add.text(LEFT, y + 4, c.label, { ...MUTED, color: '#c8c0a0' }));
       add(this.add.text(LEFT + 190, y, c.code, { ...TEXT, fontSize: '28px' }));
-      this.parts.push(...button(this, LEFT + 480, y, { label: 'Copy', onClick: () => void navigator.clipboard?.writeText(c.code), width: 90 }));
+      this.parts.push(...button(this, LEFT + 560, y, { label: 'Copy', onClick: () => void navigator.clipboard?.writeText(c.code), width: 90 }));
       y += 44;
     }
     const upnpText =
       this.upnp === 'trying'
-        ? 'Asking your router to let friends on the internet in...'
+        ? 'Opening the game to friends on the internet...'
         : this.upnp.state === 'ok'
-          ? 'Your router let the game in. Friends anywhere can use the Internet code.'
+          ? this.upnp.via === 'relay'
+            ? 'Friends anywhere can use the Internet code; it goes through the relay server.'
+            : 'Your router let the game in. Friends anywhere can use the Internet code.'
           : this.upnp.state === 'doubleNat'
             ? 'Your internet provider shares your address with other homes, so an Internet code cannot work. Friends on the internet can join through Tailscale.'
             : `Your router did not open the game for the internet. For friends elsewhere, forward TCP port ${DEFAULT_PORT} to this PC in your router, or use Tailscale.`;

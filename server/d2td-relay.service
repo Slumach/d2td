@@ -1,0 +1,26 @@
+# systemd unit for the D2 Tower Defense relay server.
+#   sudo mkdir -p /opt/d2td-relay && sudo cp relay.mjs /opt/d2td-relay/
+#   sudo cp d2td-relay.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now d2td-relay
+#   journalctl -u d2td-relay -f
+# Check the Node path with `command -v node` and change ExecStart if it differs.
+
+[Unit]
+Description=D2 Tower Defense relay server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/d2td-relay/relay.mjs --port 47311
+Restart=always
+RestartSec=2
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

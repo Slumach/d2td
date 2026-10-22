@@ -13,13 +13,17 @@ export interface Connection {
 
 const CONNECT_TIMEOUT_MS = 8000;
 
-/** Connects and says hello. `onClose` gets a reason the player can read. */
+/**
+ * Connects and says hello. `onClose` gets a reason the player can read. `preamble` is a line
+ * sent before the hello: through a relay server, the room to join (server/relay.mjs).
+ */
 export function connectToRelay(
   ip: string,
   port: number,
   hello: Extract<ClientMessage, { t: 'hello' }>,
   onMessage: (message: HostMessage) => void,
   onClose: (reason: string) => void,
+  preamble?: object,
 ): Connection {
   const socket = connect({ host: ip, port });
   socket.setNoDelay(true);
@@ -31,6 +35,7 @@ export function connectToRelay(
   socket.on('connect', () => {
     open = true;
     clearTimeout(timer);
+    if (preamble) sendLine(socket, preamble);
     sendLine(socket, hello);
   });
   readLines(socket, (m) => onMessage(m as HostMessage));

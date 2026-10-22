@@ -12,7 +12,7 @@ import { BrowserWindow, app, dialog, ipcMain, net, protocol, screen, shell } fro
 import { autoUpdater } from 'electron-updater';
 
 import type { JoinCode, LauncherState, MpEvent, SetupResult, SmokeResult, UpdateCheck, UpdateEvent } from '../src/launcher/api.ts';
-import { decodeJoinCode, encodeJoinCode } from '../src/net/codes.ts';
+import { decodeJoinCode, decodeRelayCode, encodeJoinCode, encodeRelayCode } from '../src/net/codes.ts';
 import { DEFAULT_PORT, PROTOCOL, type ClientMessage } from '../src/net/protocol.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../src/render/layout.ts';
 import { extractGame, verifyGame } from '../tools/extract/game.ts';
@@ -22,6 +22,7 @@ import { describe, log, openLog } from './log.ts';
 import { localAddresses } from './net/addresses.ts';
 import { connectToRelay, type Connection } from './net/client.ts';
 import { Relay } from './net/relay.ts';
+import { openTunnel, type Tunnel } from './net/tunnel.ts';
 import { openPort, type PortMapping } from './net/upnp.ts';
 
 // A clean profile for tests and the smoke run: D2TD_USER_DATA=<folder>
@@ -39,6 +40,11 @@ interface Settings {
   volume: number;
   name: string;
   lootFilter: 'default' | 'all';
+  /**
+   * The relay server hosting tries first, "address" or "address:port" (server/relay.mjs,
+   * port 47311 by default); empty skips it. Only the host needs it: relay codes carry it.
+   */
+  relay: string;
 }
 
 function defaultName(): string {
@@ -56,7 +62,7 @@ const assetsDir = () => join(app.getPath('userData'), 'assets');
 const rendererDir = () => join(app.getAppPath(), 'dist');
 
 function loadSettings(): Settings {
-  const defaults: Settings = { d2rPath: null, volume: 80, name: defaultName(), lootFilter: 'default' };
+  const defaults: Settings = { d2rPath: null, volume: 80, name: defaultName(), lootFilter: 'default', relay: '' };
   try {
     return { ...defaults, ...JSON.parse(readFileSync(settingsPath(), 'utf8')) };
   } catch {
@@ -168,6 +174,7 @@ function wireUpdates(win: BrowserWindow): void {
 
 let relay: Relay | undefined;
 let mapping: PortMapping | undefined;
+let tunnel: Tunnel | undefined;
 let connection: Connection | undefined;
 /** Proves to our own relay that our game is its host. */
 const hostToken = randomBytes(16).toString('hex');
@@ -185,11 +192,11 @@ function dataHash(): string {
   }
 }
 
-function joinRelay(win: BrowserWindow, ip: string, port: number, token?: string): void {
+function joinRelay(win: BrowserWindow, ip: string, port: number, token?: string, room?: number): void {
   connection?.close();
   const hello: Extract<ClientMessage, { t: 'hello' }> = { t: 'hello', protocol: PROTOCOL, version: app.getVersion(), data: dataHash(), name: settings.name, token };
   const send = (e: MpEvent) => !win.isDestroyed() && win.webContents.send('mp-event', e);
-  log(`mp: connecting to ${ip}:${port}`);
+  log(`mp: connecting to ${ip}:${port}${room ? ` room ${room}` : ''}`);
   const conn = connectToRelay(
     ip,
     port,
@@ -204,6 +211,7 @@ function joinRelay(win: BrowserWindow, ip: string, port: number, token?: string)
       log(`mp: closed: ${reason}`);
       send({ kind: 'closed', reason });
     },
+    room ? { r: 'join', v: 1, room } : undefined,
   );
   connection = conn;
 }
@@ -214,6 +222,8 @@ async function leaveMultiplayer(): Promise<void> {
   conn?.close();
   relay?.close();
   relay = undefined;
+  tunnel?.close();
+  tunnel = undefined;
   const m = mapping;
   mapping = undefined;
   await m?.close();
@@ -233,20 +243,38 @@ async function hostMultiplayer(win: BrowserWindow): Promise<{ ok: boolean; error
   const codes = localAddresses().map((a) => ({ label: a.kind === 'tailscale' ? 'Tailscale' : 'Same network', code: encodeJoinCode({ ip: a.ip, port }) }));
   log(`mp: hosting on port ${port}; local codes ${codes.map((c) => `${c.label} ${c.code}`).join(', ')}`);
   joinRelay(win, '127.0.0.1', port, hostToken);
+  const status = (e: MpEvent) => !win.isDestroyed() && win.webContents.send('mp-event', e);
   // The router may take a few seconds or not answer at all; the lobby updates when it does
-  void openPort(port, 'D2 Tower Defense', log).then((m) => {
+  const tryRouter = () => void openPort(port, 'D2 Tower Defense', log).then((m) => {
     if (relay !== r) {
       void m?.close();
       return;
     }
     mapping = m ?? undefined;
-    const status: MpEvent = !m
+    const s: MpEvent = !m
       ? { kind: 'upnp', status: { state: 'failed' } }
       : m.externalIp && !m.doubleNat
         ? { kind: 'upnp', status: { state: 'ok', code: { label: 'Internet', code: encodeJoinCode({ ip: m.externalIp, port }) } } }
         : { kind: 'upnp', status: { state: m.doubleNat ? 'doubleNat' : 'failed' } };
-    if (!win.isDestroyed()) win.webContents.send('mp-event', status);
+    status(s);
   });
+  // The relay server first: it needs nothing of the router. The router, and the direct
+  // codes, are the fallbacks when no relay is set or it cannot be reached
+  const address = settings.relay.trim();
+  if (!address) tryRouter();
+  else {
+    void openTunnel(address, port, log, () => {
+      if (relay !== r) return;
+      tunnel = undefined;
+      status({ kind: 'upnp', status: { state: 'trying' } });
+      tryRouter();
+    }).then((t) => {
+      if (relay !== r) return void t?.close();
+      if (!t) return tryRouter();
+      tunnel = t;
+      status({ kind: 'upnp', status: { state: 'ok', via: 'relay', code: { label: 'Internet', code: encodeRelayCode({ ip: t.ip, port: t.port, room: t.room }) } } });
+    });
+  }
   return { ok: true, codes };
 }
 
@@ -369,10 +397,11 @@ void app.whenReady().then(async () => {
   });
   ipcMain.handle('mp-host', () => hostMultiplayer(win));
   ipcMain.handle('mp-join', async (_e, code: string) => {
-    const address = decodeJoinCode(String(code));
+    const viaRelay = decodeRelayCode(String(code));
+    const address = viaRelay ?? decodeJoinCode(String(code));
     if (!address) return { ok: false, error: 'That code is not right. Check it with the host and try again.' };
     await leaveMultiplayer();
-    joinRelay(win, address.ip, address.port);
+    joinRelay(win, address.ip, address.port, undefined, viaRelay?.room);
     return { ok: true };
   });
   ipcMain.on('mp-send', (_e, message: ClientMessage) => connection?.send(message));
@@ -398,7 +427,7 @@ app.on('window-all-closed', () => app.quit());
 // Give the router mapping back on the way out
 let leaving = false;
 app.on('before-quit', (e) => {
-  if (leaving || (!relay && !mapping && !connection)) return;
+  if (leaving || (!relay && !mapping && !connection && !tunnel)) return;
   e.preventDefault();
   leaving = true;
   void leaveMultiplayer().finally(() => app.quit());
