@@ -262,7 +262,7 @@ function firstVariant(row: TxtRow, code: string): string {
 }
 
 /** What a monster plays for a mode it has no COF for: a stationary one stands, a caster casts. */
-const MODE_FALLBACK: Record<string, string[]> = { WL: ['NU', 'S1'], A1: ['S1', 'A2', 'SC'], DT: ['DD'], DD: ['DT'] };
+const MODE_FALLBACK: Record<string, string[]> = { WL: ['NU', 'S1'], A1: ['S1', 'A2', 'SC'], S1: ['NU'], DT: ['DD'], DD: ['DT'] };
 
 interface CompositeSpec {
   folder: string;
