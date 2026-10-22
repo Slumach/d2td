@@ -7,7 +7,8 @@
 import { archetypeOf } from './archetypes/index.ts';
 import type { AuraContribution, MonsterAuraFx, SkillDef, TowerBuff } from './archetypes/types.ts';
 import { within } from './combat.ts';
-import { EVOLVED_LEVEL_INDEX } from './data.ts';
+import { baseSkillId, EVOLVED_LEVEL_INDEX } from './data.ts';
+import { geared } from './items/tower.ts';
 import { idiv } from './fixed.ts';
 import { ELEMENTS, type AuraEmitter, type AuraField, type Monster, type Sim, type Tower } from './state.ts';
 
@@ -18,11 +19,11 @@ const CURSES = 'curses';
 export function activeSkill(sim: Sim, tower: Tower): { skill: SkillDef; lvl: number } | undefined {
   if (tower.evolved) {
     const recipe = sim.data.evolutions.find((e) => e.id === tower.evolved)!;
-    return { skill: sim.data.skills[recipe.attack.skill]!, lvl: EVOLVED_LEVEL_INDEX };
+    return { skill: geared(sim, tower, sim.data.skills[recipe.attack.skill]!), lvl: EVOLVED_LEVEL_INDEX };
   }
   const id = tower.picks[tower.tier - 1];
   const skill = id ? sim.data.skills[id] : undefined;
-  return skill && { skill, lvl: tower.level - 1 };
+  return skill && { skill: geared(sim, tower, skill), lvl: tower.level - 1 };
 }
 
 interface Source {
@@ -93,14 +94,14 @@ export function computeAuras(sim: Sim): AuraField {
         for (const t of s.towers) {
           if (!within(tower, t, aura.radiusUnits)) continue;
           const per = (towerBy[t.id] ??= {});
-          strongestTower((per[skill.id] ??= noBuff()), aura.towers);
+          strongestTower((per[baseSkillId(skill.id)] ??= noBuff()), aura.towers);
         }
       }
       if (aura.monsters) {
         for (const m of s.monsters) {
           if (m.hp <= 0 || !within(tower, m, aura.radiusUnits)) continue;
           const per = (monsterBy[m.id] ??= {});
-          strongestMonster((per[skill.id] ??= noFx()), aura.monsters);
+          strongestMonster((per[baseSkillId(skill.id)] ??= noFx()), aura.monsters);
         }
       }
     }

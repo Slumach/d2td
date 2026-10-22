@@ -13,7 +13,7 @@ const INPUTS = TABLES.map((t) => `global/excel/${t}.txt`);
 /** An in-memory source with an invented two-column table for every table input. */
 function fakeSource(skip: string[] = []): DataSource {
   const files = new Map(INPUTS.filter((p) => !skip.includes(p)).map((p) => [p, 'Id\tLevel\nfoo\t3\n']));
-  files.set('local/lng/strings/monsters.json', '[{"id":1,"Key":"foo","enUS":"Foo"}]');
+  for (const n of ['monsters', 'item-names', 'item-runes', 'item-modifiers', 'item-nameaffixes']) files.set(`local/lng/strings/${n}.json`, '[{"id":1,"Key":"foo","enUS":"Foo"}]');
   return {
     label: 'fake',
     exists: (p: string) => files.has(p),
@@ -38,8 +38,8 @@ describe('game extraction', () => {
     const source = fakeSource();
     const progress: number[] = [];
     const list = await extractGame(source, out, (p) => progress.push(p.done), tableJobs(source));
-    expect(Object.keys(list.files).sort()).toEqual([...TABLES, 'monstrings'].map((t) => `data/${t}.json`).sort());
-    expect(progress.at(-1)).toBe(TABLES.length + 1);
+    expect(Object.keys(list.files).sort()).toEqual([...TABLES, 'monstrings', 'itemstrings'].map((t) => `data/${t}.json`).sort());
+    expect(progress.at(-1)).toBe(TABLES.length + 2);
     expect(verifyGame(out)).toEqual({ ok: true, bad: [] });
   });
 

@@ -3,6 +3,7 @@
 
 import type { MonsterAuraFx, TowerBuff } from './archetypes/types.ts';
 import type { GameData } from './data.ts';
+import type { Gear } from './items/gear.ts';
 import type { GameMap } from './map.ts';
 import type { Rng } from './rng.ts';
 
@@ -91,6 +92,9 @@ export interface Monster {
   y: number;
   /** The player whose tower last hurt it: the kill gold goes to them. */
   lastHit: number;
+  /** The tower that last hurt it: its gold find and magic find apply to the kill. */
+  lastTower: number;
+  poisonTower: number;
   /** Timed statuses from on-hit control skills. */
   slowPct: number;
   slowTicks: number;
@@ -148,6 +152,8 @@ export interface Tower {
   partnerLevel: number;
   /** Summon towers: ticks until the next summon may be raised. */
   summonCooldown: number;
+  /** What it wears (D2's paperdoll). Replaced, never mutated, when an item goes on or comes off. */
+  gear?: Gear;
   /** Evolved towers cast their partner's skill too, on its own cooldown. */
   partnerCooldown: number;
 }
@@ -291,4 +297,6 @@ export interface Sim {
   fx: AuraField;
   /** Who is acting right now (a tower's owner), so a kill pays them. Not state: set before every action. */
   actor: number;
+  /** The tower acting right now (0 for none), so its gold find and magic find apply. */
+  actorTower: number;
 }

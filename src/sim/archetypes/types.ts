@@ -2,6 +2,7 @@
 // resolve() turns it plus its skills.txt and missiles.txt rows into a SkillDef with all
 // five tower levels precomputed, and its behaviour hooks run that SkillDef in the sim.
 
+import type { TowerGear } from '../items/gear.ts';
 import type { Element, Missile, Sim, Tower } from '../state.ts';
 import type { TableRow, Tables } from '../tables.ts';
 
@@ -157,6 +158,8 @@ export interface ControlDef extends SkillCommon {
 }
 
 export interface TowerBuff {
+  /** A melee tower's worn gear, for its on-hit stats (crushing blow, deadly strike, added damage). */
+  gear?: TowerGear;
   damagePct: number;
   attackSpeedPct: number;
   /** Fire added to every hit, 1/256 HP (Enchant). */

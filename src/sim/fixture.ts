@@ -4,6 +4,7 @@
 // Real numbers come from assets-extracted/data.
 
 import { DESIGN } from '../data/design.ts';
+import { FIXTURE_ITEM_TABLES, FIXTURE_ITEM_WEAPONS } from './items/fixture.ts';
 import { buildGameData, type BuildOptions, type DesignData, type GameData, type TableRow, type Tables } from './data.ts';
 
 function damageCols(prefix: 'skill' | 'missile', min: number, max: number, step: number): TableRow {
@@ -86,8 +87,9 @@ const HAND_TABLES: Tables = {
     { '*constant desc': 'Champion Damage % Bonus', constants: 50 },
   ],
   monseq: Array.from({ length: 15 }, (_, frame) => ({ sequence: 'seq_shamanresurrect', mode: 'A2', frame })),
-  weapons: [{ name: 'Crystal Sword', mindam: 4, maxdam: 12 }],
+  weapons: [{ name: 'Crystal Sword', mindam: 4, maxdam: 12 }, ...FIXTURE_ITEM_WEAPONS],
   monstrings: [],
+  ...FIXTURE_ITEM_TABLES,
   levels: [1, 2, 3, 4, 5].flatMap((act) =>
     [0, 1, 2].map((i) => ({ Name: `act${act}-${i}`, Act: act - 1, mon1: 'zombie1', MonLvlEx: act * 5 + i, 'MonLvlEx(N)': 30 + act * 3 + i, 'MonLvlEx(H)': 34 + act * 2 + i })),
   ),

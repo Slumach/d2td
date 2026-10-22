@@ -2,10 +2,11 @@
 // connect). Weapon damage comes from weapons.txt, the skill adds a damage percent, extra
 // swings (Zeal) and elemental damage as a percent of the weapon roll (Vengeance).
 
-import { canHurt, dealDamage, findTarget, withBonus } from '../combat.ts';
+import { canHurt, damageAgainst, dealDamage, dealRaw, findTarget, poison, withBonus } from '../combat.ts';
 import { idiv } from '../fixed.ts';
 import { rollInt } from '../rng.ts';
-import { ELEMENTS, type Element } from '../state.ts';
+import type { TowerGear } from '../items/gear.ts';
+import { ELEMENTS, type Element, type Monster, type Sim } from '../state.ts';
 import { findRow, int } from '../tables.ts';
 import { calcAt, common, fields, filterFrom, perLevel } from './common.ts';
 import type { ArchetypeModule, MeleeDef } from './types.ts';
@@ -48,13 +49,20 @@ export const melee: ArchetypeModule<MeleeDef> = {
   act(sim, tower, skill, lvl, buff) {
     const { swings, damagePct, elementalPct } = skill.levels[lvl]!;
     const elements = ELEMENTS.filter((e) => e === 'phys' || (elementalPct[e] ?? 0) > 0);
+    // The gear's added damage can hurt what the weapon cannot
+    const hurting = buff.gear ? ELEMENTS.filter((e) => elements.includes(e) || buff.gear!.adds[e]) : elements;
     let swung = false;
     for (let i = 0; i < swings; i++) {
-      const target = findTarget(sim, tower, skill.rangeUnits, (m) => elements.some((e) => canHurt(sim, m, e, ALL)));
+      const target = findTarget(sim, tower, skill.rangeUnits, (m) => hurting.some((e) => canHurt(sim, m, e, ALL)));
       if (!target) break;
       swung = true;
-      const weaponRoll = rollInt(sim.state.rng, skill.weapon.min, skill.weapon.max);
+      const gear = buff.gear;
+      const roll = rollInt(sim.state.rng, skill.weapon.min, skill.weapon.max);
+      // Deadly strike doubles the physical part of the hit
+      const weaponRoll = gear && gear.deadlyStrikePct > 0 && rollInt(sim.state.rng, 0, 99) < gear.deadlyStrikePct ? roll * 2 : roll;
+      const hpBefore = target.hp;
       dealDamage(sim, target, withBonus(weaponRoll, damagePct + buff.damagePct), 'phys', ALL);
+      if (gear) onHit(sim, target, gear, hpBefore);
       for (const e of elements) {
         if (e === 'phys') continue;
         dealDamage(sim, target, withBonus(idiv(weaponRoll * elementalPct[e]!, 100), buff.damagePct), e, ALL);
@@ -65,3 +73,33 @@ export const melee: ArchetypeModule<MeleeDef> = {
     return swung;
   },
 };
+
+/**
+ * A melee tower's gear on a hit: its added elemental damage, then crushing blow (a quarter
+ * of the monster's life before the hit, an eighth for uniques and bosses, unless it is
+ * physical immune), slow and freeze. Bosses are slowed, never frozen.
+ */
+function onHit(sim: Sim, target: Monster, gear: TowerGear, hpBefore: number): void {
+  for (const e of ELEMENTS) {
+    const add = gear.adds[e];
+    if (e === 'phys' || !add || target.hp <= 0) continue;
+    const amount = rollInt(sim.state.rng, add[0], add[1]) * 256;
+    if (e === 'pois') poison(sim, target, damageAgainst(sim, target, amount, e, ALL), Math.max(1, gear.poisonTicks));
+    else dealDamage(sim, target, amount, e, ALL);
+    if (e === 'cold' && target.hp > 0 && gear.coldTicks > 0) target.chillTicks = Math.max(target.chillTicks, gear.coldTicks);
+  }
+  if (target.hp <= 0) return;
+  if (gear.crushingBlowPct > 0 && rollInt(sim.state.rng, 0, 99) < gear.crushingBlowPct && canHurt(sim, target, 'phys', ALL)) {
+    const share = target.rank === 'unique' || target.rank === 'boss' ? 8 : 4;
+    dealRaw(sim, target, idiv(hpBefore, share));
+  }
+  if (target.hp <= 0) return;
+  if (gear.slowPct > 0) {
+    target.slowPct = Math.max(target.slowPct, gear.slowPct);
+    target.slowTicks = Math.max(target.slowTicks, SLOW_TICKS);
+  }
+  if (gear.freezeTicks > 0 && target.rank !== 'boss') target.freezeTicks = Math.max(target.freezeTicks, gear.freezeTicks);
+}
+
+/** How long an item's slow target holds after a hit: D2 keeps it while the hits keep coming; two seconds here. */
+const SLOW_TICKS = 40;

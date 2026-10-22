@@ -9,6 +9,7 @@
 //   pulse  takes a percent of current HP off everything in radius, as the skill's element
 //          (Static Field). It cannot take a monster below the difficulty's floor.
 
+import { baseSkillId, skillPlus } from '../data.ts';
 import { aliveWithin, damageAgainst, dealRaw, findTarget } from '../combat.ts';
 import { d2FramesToTicks, idiv } from '../fixed.ts';
 import type { Element, Monster } from '../state.ts';
@@ -38,9 +39,12 @@ const RESIST_STATS: Record<string, Element> = {
 };
 
 /** A curse is worth recasting on a monster that lacks it, or whose copy is weaker or half spent. */
+/** A curse's strength: its tower level plus the +skills it was cast with. */
+const strength = (skill: string, lvl: number) => lvl + skillPlus(skill);
+
 function wantsCurse(m: Monster, skill: string, lvl: number, duration: number): boolean {
-  const has = m.curses.find((c) => c.skill === skill);
-  return !has || has.lvl < lvl || has.ticksLeft * 2 < duration;
+  const has = m.curses.find((c) => baseSkillId(c.skill) === baseSkillId(skill));
+  return !has || strength(has.skill, has.lvl) < strength(skill, lvl) || has.ticksLeft * 2 < duration;
 }
 
 export const debuff: ArchetypeModule<DebuffDef> = {
@@ -85,9 +89,12 @@ export const debuff: ArchetypeModule<DebuffDef> = {
       const target = findTarget(sim, tower, skill.rangeUnits, (m) => wantsCurse(m, skill.id, lvl, level.durationTicks));
       if (!target) return false;
       for (const m of aliveWithin(sim, target, level.radiusUnits)) {
-        const has = m.curses.find((c) => c.skill === skill.id);
+        const has = m.curses.find((c) => baseSkillId(c.skill) === baseSkillId(skill.id));
         if (has) {
-          has.lvl = Math.max(has.lvl, lvl);
+          if (strength(skill.id, lvl) > strength(has.skill, has.lvl)) {
+            has.skill = skill.id;
+            has.lvl = lvl;
+          }
           has.ticksLeft = Math.max(has.ticksLeft, level.durationTicks);
         } else {
           m.curses.push({ skill: skill.id, lvl, ticksLeft: level.durationTicks });

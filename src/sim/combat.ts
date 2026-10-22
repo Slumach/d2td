@@ -1,5 +1,6 @@
 // Targeting, resistance and damage. Every hit in the sim goes through dealDamage.
 
+import { gearOf } from './items/tower.ts';
 import type { HitFilter, MonsterAuraFx, SkillCommon, TowerBuff } from './archetypes/types.ts';
 import { idiv } from './fixed.ts';
 import { rollInt } from './rng.ts';
@@ -101,7 +102,10 @@ export function dealDamage(
 ): number {
   if (monster.hp <= 0) return 0;
   const dealt = damageAgainst(sim, monster, amount, element, filter);
-  if (dealt > 0) monster.lastHit = sim.actor;
+  if (dealt > 0) {
+    monster.lastHit = sim.actor;
+    monster.lastTower = sim.actorTower;
+  }
   monster.hp -= dealt;
   if (monster.hp <= 0) killMonster(sim, monster);
   return dealt;
@@ -150,12 +154,14 @@ export function poison(sim: Sim, monster: Monster, total: number, ticks: number)
   monster.poisonPerTick = idiv(total + ticks - 1, ticks);
   monster.poisonTicks = ticks;
   monster.poisonBy = sim.actor;
+  monster.poisonTower = sim.actorTower;
 }
 
 /** Damage that already went through resistance (poison ticks, Static Field). */
 export function dealRaw(sim: Sim, monster: Monster, amount: number): void {
   if (monster.hp <= 0 || amount <= 0) return;
   monster.lastHit = sim.actor;
+  monster.lastTower = sim.actorTower;
   monster.hp -= amount;
   if (monster.hp <= 0) killMonster(sim, monster);
 }
@@ -175,7 +181,10 @@ export function bounty(sim: Sim, monster: Monster): number {
 export function killMonster(sim: Sim, monster: Monster): void {
   const s = sim.state;
   monster.hp = 0;
-  const gold = bounty(sim, monster);
+  // Gold find on the killing tower's gear adds to the bounty, as in D2
+  const by = monster.lastTower ? s.towers.find((t) => t.id === monster.lastTower) : undefined;
+  const goldFind = by ? gearOf(sim, by).goldFindPct : 0;
+  const gold = bounty(sim, monster) + idiv(bounty(sim, monster) * goldFind, 100);
   const killer = Math.min(monster.lastHit, s.gold.length - 1);
   s.gold[killer]! += gold;
   s.kills++;

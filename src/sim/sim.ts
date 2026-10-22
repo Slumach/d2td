@@ -18,6 +18,7 @@ import { decayCorpses, spawnMonsters, updateMonsters } from './monsters.ts';
 import { createRng } from './rng.ts';
 import type { Command, Sim, TimedCommand, Tower } from './state.ts';
 import { updateSummons } from './archetypes/summon.ts';
+import { geared, gearOf, withGear } from './items/tower.ts';
 import { build, evolve, pickBranch, pickSkill, sell, setTargeting, towerById, upgrade, upgradeTier } from './towers.ts';
 
 export type * from './state.ts';
@@ -43,6 +44,7 @@ export function createSim(data: GameData, seed: number, opts: SimOptions = {}): 
     arcOwners: Array.from({ length: ARC_COUNT }, (_, k) => k % players),
     fx: EMPTY_FIELD,
     actor: 0,
+    actorTower: 0,
     state: {
       tick: 0,
       rng: createRng(seed),
@@ -211,11 +213,14 @@ export function attackInterval(sim: Sim, tower: Tower, skill: SkillDef, lvl: num
 function updateTowers(sim: Sim): void {
   for (const tower of sim.state.towers) {
     sim.actor = tower.owner;
+    sim.actorTower = tower.id;
     if (tower.summonCooldown > 0) tower.summonCooldown--;
-    const buff = sim.fx.towers[tower.id] ?? NO_BUFF;
+    const auraBuff = sim.fx.towers[tower.id] ?? NO_BUFF;
+    const gear = gearOf(sim, tower);
     if (tower.evolved && tower.partnerSkill) {
-      const partner = sim.data.skills[tower.partnerSkill]!;
+      const partner = geared(sim, tower, sim.data.skills[tower.partnerSkill]!);
       const act = archetypeOf(partner).act;
+      const buff = withGear(auraBuff, gear, partner);
       if (tower.partnerCooldown > 0) tower.partnerCooldown--;
       else if (act && act(sim, tower, partner, tower.partnerLevel, buff)) {
         tower.partnerCooldown = attackInterval(sim, tower, partner, tower.partnerLevel, buff) - 1;
@@ -228,6 +233,7 @@ function updateTowers(sim: Sim): void {
     const active = activeSkill(sim, tower);
     const act = active && archetypeOf(active.skill).act;
     if (!active || !act) continue;
+    const buff = withGear(auraBuff, gear, active.skill);
     if (act(sim, tower, active.skill, active.lvl, buff)) {
       tower.cooldown = attackInterval(sim, tower, active.skill, active.lvl, buff) - 1;
     }
@@ -239,6 +245,7 @@ function updateMissiles(sim: Sim): void {
   const gone = new Set<number>();
   for (const missile of [...s.missiles]) {
     sim.actor = towerById(sim, missile.towerId)?.owner ?? 0;
+    sim.actorTower = missile.towerId;
     const skill = sim.data.skills[missile.skill]!;
     const update = archetypeOf(skill).updateMissile;
     if (!update || !update(sim, missile, skill)) gone.add(missile.id);

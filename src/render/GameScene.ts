@@ -14,7 +14,7 @@ import { MpSession } from '../launcher/session.ts';
 import { Lockstep } from '../net/lockstep.ts';
 import type { LobbyPlayer } from '../net/protocol.ts';
 import { actJustStarted, takeCheckpoint, type Checkpoint } from '../sim/checkpoint.ts';
-import { baseMonsterId, buildGameData, MAX_TIER, MAX_TOWER_LEVEL, stageName, waveLabel as labelOf, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
+import { baseMonsterId, baseSkillId, buildGameData, MAX_TIER, MAX_TOWER_LEVEL, stageName, waveLabel as labelOf, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
 import { standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
 import { aliveOf, arcOwner, ringOf, seatOf, type MatchMode } from '../sim/match.ts';
@@ -878,7 +878,7 @@ export class GameScene extends Phaser.Scene {
     for (const m of s.missiles) {
       seen.add(m.id);
       const skill = this.sim.data.skills[m.skill];
-      const art = SKILL_ART[m.skill];
+      const art = SKILL_ART[baseSkillId(m.skill)];
       if (!skill || !art) continue;
       const { x: px, y: py } = project(m.x, m.y);
       let view = this.missiles.get(m.id);
@@ -889,7 +889,7 @@ export class GameScene extends Phaser.Scene {
           sprite = this.sprite(texture, px, py).setDepth(DEPTH.effects);
           if ((metaOf(this, texture).blend ?? 0) > 0) sprite.setBlendMode(Phaser.BlendModes.ADD);
         }
-        view = { sprite, x: m.x, y: m.y, skill: m.skill, art: art.fly ?? '', age: 0 };
+        view = { sprite, x: m.x, y: m.y, skill: baseSkillId(m.skill), art: art.fly ?? '', age: 0 };
         if (art.fly) this.sounds.travel(art.fly);
         this.missiles.set(m.id, view);
         if (art.fall) this.fx.fall(art.fall, { x: px, y: py }, m.ticksLeft * TICK_MS, () => undefined);
@@ -1452,7 +1452,7 @@ export class GameScene extends Phaser.Scene {
       if (em.towerId === tower.id) return false;
       const src = towerById(sim, em.towerId);
       return src !== undefined && (src.x - tower.x) ** 2 + (src.y - tower.y) ** 2 <= em.radiusUnits * em.radiusUnits;
-    }).map((em) => this.skillName(em.skill)))];
+    }).map((em) => this.skillName(baseSkillId(em.skill))))];
     if (under.length) lines.push(`Under ${under.join(', ')}`);
     const level = active ? upgradeCost(sim, tower) : undefined;
     const tier = tierCost(sim, tower);

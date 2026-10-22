@@ -1,5 +1,6 @@
 // Monster spawning, abilities and movement. Monsters walk the ring and lap it until killed.
 
+import { gearOf } from './items/tower.ts';
 import { blockerAhead } from './archetypes/summon.ts';
 import { dealRaw, distSq, monsterFx } from './combat.ts';
 import { idiv } from './fixed.ts';
@@ -36,6 +37,8 @@ export function createMonster(sim: Sim, def: string, wave: number, rank: Rank, m
     id: s.nextId++,
     walked: 0,
     lastHit: 0,
+    lastTower: 0,
+    poisonTower: 0,
     poisonBy: 0,
     def,
     wave,
@@ -129,6 +132,7 @@ function tickStatuses(sim: Sim, m: Monster): boolean {
   if (m.poisonTicks > 0) {
     m.poisonTicks--;
     sim.actor = m.poisonBy;
+    sim.actorTower = m.poisonTower;
     dealRaw(sim, m, m.poisonPerTick);
     if (m.poisonTicks === 0) m.poisonPerTick = 0;
   }
@@ -170,8 +174,10 @@ export function updateMonsters(sim: Sim): void {
       m.blockedTicks++;
       walk(sim, m, Math.max(0, ahead(sim.map, m.dist, blocker.dist) - rules.blockRangeUnits));
       if (m.attackCooldown === 0) {
-        const hit = rollInt(s.rng, m.minDamage, m.maxDamage);
-        blocker.hp -= hit - idiv(hit * Math.min(100, monsterFx(sim, m).damageDownPct), 100);
+        if (landsOn(sim, m, blocker.towerId)) {
+          const hit = rollInt(s.rng, m.minDamage, m.maxDamage);
+          blocker.hp -= hit - idiv(hit * Math.min(100, monsterFx(sim, m).damageDownPct), 100);
+        }
         m.attackCooldown = rules.monsterAttackTicks;
       }
     } else {
@@ -197,3 +203,19 @@ export function decayCorpses(sim: Sim): void {
   s.corpses = s.corpses.filter((c) => c.ticksLeft > 0);
 }
 
+/**
+ * Whether a monster's swing lands on a summon. A summon of a tower wearing armour is hit by
+ * D2's chance to hit (attack rating against the gear's defence, 5% to 95%, both at the
+ * monster's level) and then blocks by the gear's block chance; a summon of an unarmoured
+ * tower is always hit, as before items.
+ */
+function landsOn(sim: Sim, m: Monster, towerId: number): boolean {
+  const tower = sim.state.towers.find((t) => t.id === towerId);
+  if (!tower?.gear) return true;
+  const gear = gearOf(sim, tower);
+  if (gear.defense <= 0 && gear.blockPct <= 0) return true;
+  const ar = sim.data.monsters[m.def]!.attackRating;
+  const chance = gear.defense > 0 ? Math.min(95, Math.max(5, idiv(100 * ar, Math.max(1, ar + gear.defense)))) : 100;
+  if (rollInt(sim.state.rng, 0, 99) >= chance) return false;
+  return rollInt(sim.state.rng, 0, 99) >= gear.blockPct;
+}

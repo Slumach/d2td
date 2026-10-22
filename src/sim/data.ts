@@ -10,6 +10,7 @@ import { DIFFICULTIES, DIFFICULTY_NAMES, levelVariantId, variantId, type Difficu
 import { ELEMENTS, MONSTER_MODS, type Element, type MonsterMod, type Rank } from './state.ts';
 import { createMap } from './map.ts';
 import { findRow, int, monumodConstant, str, type TableRow, type Tables } from './tables.ts';
+import { buildItemData, type ItemData } from './items/data.ts';
 
 export type { TableRow, Tables } from './tables.ts';
 
@@ -275,6 +276,8 @@ export interface MonsterDef {
   resist: Record<Element, number>;
   undead: boolean;
   demon: boolean;
+  /** D2 attack rating: A1TH percent of monlvl TH at the difficulty's level. Decides hits on armoured summons. */
+  attackRating: number;
   /** Ticks between AI decisions (monstats aidel). */
   aiDelayTicks: number;
   resurrect?: { monTypes: string[]; chancePct: number; radiusUnits: number; castTicks: number };
@@ -390,6 +393,28 @@ export interface GameData {
   ladders: Ladder[];
   economy: Economy;
   rules: Rules;
+  /** Every item the tables hold (src/sim/items/data.ts). */
+  items: ItemData;
+  /** skills.txt skill name to its Id, for items that name a skill by number. */
+  skillIds: Record<string, string>;
+  /**
+   * A skill as a geared tower casts it: its skills.txt levels raised by `plus`, and a melee
+   * skill swinging `weapon` (whole HP). Built once and kept in `skills` under the returned
+   * id, so missiles and curses look it up like any skill.
+   */
+  skillVariant: (id: string, plus: number, weapon?: { min: number; max: number }) => string;
+}
+
+/** The skill a variant id (blessed-hammer+3) was built from. */
+export function baseSkillId(id: string): string {
+  const at = id.indexOf('+');
+  return at < 0 ? id : id.slice(0, at);
+}
+
+/** The +skill levels a variant id carries (0 for a plain skill). */
+export function skillPlus(id: string): number {
+  const at = id.indexOf('+');
+  return at < 0 ? 0 : parseInt(id.slice(at + 1), 10) || 0;
 }
 
 const RESIST_COLUMNS: Record<Element, string> = {
@@ -533,6 +558,7 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
     resist,
     undead: int(row, 'lUndead') === 1 || int(row, 'hUndead') === 1,
     demon: int(row, 'demon') === 1,
+    attackRating: idiv(int(row, col('A1TH')) * int(lvlRow, lvlCol('TH')), 100),
     aiDelayTicks: Math.max(1, d2FramesToTicks(int(row, col('aidel')))),
     resurrect: resurrect && {
       monTypes: [resurrect.monType].flat(),
@@ -1012,6 +1038,26 @@ export function buildGameData(
         }
       : undefined;
 
+  const skillVariant = (id: string, plus: number, weapon?: { min: number; max: number }) => {
+    const key = `${id}+${plus}${weapon ? `@${weapon.min}-${weapon.max}` : ''}`;
+    if (skills[key]) return key;
+    const json = jsonById.get(id);
+    if (!json) throw new Error(`No skill ${id} to raise`);
+    const ladder = ladders.find((l) => l.skill === id);
+    const levels = (ladder?.levels ?? json.skillLevels ?? []).map((l) => l + plus);
+    let def = resolveSkill(tables, json, design, weaponFor(id), levels);
+    if (ladder) def = withTierBonus(def, ladder.tierBonus);
+    if (weapon && def.archetype === 'melee') def = { ...def, weapon: { min: weapon.min * 256, max: weapon.max * 256 } };
+    skills[key] = { ...def, id: key };
+    return key;
+  };
+  const skillIds: Record<string, string> = {};
+  for (const r of tables.skills) {
+    const name = str(r, 'skill');
+    const num = r['*Id'] ?? r['Id'];
+    if (name && num !== undefined) skillIds[name] = String(num);
+  }
+
   return {
     acts: m.acts,
     skills,
@@ -1022,6 +1068,9 @@ export function buildGameData(
     ladders,
     economy: economyFrom(design.balance),
     rules,
+    items: buildItemData(tables),
+    skillIds,
+    skillVariant,
     ...(extendWaves ? { extendWaves } : {}),
   };
 }

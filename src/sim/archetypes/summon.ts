@@ -195,6 +195,7 @@ export function updateSummons(sim: Sim): void {
   const reach = sim.data.rules.blockRangeUnits + REACH;
   for (const unit of s.summons) {
     sim.actor = s.towers.find((t) => t.id === unit.towerId)?.owner ?? 0;
+    sim.actorTower = unit.towerId;
     if (unit.shovedTicks > 0) unit.shovedTicks--;
     if (unit.kind === 'revive' && unit.ticksLeft > 0 && --unit.ticksLeft === 0) unit.hp = 0;
     if (unit.hp <= 0 || --unit.cooldown > 0) continue;

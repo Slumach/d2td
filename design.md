@@ -293,6 +293,35 @@ After wave 75 the run goes on forever and never ends in a win. Every 10 waves is
 
 Harness: the itemless ordinary bots now all lose by early Tier 1 (TWOLINE and PALADIN on wave 77 with Hell Baal still lapping; NECRO and MIXED3 in Hell Act 2), so nothing stalls on Baal any more. The target for a bot in best-in-slot items (dies between waves 175 and 225) is tuned in Stage F, with the item bots.
 
+### Stage C: item data (Oct 22)
+
+Items come from the player's install, nothing hand-listed: every spawnable base in weapons.txt and armor.txt, and from misc.txt the rings, amulets, jewels, gems and runes (583 bases), with each base's type chain from itemtypes.txt; 396 uniques, 140 set items in 35 sets with their partial and full bonuses, 517 magic prefixes and 474 suffixes, rare names, 99 runewords and the gem and rune socket effects. Names are D2R's strings. Charms, potions, scrolls, keys and quest items are left out. The model is src/sim/items: data.ts reads the tables, item.ts rolls an item (a plain JSON record a command or a save can carry whole) on the sim's seeded RNG, gear.ts sums what a tower wears, tower.ts applies it in the sim.
+
+- Rolling is D2's: the affix level from the item level and the base's quality and magic levels; a magic item has a prefix, a suffix or both; a rare 3 to 6 affixes, at most three of each, one per affix group; affixes only from their item types and never their excluded types, class affixes only on that class's items; uniques and set items by rarity among those of the base at or under the item level, falling back to rare when none fits. Every property rolls once between its min and max; properties.txt turns its code into stats (func 15, 16 and 17 for elemental min, max and length, 21 for +class skills, 11 for chance to cast).
+- Paperdoll: weapon, shield, helm, body armour, gloves, boots, belt, two rings, amulet, all live. A two-handed weapon (2handed and not 1or2handed) needs the shield hand free, and a shield needs a one-handed weapon. Class items (itemtypes.txt Class: Auric Shields, Orbs, Voodoo Heads and the other four classes' items) fit only their class's towers; with three tower classes, the other four classes' items fit no tower and are for selling.
+- Sockets: a base's limit is its type's MaxSockets for the item level (up to 25, 40, above), capped by its own gemsockets. A gem or rune gives its weaponMod, helmMod (helms and body armour) or shieldMod stats by where it sits; a jewel its own stats. Runes in order, filling exactly the sockets of a white or superior item of an allowed type, make the runeword, with the runes' own stats on top.
+- Per-level stats ("based on character level") are taken at the item's level, capped at 99: a tower has no character level.
+
+Stat mapping (src/sim/items/gear.ts and tower.ts), D2's values throughout:
+
+| D2 stat | On a tower |
+| --- | --- |
+| +all skills, +class skills (that class only), +skill tab of the class | levels added to the tower's line skill: skills.txt levels 1, 5, 10, 15, 20 become 1+n ... 20+n, on every tier and on an evolved tower's attack and partner. The raised skill keeps its art and counts as the same curse or aura. |
+| +a single skill (by name or Id), +fire skills (on fire skills) | the same, when it is the tower's skill |
+| Enhanced damage, +min/+max damage | melee towers: the worn weapon's base damage (ethereal +50%) plus the flat damage, with enhanced damage added to the skill's damage percent. Spells take none of it, as in D2. |
+| Added fire, cold, lightning, magic and poison damage | melee towers: an extra hit of that element per swing (cold with its chill length, poison over its length) |
+| Increased attack speed | melee towers: attack speed, at D2's effective rate 120 x IAS / (120 + IAS) |
+| Faster cast rate | every other tower: cast speed, the same diminishing rate |
+| Crushing blow | melee: a quarter of the monster's life before the hit (an eighth for uniques and bosses), never on physical immunes |
+| Deadly strike | melee: doubles the physical part of the hit |
+| Slow target, freeze target | melee: slows for two seconds; freezes (never bosses) |
+| Gold find | the killing tower's bounty, added: 100% gold find doubles it |
+| Magic find | the killing tower's drops (Stage D) |
+| Defence, enhanced defence, block | durability: monsters hit the tower's summons by D2's chance to hit (their attack rating against the defence, 5% to 95%) and then the summon blocks by the block chance. Monsters never attack towers. |
+| Resistances, life, mana, leech, attributes, light radius | nothing |
+
+Not yet built: chance to cast on hit and on attack (the stat is read and kept, but a tower casts only its own skills), open wounds and pierce; the worn weapon does not yet change the tower's weapon layer (the class composites are extracted with one weapon each).
+
 ## Overnight decisions
 
 Calls made without asking, each the option closest to Diablo II's own rules.
@@ -302,6 +331,10 @@ Calls made without asking, each the option closest to Diablo II's own rules.
 - Oct 22: Act 5 has fifteen regular waves for its thirteen listed monsters. The two spare Hell waves are Imps (Demon Gremlin) and Death Maulers again, at stronger variants of their own families, rather than monsters from outside the list.
 - Oct 22: Zeal's "adjacent tiles" reach is the orthogonally adjacent path tile (1.1 tiles); diagonal neighbours would be 1.5 tiles, the old reach.
 - Oct 22: the Zakarum Priest heals and the Overseer cries for help in D2; the job asks for the Fallen Shaman treatment, so both raise their own kind (Zealots; Enslaved) and walk with their monstats party.
+- Oct 22: a tower has no character level, so per-level item stats take the item's own level (capped at 99) as the wearer's.
+- Oct 22: D2 adds weapon damage, enhanced damage and added elemental damage to attacks, never to spells. Towers follow it: only melee towers use them; the casters gain from +skills and faster cast rate, as a D2 caster does.
+- Oct 22: monsters never attack towers, so armour's durability is the tower's summons: monsters roll D2's chance to hit against the gear's defence and then its block.
+- Oct 22: items of the four classes without a tower (Amazon, Barbarian, Druid, Assassin) drop and sell but fit no tower.
 
 ## Open questions
 
