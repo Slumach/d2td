@@ -226,7 +226,7 @@ First run on real content (Oct 22, all five acts, before the Stage A economy reb
 
 | Action | Gold |
 | --- | --- |
-| Build a class tower | 600 for the first, then each tower owned raises the next by 110% (0.3.7: 600, 660, 726, 798, 878, ...; a legend counts once). 0.3.4 to 0.3.6 charged a flat 600; before that each tower raised it 220% for the first five and 130% after. |
+| Build a class tower | 600 for the first, then each tower owned raises the next by 115% (0.3.8: 600, 690, 793, 912, 1049, ...; 110% in 0.3.7; a legend counts once). 0.3.4 to 0.3.6 charged a flat 600; before that each tower raised it 220% for the first five and 130% after. |
 | T1 skill pick | free |
 | Skill level +1 | Geometric from a base of 60 at T1, 240 at T2, 600 at T3 (300 before Oct 23), 220% a level |
 | Upgrade to T2 | 400 |
@@ -284,6 +284,19 @@ Does upgrading beat spamming? (npm run report, seeds 1 and 2; the bots as they c
 | MIXED3 | 84, 108 | 23 / 33 | 55, 60 |
 
 Towers as each boss wave starts (free bots, median of seeds 1 and 2): TWOLINE 2, 3, 7, 8, 11 through Normal, 14, 14, 15, 17, 19 through Nightmare, 20, 21, 23, 24, 25 through Hell, 27 to 29 in endless; PALADIN 2, 3, 6, 8, 9 / 12, 13, 16, 18, 20 / 21, 23, 24, 25, 26 / 27 to 29; NECRO 2, 4, 7, 8, 11 / 14, 15, 19, 21, 23 / 24, 24, 24, 24; MIXED3 1, 5, 8, 10, 15 / 15, 15, 16, 16, 17 / 18, 21, 23, 23, 25 / 27 to 33. Tier timing: T2 in Normal Act 2 (NECRO Act 3), T3 from Normal Act 5 (PALADIN) to Nightmare Act 3 (TWOLINE), MIXED3 on target in Nightmare Act 1; no free bot evolves (target Hell Act 3, still missed; held to 12, TWOLINE's Hammerdin comes in Hell Act 4). Against 0.3.2 the bots still go further (MIXED3 84 and 108 against 54; TWOLINE 108 against 60 and 63), and against 0.3.6 they go less far (TWOLINE 108 against 132). MIXED3 does better wide than held to 12: its mix of elements needs towers of each against Hell's immunities. NECRO's seed 2 dies in Normal Act 5 either way.
+
+**Evolving against going wide (0.3.8).** With evolutions granting reach and taking any partner on the ring, the harness bots were taught to evolve: the evolved tower's value (the recipe's damage and its reach step) enters their power model as before, a pair that can still make a recipe is weighed at 75% of the evolved tower when the gold left is within three waves of income (40% when not), a ready evolution becomes the bot's saving goal when its gain per gold is at least half the best option's and its fee is within eight waves of recent income, and nothing else is saved for beyond three waves of it. Two faults kept them from it before: the overkill cap came from the next wave's regular monsters, and a boss wave has none, so for a wave every option looked worthless and the bot spent what it was saving; and a bot could save for a goal twenty waves of income away while its defence starved. The Necromancer bot builds the bone and curse lines only, since the model overrates the summoning line's skeletons (it died on wave 23 with them, 108 without).
+
+Measured (npm run report, seeds 1 and 2; the bots against the same bots held to T3, BOT_NO_EVOLVE=1). At the 110% floor evolving drew with going wide for TWOLINE (110 and 120 against 108 and 108), PALADIN (110 and 109 against 108 and 108) and MIXED3 (108 and 114 against 114 and 113), and won only for NECRO (108 and 108 against 71 and 73); so, as decided, the floor went to 115%. At 115%:
+
+| Bot | Evolving: died on | Held to T3: died on | Towers at Hell Act 3, evolving / held | First evolution |
+| --- | --- | --- | --- | --- |
+| TWOLINE | 110, 110 | 108, 107 | 9 / 16 | Hell Act 1 (templar, waves 48 and 53) |
+| PALADIN | 110, 110 | 108, 108 | 11 / 12 | Hell Act 3 (hammerdin, 58 and 62) |
+| NECRO | 107, 109 | 92, 75 | 9 / 19 | Hell Act 2 (explosionmancer, 48 and 60) |
+| MIXED3 | 114, 74 | 108, 64 | 14 / 18 | Hell Act 5 (lightsorc, 75), and never on seed 2 |
+
+Evolving wins for every bot: clearly for NECRO (15 and 34 waves) and MIXED3 (6 and 10), narrowly for TWOLINE and PALADIN (2 to 3 waves). Tower counts at Hell Act 3 are under 20 for every evolving bot (9 to 14). Every bot but MIXED3 evolves by Hell Act 3; MIXED3, which builds every class's T1 skills, rarely has two lines of one class's recipe far enough up (a trial without its summoning line evolved by Hell Act 3 on one seed and died on wave 61 on the other). Towers as each boss wave starts, evolving bots: TWOLINE 2, 3, 6, 6, 6 through Normal, 6 through Nightmare, 8, 9, 9, 9, 11 through Hell; PALADIN 2, 3, 6, 6, 7 / 7, 8, 11, 12, 12 / 12, 12, 11, 11, 11; NECRO 2, 3, 5, 6, 7 / 7 / 7, 7, 9, 9, 9; MIXED3 1, 5, 7, 9, 9 / 9, 9, 9, 10, 13 / 13, 13, 14, 15, 13.
 
 The bots gained two lookaheads for the new prices: a tower two tiers below the top values the T3 path at 40% (the T2 between can look no better than another tower), and an adjacent pair whose lines can still make a recipe, or a new tower beside one it could evolve with, is valued as the evolved tower at 40% over all the gold left to pay.
 

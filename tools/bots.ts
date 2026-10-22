@@ -7,7 +7,7 @@
 //             Conviction), no evolution
 //   PALADIN   Zealot, Holy and Aura towers; opens for a Hammerdin by wave 15
 //   SORC      the four Sorceress lines, evolving whatever pair it can
-//   NECRO     the three Necromancer lines, evolving whatever pair it can
+//   NECRO     the Necromancer's bone and curse lines, evolving whatever pair it can
 //   MIXED3    every class's lines, evolving whatever pair it can
 //
 // All share one engine, so they differ only in what they may use. Each decision takes the
@@ -317,16 +317,21 @@ function comingFoes(sim: Sim): Foe[] {
 
 /** Average HP of the next wave's normal monsters, in 1/256 HP. */
 function nextWaveHp(sim: Sim): number {
-  const wave = waveAt(sim, sim.state.wave) ?? sim.data.waves.at(-1)!;
-  let total = 0;
-  let count = 0;
-  for (const g of wave.groups) {
-    if (g.rank !== 'normal') continue;
-    const d = sim.data.monsters[g.monster]!;
-    total += ((d.minHp + d.maxHp) / 2) * g.count;
-    count += g.count;
+  // A boss wave has no regular monsters: the nearest wave before it that has some stands in,
+  // or every option looks worthless for a wave and the bot spends what it was saving
+  for (let w = sim.state.wave; w >= 0; w--) {
+    const wave = waveAt(sim, w) ?? sim.data.waves.at(-1)!;
+    let total = 0;
+    let count = 0;
+    for (const g of wave.groups) {
+      if (g.rank !== 'normal') continue;
+      const d = sim.data.monsters[g.monster]!;
+      total += ((d.minHp + d.maxHp) / 2) * g.count;
+      count += g.count;
+    }
+    if (count > 0) return total / count;
   }
-  return count > 0 ? total / count : 256;
+  return 256;
 }
 
 interface Coverage {
@@ -536,7 +541,7 @@ interface BotConfig {
   /** T1 skills the bot may build. */
   builds: string[];
   tiers: boolean;
-  /** Weigh evolving any adjacent pair that makes a recipe. */
+  /** Weigh evolving any pair on the ring that makes a recipe, and plan toward recipes. */
   evolve?: boolean;
   /** Judge power against the coming monsters' resistances (see totalPower). */
   elements?: boolean;
@@ -550,6 +555,18 @@ const LOOKAHEAD_DISCOUNT_PCT = 50;
 const LOOKAHEAD_MIN_TOWERS = 3;
 /** Two tiers ahead (T1 to T3): further off, so worth less again. */
 const FAR_LOOKAHEAD_PCT = 40;
+/** An evolution whose remaining gold is within this many waves of the bot's income so far... */
+const EVOLVE_SOON_WAVES = 3;
+/** ...is weighed at this share of its gain, as a near purchase rather than a far one. */
+const EVOLVE_SOON_PCT = 75;
+/** A bot saves only for a purchase whose next payment is within this many waves of its recent income... */
+const SAVE_WAVES = 3;
+/** ...or this many for an evolution's fee, the big purchase a few high towers are built toward. */
+const EVOLVE_SAVE_WAVES = 8;
+/** Recent income: what the last this-many waves brought in, per wave. */
+const INCOME_WAVES = 3;
+/** An evolution ready to buy becomes the goal when its gain per gold is at least this share of the best option's. */
+const EVOLVE_PRIORITY = 0.5;
 const sum = (xs: number[]) => xs.reduce((n, x) => n + x, 0);
 
 function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov: Coverage): Option[] {
@@ -584,7 +601,8 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
     }
   }
 
-  // Evolutions: any adjacent pair that makes a recipe, judged as the merged tower, once they open
+  // Evolutions: any pair on the ring that makes a recipe (no adjacency since 0.3.8), judged as
+  // the evolved tower: the recipe's damage and its reach step, on the attack tower's tile
   if (config.evolve) {
     for (let i = 0; i < towers.length; i++) {
       for (let j = i + 1; j < towers.length; j++) {
@@ -603,10 +621,13 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
     }
   }
 
-  // Evolutions further off: an adjacent pair whose lines can still make a recipe is worth the
-  // evolved tower, discounted, over all the gold left to get there; the step bought is the
-  // one on the tower further behind. And a new tower beside one it could evolve with.
+  // Evolutions further off: a pair whose lines can still make a recipe is worth the evolved
+  // tower over all the gold left to get there, at EVOLVE_SOON_PCT when that gold is within a
+  // few waves of income and FAR_LOOKAHEAD_PCT when not; the step bought is the one on the
+  // tower further behind. And a new tower of the missing line, on the best free spot.
   if (config.evolve && towers.length >= LOOKAHEAD_MIN_TOWERS) {
+    const gold = sim.state.gold[0] ?? 0;
+    const perWave = (gold + towers.reduce((n, t) => n + t.spent, 0)) / Math.max(1, sim.state.wave);
     const planned = (attack: Tower, partner: Tower, recipe: (typeof sim.data.evolutions)[number], extra: number, commandsIfNoStep?: Command[]): Option | undefined => {
       const pa = pathTo(sim, attack, recipe.attack.skill, recipe.attack.minTier);
       const pp = pathTo(sim, partner, recipe.partner.skill, recipe.partner.minTier);
@@ -619,43 +640,44 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
         ...attack, tier: MAX_TIER + 1, level: MAX_TOWER_LEVEL, evolved: recipe.id, partnerSkill: recipe.partner.skill,
         partnerLevel: EVOLVED_LEVEL_INDEX, picks: [...attack.picks],
       };
-      const gain = (gainOf(sim, towers, judge, merged, [partner.id]) * FAR_LOOKAHEAD_PCT) / 100;
-      return { cost: extra + pa.gold + pp.gold + e.evolveCost, stepCost, gain, commands, damage: true };
+      const cost = extra + pa.gold + pp.gold + e.evolveCost;
+      const soon = cost - gold <= EVOLVE_SOON_WAVES * perWave;
+      const gain = (gainOf(sim, towers, judge, merged, [partner.id]) * (soon ? EVOLVE_SOON_PCT : FAR_LOOKAHEAD_PCT)) / 100;
+      return { cost, stepCost, gain, commands, damage: true };
     };
-    const adjacentTo = (a: Tower, b: { tileX: number; tileY: number }) => Math.abs(a.tileX - b.tileX) <= 1 && Math.abs(a.tileY - b.tileY) <= 1;
+    const lineIs = (t: Tower, at: { cls: string; line: string }) => !t.evolved && t.legendOf === undefined && t.cls === at.cls && t.line === at.line;
     for (const recipe of sim.data.evolutions) {
       const atA = placeOf(sim, recipe.attack.skill);
       const atP = placeOf(sim, recipe.partner.skill);
       if (!atA || !atP) continue;
-      for (const t of towers) {
-        if (t.evolved) continue;
-        // Pairs already standing side by side
-        if (t.cls === atA.cls && t.line === atA.line) {
-          for (const u of towers) {
-            if (u === t || u.evolved || !adjacentTo(t, u) || u.cls !== atP.cls || u.line !== atP.line) continue;
-            const o = planned(t, u, recipe, 0);
-            if (o) out.push(o);
-          }
+      const attacks = towers.filter((t) => lineIs(t, atA));
+      const partners = towers.filter((t) => lineIs(t, atP));
+      // Pairs anywhere on the ring
+      for (const t of attacks) {
+        for (const u of partners) {
+          if (u === t) continue;
+          const o = planned(t, u, recipe, 0);
+          if (o) out.push(o);
         }
-        // A new tower to stand beside t and make the pair with it
-        const mine = t.cls === atA.cls && t.line === atA.line ? 'attack' : t.cls === atP.cls && t.line === atP.line ? 'partner' : undefined;
-        if (!mine) continue;
-        const other = mine === 'attack' ? atP : atA;
-        const t1 = sim.data.classes[other.cls]!.lines[other.line]!.tiers[0]![0]!;
+      }
+      // One side standing, the other line not yet built: a new tower of it on the best free spot
+      for (const [have, missing, role] of [[attacks, atP, 'attack'], [partners, atA, 'partner']] as const) {
+        if (have.length === 0 || (role === 'attack' ? partners : attacks).length > 0) continue;
+        const t1 = sim.data.classes[missing.cls]!.lines[missing.line]!.tiers[0]![0]!;
         if (!config.builds.includes(t1) || towers.length >= (config.maxTowers ?? Infinity)) continue;
-        if (towers.some((u) => u !== t && !u.evolved && adjacentTo(t, u) && u.cls === other.cls && u.line === other.line)) continue;
-        let spot: { x: number; y: number } | undefined;
-        for (let dy = -1; dy <= 1 && !spot; dy++) for (let dx = -1; dx <= 1 && !spot; dx++) if (canBuild(sim, t.tileX + dx, t.tileY + dy)) spot = { x: t.tileX + dx, y: t.tileY + dy };
+        const list = sim.data.skills[t1]!.archetype === 'melee' ? melee : ranged;
+        const spot = list.find((p) => canBuild(sim, p.x, p.y));
         if (!spot) continue;
         const c = tileCenter(spot);
         const fresh: Tower = {
-          id: -2, owner: 0, cls: other.cls, tileX: spot.x, tileY: spot.y, x: c.x, y: c.y, line: other.line, tier: 1, level: 1,
+          id: -2, owner: 0, cls: missing.cls, tileX: spot.x, tileY: spot.y, x: c.x, y: c.y, line: missing.line, tier: 1, level: 1,
           picks: [t1], spent: 0, cooldown: 0, targeting: 'first', evolved: '', partnerSkill: '', partnerLevel: 0, summonCooldown: 0, partnerCooldown: 0,
         };
-        const o = mine === 'attack'
-          ? planned(t, fresh, recipe, buildCostFor(sim, 0), [{ type: 'build', x: spot.x, y: spot.y, cls: other.cls, skill: t1 }])
-          : planned(fresh, t, recipe, buildCostFor(sim, 0), [{ type: 'build', x: spot.x, y: spot.y, cls: other.cls, skill: t1 }]);
-        if (o) out.push(o);
+        const build: Command[] = [{ type: 'build', x: spot.x, y: spot.y, cls: missing.cls, skill: t1 }];
+        for (const t of have) {
+          const o = role === 'attack' ? planned(t, fresh, recipe, buildCostFor(sim, 0), build) : planned(fresh, t, recipe, buildCostFor(sim, 0), build);
+          if (o) out.push(o);
+        }
       }
     }
   }
@@ -795,7 +817,8 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
       const a = byTag(s, goal.a);
       const b = byTag(s, goal.b);
       const match = a && b && evolutionFor(s, a, b);
-      if (!a || !b || !match) {
+      // A bot held to T3 (BOT_NO_EVOLVE) skips its opening's evolution too
+      if (!a || !b || !match || !config.evolve) {
         goals.shift();
         continue;
       }
@@ -811,6 +834,15 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
   // The best option depends only on the wave (the coming monsters) and the
   // towers, not on gold or the monsters out, so it is worked out again only when one changes
   let cached: { key: string; best: Option | undefined; all: Option[] } | undefined;
+  // Gold earned by each wave's start (in hand and spent), for the income of the last few waves
+  const earnedAt = new Map<number, number>();
+  const recentIncome = (s: Sim): number => {
+    const earned = (s.state.gold[0] ?? 0) + s.state.towers.reduce((n, t) => n + t.spent, 0);
+    if (!earnedAt.has(s.state.wave)) earnedAt.set(s.state.wave, earned);
+    const back = Math.max(0, s.state.wave - INCOME_WAVES);
+    const then = earnedAt.get(back) ?? 0;
+    return Math.max(1, (earned - then) / Math.max(1, s.state.wave - back));
+  };
   const keyOf = (s: Sim) =>
     `${s.state.wave}|${s.state.towers.map((t) => `${t.id}:${t.tileX},${t.tileY}:${t.tier}.${t.level}:${t.picks.join('+')}:${t.evolved}:${t.partnerSkill}.${t.partnerLevel}`).join(';')}`;
 
@@ -828,10 +860,25 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
       if (cached?.key !== key) {
         let pick: Option | undefined;
         const all = options(s, config, ranged, melee, cov);
+        // Save only for what a few waves of income can pay: a goal further off starves the defence
+        const gold = s.state.gold[0] ?? 0;
+        const perWave = recentIncome(s);
+        const reachable = (o: Option) => (o.stepCost ?? o.cost) - gold <= (o.commands[0]?.type === 'evolve' ? EVOLVE_SAVE_WAVES : SAVE_WAVES) * perWave;
         for (const o of all) {
-          if (o.gain <= 0) continue;
+          if (o.gain <= 0 || !reachable(o)) continue;
           if (!pick || o.gain / o.cost > pick.gain / pick.cost) pick = o;
         }
+        // An evolution ready to buy is saved for when it is worth a fair share of the best buy
+        // per gold: a stream of cheap levels would otherwise always come first, and the gold for
+        // the fee never gather
+        let evolve: Option | undefined;
+        for (const o of all) {
+          if (o.gain <= 0 || o.commands[0]?.type !== 'evolve') continue;
+          if (!evolve || o.gain / o.cost > evolve.gain / evolve.cost) evolve = o;
+        }
+        // ...and the fee is within a few waves of income
+        if (pick && evolve && reachable(evolve) && evolve.gain / evolve.cost >= (pick.gain / pick.cost) * EVOLVE_PRIORITY) pick = evolve;
+        if (process.env['BOT_DEBUG']) console.error(`w${s.state.wave} gold ${s.state.gold[0]} pick ${pick?.commands[0]?.type} ${Math.round(((pick?.gain ?? 0) / (pick?.cost ?? 1)) * 1e6)} cost ${pick?.cost} | evolve ${evolve ? Math.round((evolve.gain / evolve.cost) * 1e6) : '-'}`);
         cached = { key, best: pick, all };
       }
       const gold = s.state.gold[0] ?? 0;
@@ -879,7 +926,10 @@ const CONFIGS: Partial<Record<Strategy, BotConfig>> = {
 const SORC_BUILDS = ['fire-bolt', 'ice-bolt', 'charged-bolt', 'static-field'];
 const NECRO_BUILDS = ['raise-skeleton', 'teeth', 'amplify-damage'];
 CONFIGS.SORC = { strategy: 'SORC', builds: SORC_BUILDS, tiers: true, evolve: true, elements: true };
-CONFIGS.NECRO = { strategy: 'NECRO', builds: NECRO_BUILDS, tiers: true, evolve: true, elements: true };
+// The Necromancer bot builds the bone and curse lines: its power model overrates the summoning
+// line's skeletons, which build a ring that cannot hold Normal Act 5 (wave 23 with them, 108
+// without; 0.3.8). BOT_BUILDS=a,b overrides any bot's T1 list for a run.
+CONFIGS.NECRO = { strategy: 'NECRO', builds: ['teeth', 'amplify-damage'], tiers: true, evolve: true, elements: true };
 CONFIGS.AMAZON = { strategy: 'AMAZON', builds: ['magic-arrow', 'poison-javelin', 'critical-strike'], tiers: true, evolve: true, elements: true };
 CONFIGS.BARB = {
   strategy: 'BARB',
@@ -908,8 +958,11 @@ export function createBot(strategy: Strategy, sim: Sim, pool?: readonly Item[]):
     return engineBot({ ...CONFIGS.MIXED3!, strategy, ...(builds.length > 0 ? { builds } : {}) }, sim);
   }
   // BOT_MAX_TOWERS=n holds a bot to n towers: a few high towers against the bot's own choice
+  // BOT_NO_EVOLVE holds a bot to T3 (it never evolves), the same bot otherwise
   const cap = Number(process.env['BOT_MAX_TOWERS'] ?? 0);
-  return engineBot(cap > 0 ? { ...CONFIGS[strategy]!, maxTowers: cap } : CONFIGS[strategy]!, sim);
+  const builds = process.env['BOT_BUILDS']?.split(',');
+  const noEvolve = !!process.env['BOT_NO_EVOLVE'];
+  return engineBot({ ...CONFIGS[strategy]!, ...(cap > 0 ? { maxTowers: cap } : {}), ...(builds ? { builds } : {}), ...(noEvolve ? { evolve: false } : {}) }, sim);
 }
 
 /** Debug view: a bot's options right now, best power per gold first. */
