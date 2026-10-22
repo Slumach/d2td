@@ -4,8 +4,10 @@
 // mana globe, the two skill buttons either side of the centre, the four belt slots, the
 // run/walk button, the stamina and experience bars and the row of mini-menu buttons.
 //
-// What they mean here: the life globe fills with this player's share of the current wave's
-// kills and its number is their kills in all; the mana globe fills with the alive weight
+// What they mean here: the life globe starts full and drains as the alive weight on the
+// ring rises, empty being the loss, and its number is the alive weight over the limit; the
+// mana globe fills with this player's share of every kill in the game (full alone) and its
+// number is the game's kill count; the old meaning (the globe fills with the alive weight
 // on the ring and its number is that weight (full is the loss). The skill buttons show the
 // selected tower's line skills with its level in the corner. The belt holds gems, runes
 // and jewels. The stamina bar drains with the wave timer, the experience bar fills across
@@ -78,10 +80,10 @@ const DEPTH = { liquid: 2899, panel: 2900, over: 2903, frame: 2905 };
 
 export interface HudNumbers {
   gold: number;
-  /** This player's kills in all, and their share of the current wave's monsters killed, 0 to 1. */
+  /** The game's kills in all, and this player's share of them, 0 to 1 (1 alone). */
   kills: number;
-  waveShare: number;
-  /** The alive weight on the ring, and the limit that loses the run. */
+  killShare: number;
+  /** The alive weight on the ring, and the limit that loses the run (100 for each player sharing it). */
   alive: number;
   aliveLimit: number;
   /** "Normal Act 1 3/6", the stage line under the bar. */
@@ -266,16 +268,18 @@ export class D2Hud {
   }
 
   update(n: HudNumbers): void {
-    this.killsText.setText(`Kills: ${n.kills}`);
-    this.aliveText.setText(`Alive: ${n.alive} / ${n.aliveLimit}`);
+    // Life over the life globe: what is alive against the limit; kills over the mana globe
+    this.killsText.setText(`Alive: ${n.alive} / ${n.aliveLimit}`);
+    this.aliveText.setText(`Kills: ${n.kills}`);
     this.stageText.setText(n.wave);
     this.timerText.setText(n.timer);
     this.nextWave = n.nextWave;
-    if (n.waveShare !== this.lastHealth) {
-      this.lastHealth = n.waveShare;
-      this.crop(this.health, n.waveShare);
+    const health = Math.max(0, Math.min(1, 1 - n.alive / Math.max(1, n.aliveLimit)));
+    if (health !== this.lastHealth) {
+      this.lastHealth = health;
+      this.crop(this.health, health);
     }
-    const mana = n.alive / Math.max(1, n.aliveLimit);
+    const mana = Math.max(0, Math.min(1, n.killShare));
     if (mana !== this.lastMana) {
       this.lastMana = mana;
       this.crop(this.mana, mana);

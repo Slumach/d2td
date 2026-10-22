@@ -308,9 +308,14 @@ function updateMissiles(sim: Sim): void {
   if (gone.size > 0) s.missiles = s.missiles.filter((m) => !gone.has(m.id));
 }
 
+/** The alive weight that loses the ring: rules.aliveLimit for each player sharing it (100 alone, 200 for two, 300, 400). */
+export function aliveLimitOf(sim: Sim): number {
+  return sim.data.rules.aliveLimit * sim.players;
+}
+
 function checkEnd(sim: Sim): void {
   const s = sim.state;
-  if (s.alive >= sim.data.rules.aliveLimit) {
+  if (s.alive >= aliveLimitOf(sim)) {
     s.status = 'lost';
   } else if (!sim.data.extendWaves && s.wave >= sim.data.waves.length && s.monsters.length === 0 && s.spawns.length === 0) {
     // A run with endless waves never ends in a win: only a fixed-length run (tests, tools) does

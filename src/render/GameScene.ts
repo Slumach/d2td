@@ -27,6 +27,7 @@ import {
   canBuild,
   earlySendBonus,
   evolutionFor,
+  aliveLimitOf,
   pendingChoices,
   sellValue,
   buildCostFor,
@@ -1345,7 +1346,7 @@ export class GameScene extends Phaser.Scene {
 
   /** The alive count across the top: it fills as monsters pile up, and the run is lost when it is full. */
   private drawAlive(alive: number): void {
-    const limit = this.sim.data.rules.aliveLimit;
+    const limit = aliveLimitOf(this.sim);
     const frac = Math.max(0, Math.min(1, alive / limit));
     if (this.d2) return;
     const { width, height, y } = ALIVE_BAR;
@@ -1361,9 +1362,9 @@ export class GameScene extends Phaser.Scene {
     this.drawAlive(state.alive);
     this.hud.setText(`Gold ${this.gold}   Wave ${state.wave}   Kills ${state.kills}`);
     this.hud2.setText(this.d2 ? '' : this.waveTimer());
-    this.d2?.update(this.hudNumbers(data.rules.aliveLimit));
+    this.d2?.update(this.hudNumbers(aliveLimitOf(this.sim)));
     if (state.status !== 'playing' && !this.endOverlay.visible) {
-      const why = state.status === 'won' ? 'Victory' : `Defeat: ${data.rules.aliveLimit} alive on the ring`;
+      const why = state.status === 'won' ? 'Victory' : `Defeat: ${aliveLimitOf(this.sim)} alive on the ring`;
       this.endOverlay.setText(`${why}\nwave ${state.wave}, ${state.kills} kills\nclick to play again`).setVisible(true);
     }
   }
@@ -1376,7 +1377,7 @@ export class GameScene extends Phaser.Scene {
         const watching = !this.onOwnRing ? `   (watching ${this.nameOf(this.view)})` : '';
     this.drawAlive(s.alive);
     this.hud.setText(`Gold ${this.onOwnRing ? this.gold : '-'}   Alive ${s.alive}   Wave ${s.wave}   Kills ${s.kills}${watching}`);
-    this.d2?.update(this.hudNumbers(match.data.rules.aliveLimit));
+    this.d2?.update(this.hudNumbers(aliveLimitOf(this.sim)));
 
     const parts: string[] = [];
     const timer = this.waveTimer();
@@ -1409,8 +1410,8 @@ export class GameScene extends Phaser.Scene {
     const left = s.status === 'playing' && waveAt(sim, s.wave) ? (s.nextWaveTick - s.tick) / sim.data.economy.waveTicks : 0;
     return {
       gold: this.onOwnRing ? this.gold : 0,
-      kills: s.killsBy[seat] ?? 0,
-      waveShare: s.waveSize > 0 ? (s.waveKillsBy[seat] ?? 0) / s.waveSize : 0,
+      kills: s.kills,
+      killShare: s.kills > 0 ? (s.killsBy[seat] ?? 0) / s.kills : 1,
       alive: s.alive,
       aliveLimit,
       wave: this.waveLabel(s.wave),

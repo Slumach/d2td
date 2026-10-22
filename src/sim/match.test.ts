@@ -108,6 +108,20 @@ describe('ffa match', () => {
     expect(match.zones.map((z) => z.state.wave)).toEqual([2, 2, 2]);
   });
 
+  it('loses a shared ring at 100 alive for each player on it', () => {
+    const match = createMatch(data, 1, 'team', 2);
+    const z = match.zones[0]!;
+    const fill = (n: number) => {
+      for (let i = 0; i < n; i++) addMonster(z, 'zombie1', i * 100).stunTicks = 1_000_000;
+    };
+    fill(data.rules.aliveLimit);
+    run(match, 1);
+    expect(z.state.status).toBe('playing');
+    fill(data.rules.aliveLimit);
+    run(match, 1);
+    expect(z.state.status).toBe('lost');
+  });
+
   it('drops a player whose ring fills up, and the last ring standing wins', () => {
     const match = createMatch(data, 1, 'ffa', 3);
     const fill = (ring: number) => {

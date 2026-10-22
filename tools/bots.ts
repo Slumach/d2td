@@ -21,7 +21,7 @@ import type { HitFilter, SkillDef } from '../src/sim/archetypes/types.ts';
 import { auraSources } from '../src/sim/auras.ts';
 import { baseSkillId, EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, type GameData } from '../src/sim/data.ts';
 import { tileCenter, isPathTile } from '../src/sim/map.ts';
-import { activeSkill, buildCostFor, canBuild, createSim, waveAt, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
+import { activeSkill, aliveLimitOf, buildCostFor, canBuild, createSim, waveAt, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
 import { withMods } from '../src/sim/combat.ts';
 import { freeSpot } from '../src/sim/items/loot.ts';
 import { lootPool, outfit, type LootSet } from './outfit.ts';
@@ -443,8 +443,8 @@ interface Option {
 /** True for a skill that kills by itself rather than helping others. */
 const isDamage = (skill: SkillDef | undefined) => !!skill && skill.archetype !== 'buffAura' && skill.archetype !== 'debuff';
 
-/** Alive weight past which a bot stops saving and buys the best damage it can afford now. */
-const PANIC_ALIVE = 60;
+/** Share of the ring's alive limit past which a bot stops saving and buys the best damage it can afford now. */
+const PANIC_PCT = 60;
 
 interface Judge {
   cov: Coverage;
@@ -705,7 +705,7 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
       if (best && gold >= (best.stepCost ?? best.cost)) return [...best.commands, ...out];
       // The ring is filling: no more saving, the best damage affordable now. (Buying the
       // cheapest thing when the model rates nothing was tried and made every bot worse.)
-      if (s.state.alive >= PANIC_ALIVE) {
+      if (s.state.alive * 100 >= aliveLimitOf(s) * PANIC_PCT) {
         let now: Option | undefined;
         for (const o of cached.all) {
           if (o.gain <= 0 || !o.damage || gold < (o.stepCost ?? o.cost)) continue;
