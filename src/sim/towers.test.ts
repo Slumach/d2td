@@ -130,16 +130,16 @@ describe('evolution', () => {
     return { holy, aura };
   }
 
-  it('needs the two towers adjacent, diagonals included', () => {
+  it('takes a partner anywhere on the ring, adjacent or not', () => {
     const sim = testSim();
     const { holy, aura } = hammerdinPair(sim, { x: 15, y: 7 });
     expect(evolutionFor(sim, holy, aura)?.recipe.id).toBe('hammerdin');
     const other = testSim();
-    const far = hammerdinPair(other, { x: 16, y: 6 });
-    expect(evolutionFor(other, far.holy, far.aura)).toBeUndefined();
+    const far = hammerdinPair(other, { x: 20, y: 6 });
+    expect(evolutionFor(other, far.holy, far.aura)?.recipe.id).toBe('hammerdin');
   });
 
-  it('consumes both towers and lands on the attack tower tile with the partner aura built in', () => {
+  it('evolves the selected tower in place, keeping its id, and consumes the partner', () => {
     const sim = testSim();
     const { holy, aura } = hammerdinPair(sim, { x: 15, y: 6 });
     const spent = holy.spent + aura.spent;
@@ -148,7 +148,9 @@ describe('evolution', () => {
     run(sim, { type: 'evolve', towerA: aura.id, towerB: holy.id });
     expect(sim.state.towers).toHaveLength(1);
     const evolved = sim.state.towers[0]!;
-    expect([evolved.tileX, evolved.tileY]).toEqual([14, 6]);
+    // The aura tower was selected: it stays, on its tile, as the evolved tower
+    expect(evolved.id).toBe(aura.id);
+    expect([evolved.tileX, evolved.tileY]).toEqual([15, 6]);
     expect(evolved.evolved).toBe('hammerdin');
     expect(evolved.partnerSkill).toBe('concentration');
     expect(evolved.partnerLevel).toBe(aura.level - 1);
@@ -165,7 +167,7 @@ describe('evolution', () => {
     expect(evolved.spent).toBe(spent + sim.data.economy.evolveCost);
     expect(sim.state.gold[0]!).toBe(gold - sim.data.economy.evolveCost);
     // The partner's tile is free again
-    expect(canBuild(sim, 15, 6)).toBe(true);
+    expect(canBuild(sim, 14, 6)).toBe(true);
   });
 
   it('levels an evolved tower past 5 on its own steep ladder, each level raising both its skills', () => {

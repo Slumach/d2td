@@ -476,6 +476,21 @@ export class GameScene extends Phaser.Scene {
   // ---- input and commands ----
 
   /** Why this tower cannot evolve yet: the recipes its line is part of, what it still needs and what must stand beside it. */
+  /**
+   * Every tower on the ring that can evolve with `tower`, highest tier and level first; when
+   * more than one qualifies each button names its partner, so the player picks which is spent.
+   */
+  private partners(tower: Tower): { match: NonNullable<ReturnType<typeof evolutionFor>>; other: Tower; label: string }[] {
+    const sim = this.sim;
+    const found = sim.state.towers.flatMap((other) => {
+      const match = evolutionFor(sim, tower, other);
+      return match ? [{ match, other }] : [];
+    });
+    found.sort((a, b) => b.other.tier - a.other.tier || b.other.level - a.other.level);
+    const many = found.length > 1;
+    return found.map((f) => ({ ...f, label: many ? ` with ${this.skillName(f.other.picks.at(-1) ?? '')} T${f.other.tier} L${f.other.level}` : '' }));
+  }
+
   private evolveHint(tower: Tower): string {
     const sim = this.sim;
     const line = sim.data.classes[tower.cls]?.lines[tower.line];
@@ -486,8 +501,8 @@ export class GameScene extends Phaser.Scene {
       const own = ofLine.has(r.attack.skill) ? r.attack : r.partner;
       const other = own === r.attack ? r.partner : r.attack;
       return meets(sim, tower, own)
-        ? `${r.name} needs an adjacent ${this.skillName(other.skill)} at tier ${other.minTier}`
-        : `${r.name} needs this tower at ${this.skillName(own.skill)} tier ${own.minTier}, beside ${this.skillName(other.skill)} at tier ${other.minTier}`;
+        ? `${r.name} needs a ${this.skillName(other.skill)} tower at tier ${other.minTier} anywhere on your ring`
+        : `${r.name} needs this tower at ${this.skillName(own.skill)} tier ${own.minTier} and a ${this.skillName(other.skill)} tower at tier ${other.minTier} anywhere on your ring`;
     });
     return `Evolve: ${parts.join('; ')}`;
   }
@@ -1882,11 +1897,9 @@ export class GameScene extends Phaser.Scene {
       }
     }
     let evolvable = false;
-    for (const other of sim.state.towers) {
-      const match = evolutionFor(sim, tower, other);
-      if (!match) continue;
+    for (const { match, other, label } of this.partners(tower)) {
       evolvable = true;
-      buttons.push({ label: `Evolve ${match.recipe.name} ${e.evolveCost}g`, enabled: this.gold >= e.evolveCost, onClick: () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }) });
+      buttons.push({ label: `Evolve ${match.recipe.name}${label} ${e.evolveCost}g`, enabled: this.gold >= e.evolveCost, onClick: () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }) });
     }
     // T5: shown only once three evolutions stand together
     for (const o of legendOptions(sim, tower)) {
@@ -1951,11 +1964,9 @@ export class GameScene extends Phaser.Scene {
     } else if (!tower.evolved && line && tower.level < MAX_TOWER_LEVEL && tower.tier < line.tiers.length) {
       specs.push({ label: `T${tower.tier + 1} unlocks at level ${MAX_TOWER_LEVEL}`, enabled: false, onClick: () => undefined });
     }
-    for (const other of sim.state.towers) {
-      const match = evolutionFor(sim, tower, other);
-      if (!match) continue;
+    for (const { match, other, label } of this.partners(tower)) {
       specs.push({
-        ...this.skillButton(match.recipe.attack.skill, `Evolve ${match.recipe.name} (${e.evolveCost}g)`, () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }), this.gold >= e.evolveCost),
+        ...this.skillButton(match.recipe.attack.skill, `Evolve ${match.recipe.name}${label} (${e.evolveCost}g)`, () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }), this.gold >= e.evolveCost),
         colour: '#5a2a70',
       });
     }

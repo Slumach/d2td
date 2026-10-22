@@ -95,25 +95,22 @@ export function sellValue(sim: Sim, tower: Tower): number {
   return idiv(spent * sim.data.economy.sellRefundPct, 100);
 }
 
-const adjacentTiles = (a: Tower, b: Tower) => a.id !== b.id && Math.abs(a.tileX - b.tileX) <= 1 && Math.abs(a.tileY - b.tileY) <= 1;
-
 /**
  * T5: the legend three towers make, if they do: three evolved towers of one player and one
- * class, three different recipes, each beside the other two. Hidden until it is true.
+ * class, three different recipes, anywhere on the ring (0.3.8). Hidden until it is true.
  */
 export function legendFor(sim: Sim, a: Tower, b: Tower, c: Tower): LegendDef | undefined {
   const three = [a, b, c];
   if (new Set(three.map((t) => t.id)).size !== 3) return undefined;
   if (three.some((t) => !t.evolved || t.legend || t.legendOf !== undefined || t.owner !== a.owner || t.cls !== a.cls)) return undefined;
   if (new Set(three.map((t) => t.evolved)).size !== 3) return undefined;
-  if (!adjacentTiles(a, b) || !adjacentTiles(a, c) || !adjacentTiles(b, c)) return undefined;
   return sim.data.legends.find((l) => l.cls === a.cls);
 }
 
 /** Every pair of other towers that makes a legend with `tower`, for its panel's button and the bots. */
 export function legendOptions(sim: Sim, tower: Tower): { legend: LegendDef; others: [Tower, Tower] }[] {
   if (!tower.evolved || tower.legend || tower.legendOf !== undefined) return [];
-  const near = sim.state.towers.filter((t) => adjacentTiles(tower, t) && t.evolved && t.legendOf === undefined && !t.legend);
+  const near = sim.state.towers.filter((t) => t.id !== tower.id && t.owner === tower.owner && t.evolved && t.legendOf === undefined && !t.legend);
   const out: { legend: LegendDef; others: [Tower, Tower] }[] = [];
   for (let i = 0; i < near.length; i++) {
     for (let j = i + 1; j < near.length; j++) {
@@ -125,9 +122,10 @@ export function legendOptions(sim: Sim, tower: Tower): { legend: LegendDef; othe
 }
 
 /**
- * T5: the three become the legend on a's tile. All three stay towers, so every skill they
- * had keeps acting: a shows (as the legend's NPC) and the other two ride on it unseen,
- * freeing their tiles. Their levels reset to 5 and the legend's ladder takes them on.
+ * T5: the three become the legend on a's tile, a being the tower selected. All three stay
+ * towers, so every skill they had keeps acting: a shows (as the legend's NPC) and the other
+ * two ride on it unseen, freeing their tiles. Their levels reset to 5 and the legend's ladder
+ * takes them on.
  */
 export function ascend(sim: Sim, a: Tower, b: Tower, c: Tower): void {
   const legend = legendFor(sim, a, b, c);
@@ -156,9 +154,12 @@ export function adjacent(a: Tower, b: Tower): boolean {
   return a.id !== b.id && Math.abs(a.tileX - b.tileX) <= 1 && Math.abs(a.tileY - b.tileY) <= 1;
 }
 
-/** The recipe two adjacent towers can evolve into, with which one is the attack tower. */
+/**
+ * The recipe two towers can evolve into, with which one is the attack tower: one player's,
+ * anywhere on the ring (no adjacency since 0.3.8), neither evolved nor riding a legend.
+ */
 export function evolutionFor(sim: Sim, a: Tower, b: Tower): { recipe: EvolutionDef; attack: Tower; partner: Tower } | undefined {
-  if (!adjacent(a, b)) return undefined;
+  if (a.id === b.id || a.owner !== b.owner || a.legendOf !== undefined || b.legendOf !== undefined) return undefined;
   for (const recipe of sim.data.evolutions) {
     if (meets(sim, a, recipe.attack) && meets(sim, b, recipe.partner)) return { recipe, attack: a, partner: b };
     if (meets(sim, b, recipe.attack) && meets(sim, a, recipe.partner)) return { recipe, attack: b, partner: a };
@@ -253,22 +254,32 @@ export function setTargeting(tower: Tower, mode: Targeting): void {
   if (TARGETING_MODES.includes(mode)) tower.targeting = mode;
 }
 
+/**
+ * Evolves `a`, the tower the player selected, with `b`, the partner, anywhere on the ring:
+ * `a` becomes the evolved tower on its own tile, keeping its id (so it stays selected) and
+ * its gear; `b` is consumed, its tile freed and its gear sent home. Which recipe, and which
+ * of the two is the attack, comes from evolutionFor whichever was selected.
+ */
 export function evolve(sim: Sim, a: Tower, b: Tower): void {
   const s = sim.state;
   const cost = sim.data.economy.evolveCost;
   const match = evolutionFor(sim, a, b);
-  if (!match || a.owner !== b.owner || !pay(sim, a.owner, cost)) return;
+  if (!match || !pay(sim, a.owner, cost)) return;
   const { recipe, attack, partner } = match;
   // The partner aura keeps the level it reached: its current level if it still has it,
   // otherwise it was maxed to tier past it
   const partnerLevel = partner.picks[partner.tier - 1] === recipe.partner.skill ? Math.min(partner.level, MAX_TOWER_LEVEL) - 1 : MAX_TOWER_LEVEL - 1;
-  removeTower(sim, attack.id);
-  removeTower(sim, partner.id);
-  // The evolved tower keeps the attack tower's gear; the partner's goes back to its owner
-  sendHome(sim, partner.owner, Object.values(partner.gear ?? {}));
+  removeTower(sim, a.id);
+  removeTower(sim, b.id);
+  sendHome(sim, b.owner, Object.values(b.gear ?? {}));
   s.towers.push({
     ...attack,
-    id: s.nextId++,
+    id: a.id,
+    tileX: a.tileX,
+    tileY: a.tileY,
+    x: a.x,
+    y: a.y,
+    targeting: a.targeting,
     picks: [...attack.picks],
     tier: MAX_TIER + 1,
     level: MAX_TOWER_LEVEL,
@@ -280,6 +291,10 @@ export function evolve(sim: Sim, a: Tower, b: Tower): void {
     summonCooldown: 0,
     partnerCooldown: 0,
   });
+  // It wears what the selected tower wore, nothing of the attack's if that was the partner
+  const evolved = s.towers.at(-1)!;
+  if (a.gear) evolved.gear = a.gear;
+  else delete evolved.gear;
 }
 
 export function sell(sim: Sim, tower: Tower): void {

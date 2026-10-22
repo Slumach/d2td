@@ -71,7 +71,7 @@ export type CommandBody =
   | { type: 'pickBranch'; towerId: number; skill: string }
   | { type: 'setTargeting'; towerId: number; mode: Targeting }
   | { type: 'evolve'; towerA: number; towerB: number }
-  /** T5: three adjacent evolved towers of a class become its legend, on towerA's tile. */
+  /** T5: three evolved towers of a class, anywhere on the ring, become its legend on towerA's tile. */
   | { type: 'ascend'; towerA: number; towerB: number; towerC: number }
   | { type: 'sell'; towerId: number }
   | { type: 'callWave' }
