@@ -19,12 +19,12 @@ D2 Tower Defense is a free fan game. It draws its monsters, heroes, maps, menus 
 
 ## The first time you start it
 
-The first start shows a setup screen. Setup copies the pictures and sounds the game needs out of your Diablo II: Resurrected folder: every act's monsters and maps, the menus and the control panel. It only reads from that folder and never changes it.
+The first start shows a setup screen. Setup copies the pictures and sounds the game needs out of your Diablo II: Resurrected folder: every act's monsters and maps, the items, the menus and the control panel. It only reads from that folder and never changes it.
 
 1. Check the folder shown under **Diablo II: Resurrected folder**. Usually it finds the right one by itself, for example `C:\Program Files (x86)\Diablo II Resurrected`.
 2. If it says **Not found**, click **Choose folder...** and pick the folder where you installed Diablo II: Resurrected. It is the folder that has a folder called **Data** inside it.
 3. Click **Extract game files** and wait. A bar shows how far it has got. It takes a few minutes.
-4. The main menu appears. Click **Single Player**.
+4. The main menu appears. Click **Single Player**, then **Play**.
 
 You only do this once. Next time the game opens straight to the main menu.
 
@@ -39,7 +39,16 @@ A new version of the game may need a few more files from Diablo II: Resurrected.
 - The globe on the left shows your share of the current wave's kills; the globe on the right fills as monsters pile up on the ring. If it fills, the run is lost.
 - **Send Wave** brings the next wave early for extra gold.
 - Press **I** for the inventory, **Tab** for the map, and **Esc** for the menu. The menu has **Options**, **Save**, **Quit to Menu** and **Return to Game**.
-- The game saves itself at the start of every act. **Continue** in the main menu picks up from there.
+- The game saves itself at the start of every act. **Continue** (under **Single Player**) picks up from there.
+
+### Items
+
+- Monsters drop items. Click a name on the ground to pick it up; whatever is left goes into your inventory when the wave is over, if there is room.
+- Press **I** to open the inventory and the stash. Click an item to pick it up and click where it should go; right-click puts it back.
+- To give a tower an item, click the tower, open the inventory, and put the item in one of the ten slots of the figure at the top.
+- Put a gem, rune or jewel on an item with an empty socket to socket it. The four belt slots on the control panel hold gems and runes ready to socket.
+- Drop an item on **Sell** to sell it. Smith's Hammer, put on an item, adds a socket. Right-click Wirt's Leg to open the Secret Cow Level, if you dare.
+- Your items and stash are kept between games, even if you close the game in the middle of one. They are in `%APPDATA%\D2 Tower Defense\profile.json`; copy that file to keep a backup.
 
 ## Playing together
 
@@ -55,7 +64,7 @@ If there is no Internet code, a friend elsewhere can still join if you forward T
 
 **To join:** click **Multiplayer**, then **Join Game**, type or paste the code, and press **Join**. Then wait for the host to start.
 
-In a game, waves start on a timer; any player can press **Send Wave** to bring the next one early. The number keys show another player's area; press your own number to go back. **Esc** opens a menu, but the game keeps going for everyone. If the host leaves, the game ends.
+In a game, waves start on a timer; any player can press **Send Wave** to bring the next one early. Everyone brings their own items. To trade, open the inventory and click **Trade** with a player's name; put items and gold on your side and click the tick to accept. The number keys show another player's area; press your own number to go back. **Esc** opens a menu, but the game keeps going for everyone. If the host leaves, the game ends.
 
 ## If something goes wrong
 
@@ -73,4 +82,4 @@ Send **main.log**. If there is also a **main.old.log**, send that too; it is the
 
 Open Windows **Settings**, go to **Apps**, then **Installed apps**, find **D2 Tower Defense** and click **Uninstall**.
 
-The copied game pictures stay behind in `%APPDATA%\D2 Tower Defense`. Delete that folder too if you want them gone.
+The copied game pictures, your items and your stash stay behind in `%APPDATA%\D2 Tower Defense`. Delete that folder too if you want them gone.
