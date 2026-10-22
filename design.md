@@ -413,6 +413,20 @@ Data-driven like the first three: a class JSON (lines and tiers), a skill JSON p
 - **Druid** (class weapon Club). Fire: Firestorm (projectile, calc1 streams), Fissure (the Eruption row; a fire zone), Volcano (a fire zone of aurarangecalc radius for its missile's life). Wind: Arctic Blast (a cold line missile that chills), Tornado (a physical line missile from its MinDam columns), Hurricane (a control aura: cold pulses in aurarangecalc, every 20 ticks since the row has no perdelay). Summoning: Raven (druidhawk, petmax of them), Dire Wolf (the Summon Fenris row, fenris, calc1 life), Grizzly (druidbear, one, calc1 damage); a summon's row damage columns add to its monstats blows as the elemental ones do. Evolutions: Fire Druid (Volcano with Grizzly), Wind Druid (Hurricane with Tornado), Summoner Druid (Grizzly with Dire Wolf).
 - **Assassin** (class weapon Katar). Traps: Fire Blast (the Fire Trauma row; a fire burst of aurarangecalc radius), Lightning Sentry (its bolt, sentrylightningbolt, fired from the tower itself at the row's lightning; a missile Range that is a calc is taken at level 20), Death Sentry (the mon death sentry row the trap casts: corpses within ln34 explode for 40 to 80 percent of their life, half of it physical, half fire; the Death Sentry row itself carries only the lightning bolt). Martial Arts: Tiger Strike (melee, its damage percent), Dragon Talon (melee, calc1 kicks at calc2 percent), Phoenix Strike (the Royal Strike row: its meteor, royalstrikemeteor's fire, on everything within aurarangecalc of the struck monster). Shadow: Cloak of Shadows (a curse that blinds: the monsters hit nothing while it lasts), Mind Blast (a physical burst from its MinDam columns that stuns for its ELen), Shadow Master (shadowmaster, one; she blocks, her own blows being 0 in monstats). Evolutions: Trapsin (Death Sentry with Lightning Sentry), Kicksin (Dragon Talon with Shadow Master), Phoenix Striker (Phoenix Strike with Mind Blast). Not carried: the traps as placed objects (they fire from the tower), Phoenix Strike's lightning and ice charges, Mind Blast's conversion.
 
+Harness (npm run loot -- --bots AMAZON,BARB,DRUID,ASSASSIN, itemless and best in slot, seeds 1 and 2; the single-class rule applies: a death from Hell Act 3 on is not a miss):
+
+| Bot | none | bis |
+| --- | --- | --- |
+| AMAZON | 55, 55 (Hell Act 1) | 65, 69 (Hell Act 3 to 4) |
+| BARB | 21, 21 (Normal Act 5; 9 with the Hand Axe it had first) | 88, 85 (Tier 1 to 2, Hand Axe run) |
+| DRUID | 47, 47 (Nightmare Act 5) | 75, 75 (Hell Baal's wave) |
+| ASSASSIN | 48, 22 (Nightmare Act 5; Normal Act 5 on seed 2) | 98, 98 (Tier 3) |
+| MIXED3, for scale | 55, 55 | 121, 121 |
+
+The Amazon plays like the three older classes. The Barbarian is the miss: a melee-only class whose towers touch one path tile each kills too slowly for its income to grow (four Frenzy towers by wave 20, 2,300 gold banked, the ring full on wave 21); the Paladin's melee line only works beside his ranged lines. Its levers are melee reach, or an early ranged pick in the war cry line (War Cry at T1). The Druid and Assassin reach Nightmare Act 5 itemless: their lines are mostly single-target or short-reach at T1 (Firestorm's streams, Fire Blast's small burst, the Shadow line's blind and stun doing no damage), and the bots build little else; in best-in-slot gear they clear Hell (Druid) and reach Tier 3 (Assassin). The 22 is the bots' knife-edge again.
+
+Not built this evening: the four classes' evolutions are two-tower like the others (T5 three-tower evolutions remain unbuilt for every class); the traps stand on the tower rather than where a player would place them; the Barbarian's cries carry no defence cut; Phoenix Strike has only its fire charge.
+
 ## Overnight decisions
 
 Calls made without asking, each the option closest to Diablo II's own rules.

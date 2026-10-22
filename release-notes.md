@@ -1,3 +1,8 @@
+0.3.0
+
+- Four new classes: the Amazon (bow, javelin, passives), the Barbarian (combat, whirlwind, war cries), the Druid (fire, wind, summoning) and the Assassin (traps, martial arts, shadow), each with three lines, three tiers and three evolutions, their D2R figures, missiles and summons, and their class items equipping on them.
+- Setup extracts the new art on the first start after the update.
+
 0.2.4
 
 - Fixes the launch error of 0.2.3 (the solo spawn mark was made before the text it writes through).
