@@ -321,10 +321,18 @@ function fillSchedule(tables: Tables): Tables {
 
 export const FIXTURE_TABLES: Tables = fillSchedule(HAND_TABLES);
 
+/** The classes the fixture tables have skill rows for; the four later classes are covered by the real-table tests and the harness. */
+const FIXTURE_CLASSES = new Set(['paladin', 'sorceress', 'necromancer']);
+
 export function fixtureDesign(design: DesignData = DESIGN): DesignData {
+  const classes = design.classes.filter((c) => FIXTURE_CLASSES.has(c.id));
+  const kept = new Set(classes.flatMap((c) => Object.values(c.lines).flatMap((l) => l.tiers.flat())));
+  const skills = design.skills.filter((s) => kept.has(s.id) || design.classes.every((c) => !Object.values(c.lines).some((l) => l.tiers.flat().includes(s.id))));
   return {
     ...design,
-    skills: design.skills.map((s) =>
+    classes,
+    evolutions: Object.fromEntries(Object.entries(design.evolutions).filter(([, e]) => kept.has(e.attack.skill) && kept.has(e.partner.skill))),
+    skills: skills.map((s) =>
       s.id === 'fist-of-the-heavens'
         ? { ...s, splash: { ...(s['splash'] as object), subMissile: { missile: 'fohbolt', radiusCalc: 'aurarangecalc' } } }
         : s,

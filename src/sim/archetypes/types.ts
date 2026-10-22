@@ -35,6 +35,8 @@ export interface SkillJson {
   id: string;
   /** skills.txt "skill" column. */
   skill: string;
+  /** The name players know when skills.txt spells it otherwise (Eruption is Fissure). */
+  displayName?: string;
   archetype: ArchetypeId;
   damageType: DamageType;
   /**
@@ -60,7 +62,10 @@ export interface SkillJson {
 
 export interface SkillCommon {
   id: string;
+  /** skills.txt name: the key items, tabs and strings use. */
   name: string;
+  /** The name shown to players. */
+  displayName: string;
   archetype: ArchetypeId;
   damageType: DamageType;
   skillLevels: number[];
@@ -91,7 +96,10 @@ export interface ProjectileDef extends SkillCommon {
   missileSpeed: number;
   missileLifetime: number;
   filter: HitFilter;
-  levels: (DamageRange & { count: number })[];
+  /** Bow skills: the class weapon each arrow carries (1/256 HP), at weaponPct percent, plus the skill's damage percent. */
+  weapon?: DamageRange;
+  weaponPct: number;
+  levels: (DamageRange & { count: number; damagePct: number })[];
 }
 
 export interface PierceDef extends SkillCommon {
@@ -108,6 +116,8 @@ export interface PierceDef extends SkillCommon {
 
 export interface SplashDef extends SkillCommon {
   archetype: 'splash';
+  /** Stun on everything hit, per tower level, in ticks (War Cry, Mind Blast); never bosses. */
+  stunTicks: number[];
   /** nova: a ring from the tower out to its range, hitting everything once (Poison Nova). */
   delivery: 'missile' | 'strike' | 'orbit' | 'nova';
   /** Strikes a random monster in range instead of the tower's target (Thunder Storm). */
@@ -141,6 +151,10 @@ export interface MeleeDef extends SkillCommon {
   /** Weapon damage from weapons.txt, 1/256 HP. */
   weapon: DamageRange;
   stunTicks: number;
+  /** Every swing hits everything in reach (Whirlwind). */
+  hitsAll: boolean;
+  /** The physical hit lands as this element instead (Berserk's magic). */
+  convert?: Element;
   levels: { swings: number; damagePct: number; elementalPct: Partial<Record<Element, number>> }[];
 }
 
@@ -162,6 +176,8 @@ export interface TowerBuff {
   gear?: TowerGear;
   damagePct: number;
   attackSpeedPct: number;
+  /** Bolts fly on through what they hit with this chance (the Amazon's Pierce). */
+  piercePct?: number;
   /** Fire added to every hit, 1/256 HP (Enchant). */
   fireMin: number;
   fireMax: number;
@@ -229,6 +245,8 @@ export interface SummonDef extends SkillCommon {
 export interface CorpseDef extends SkillCommon {
   archetype: 'corpse';
   filter: HitFilter;
+  /** 'gold': the corpse is looted for a share of its bounty instead of exploded (Find Item). */
+  mode: 'explode' | 'gold';
   levels: { radiusUnits: number; minPct: number; maxPct: number; physicalPct: number }[];
 }
 

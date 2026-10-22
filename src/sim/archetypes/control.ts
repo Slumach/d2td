@@ -29,6 +29,8 @@ interface ControlJson {
   mode: 'aura' | 'onHit';
   /** Aura mode: skills.txt column for the radius. */
   radiusCalc?: string;
+  /** Aura mode: ticks between pulses when skills.txt has no perdelay (Hurricane). */
+  pulseTicks?: number;
   /** On-hit mode: slow percent and duration in ticks. */
   slowPct?: number;
   durationTicks?: number;
@@ -41,7 +43,7 @@ export const control: ArchetypeModule<ControlDef> = {
     const f = fields<ControlJson>(json);
     elementalType(json, ctx.skillRow);
     if (f.mode === 'aura') {
-      const pulseTicks = Math.max(1, d2FramesToTicks(int(ctx.skillRow, 'perdelay')));
+      const pulseTicks = Math.max(1, int(ctx.skillRow, 'perdelay') > 0 ? d2FramesToTicks(int(ctx.skillRow, 'perdelay')) : (f.pulseTicks ?? 20));
       return {
         ...common(json, ctx, false),
         archetype: 'control',

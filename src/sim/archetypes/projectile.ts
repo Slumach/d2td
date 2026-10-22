@@ -7,14 +7,23 @@ import { canHurt, findTarget, strike, withBonus } from '../combat.ts';
 import { flyOn, homeToward, pierceOn, spawnMissile, targetOf } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
 import type { Element, Monster } from '../state.ts';
+import { idiv } from '../fixed.ts';
+import { findRow, int } from '../tables.ts';
 import { calcAt, common, damageAt, elementalType, fields, filterFrom, missileLifetime, missileOf, missileSpeed, perLevel } from './common.ts';
-import type { ArchetypeModule, ProjectileDef } from './types.ts';
+import type { ArchetypeModule, DamageRange, ProjectileDef } from './types.ts';
 
 interface ProjectileJson {
   /** Shots per attack. Defaults to 1. */
   count?: number;
   /** skills.txt column with the shot count per level, instead of count. */
   countCalc?: string;
+  /**
+   * Bow skills: every arrow carries the class weapon's damage at skills.txt SrcDam
+   * (128ths; Multiple Shot's 96 is three quarters), dealt as the skill's damage type,
+   * with the skill's damage percent column on top.
+   */
+  weapon?: boolean;
+  damagePctCalc?: string;
 }
 
 export const projectile: ArchetypeModule<ProjectileDef> = {
@@ -23,16 +32,28 @@ export const projectile: ArchetypeModule<ProjectileDef> = {
   resolve(json, ctx) {
     const f = fields<ProjectileJson>(json);
     const missile = missileOf(ctx.tables, ctx.skillRow);
-    elementalType(json, ctx.skillRow);
+    if (json.damageType === 'none') throw new Error(`${json.id}: projectile needs a damage type`);
+    if (!f.weapon) elementalType(json, ctx.skillRow);
+    let weapon: DamageRange | undefined;
+    if (f.weapon) {
+      if (!ctx.weapon) throw new Error(`${json.id}: a weapon projectile needs a class weapon`);
+      const row = findRow(ctx.tables.weapons, 'name', ctx.weapon);
+      const two = int(row, '2handed') === 1 && int(row, '2handmaxdam') > 0;
+      weapon = { min: int(row, two ? '2handmindam' : 'mindam') * 256, max: int(row, two ? '2handmaxdam' : 'maxdam') * 256 };
+    }
+    const srcDam = int(ctx.skillRow, 'SrcDam');
     return {
       ...common(json, ctx, true),
       archetype: 'projectile',
       missileSpeed: missileSpeed(missile),
       missileLifetime: missileLifetime(missile),
       filter: filterFrom(missile, ctx.filterOverride),
+      ...(weapon ? { weapon } : {}),
+      weaponPct: srcDam > 0 ? Math.trunc((srcDam * 100) / 128) : 100,
       levels: perLevel(json, (level) => ({
         ...damageAt(ctx.skillRow, level, 'skill'),
         count: Math.max(1, f.countCalc ? calcAt(ctx.skillRow, f.countCalc, level) : (f.count ?? 1)),
+        damagePct: f.damagePctCalc ? calcAt(ctx.skillRow, f.damagePctCalc, level) : 0,
       })),
     };
   },
@@ -54,8 +75,10 @@ export const projectile: ArchetypeModule<ProjectileDef> = {
     if (--missile.ticksLeft < 0) return false;
     const hit = (m: Monster) => {
       const range = skill.levels[missile.level]!;
-      const amount = withBonus(rollInt(sim.state.rng, range.min, range.max), missile.damagePct);
-      strike(sim, m, amount, skill.damageType as Element, skill.filter, skill, missile.level, missile);
+      // A bow skill's arrow: the weapon at its share with the skill's percent, then the skill's own damage
+      const weapon = skill.weapon ? idiv(rollInt(sim.state.rng, skill.weapon.min, skill.weapon.max) * skill.weaponPct, 100) : 0;
+      const amount = withBonus(weapon, range.damagePct) + rollInt(sim.state.rng, range.min, range.max);
+      strike(sim, m, withBonus(amount, missile.damagePct), skill.damageType as Element, skill.filter, skill, missile.level, missile);
     };
     // A bolt that pierced flies on in a straight line
     if (missile.targetId === 0) return flyOn(sim, missile, skill.missileSpeed, hit);

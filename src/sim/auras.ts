@@ -59,6 +59,7 @@ const noFx = (): MonsterAuraFx => ({ slowPct: 0, resistDown: {}, damageDownPct: 
 function strongestTower(into: TowerBuff, add: TowerBuff): void {
   into.damagePct = Math.max(into.damagePct, add.damagePct);
   into.attackSpeedPct = Math.max(into.attackSpeedPct, add.attackSpeedPct);
+  into.piercePct = Math.max(into.piercePct ?? 0, add.piercePct ?? 0);
   if (add.fireMax > into.fireMax) {
     into.fireMin = add.fireMin;
     into.fireMax = add.fireMax;
@@ -125,6 +126,7 @@ export function computeAuras(sim: Sim): AuraField {
     for (const b of Object.values(per)) {
       sum.damagePct += b.damagePct;
       sum.attackSpeedPct += b.attackSpeedPct;
+      sum.piercePct = Math.min(100, (sum.piercePct ?? 0) + (b.piercePct ?? 0));
       sum.fireMin += b.fireMin;
       sum.fireMax += b.fireMax;
     }

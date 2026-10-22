@@ -14,12 +14,16 @@ import { aliveWithin, damageAgainst, dealRaw, findTarget } from '../combat.ts';
 import { d2FramesToTicks, idiv } from '../fixed.ts';
 import type { Element, Monster } from '../state.ts';
 import { int } from '../tables.ts';
-import { auraStats, auraUnits, calcAt, common, fields, filterFrom, perLevel } from './common.ts';
+import { auraStats, auraUnits, calcAt, common, fields, filterFrom, perLevel, tenthsToUnits } from './common.ts';
 import type { ArchetypeModule, DebuffDef } from './types.ts';
 
 interface DebuffJson {
   mode: 'aura' | 'curse' | 'pulse';
   radiusCalc?: string;
+  /** A design radius when skills.txt has none (Battle Cry's shockwave). */
+  radiusTenths?: number;
+  /** Blinds (Cloak of Shadows): monsters under it hit nothing, as D2's blind monsters attack nothing. */
+  blind?: boolean;
   /** Curse: skills.txt column with the duration in frames. */
   durationCalc?: string;
   /** Pulse: skills.txt columns with the percent of current HP and the least it takes. */
@@ -65,10 +69,10 @@ export const debuff: ArchetypeModule<DebuffDef> = {
           if (element && value < 0) resistDown[element] = -value;
         }
         return {
-          radiusUnits: auraUnits(calcAt(ctx.skillRow, f.radiusCalc ?? 'aurarangecalc', level), ctx.auraRangePerTile),
+          radiusUnits: f.radiusTenths !== undefined ? tenthsToUnits(f.radiusTenths) : auraUnits(calcAt(ctx.skillRow, f.radiusCalc ?? 'aurarangecalc', level), ctx.auraRangePerTile),
           resistDown,
           slowPct: Math.max(0, -(stats['velocitypercent'] ?? 0)),
-          damageDownPct: Math.max(0, -(stats['damagepercent'] ?? 0)),
+          damageDownPct: f.blind ? 100 : Math.max(0, -(stats['damagepercent'] ?? 0)),
           durationTicks: f.durationCalc ? Math.max(1, d2FramesToTicks(calcAt(ctx.skillRow, f.durationCalc, level))) : 0,
           hpPct: f.hpPctCalc ? calcAt(ctx.skillRow, f.hpPctCalc, level) : 0,
           minDamage: f.minDamageCalc ? calcAt(ctx.skillRow, f.minDamageCalc, level) * shift : 0,

@@ -207,10 +207,11 @@ export interface Missile {
   towerId: number;
   /** Tower level index 0 to 4 the missile was fired at. */
   level: number;
-  /** Aura bonuses snapshot at fire time: damage percent and Enchant's fire. */
+  /** Aura bonuses snapshot at fire time: damage percent, Enchant's fire, and Pierce's chance to fly on. */
   damagePct: number;
   fireMin: number;
   fireMax: number;
+  piercePct: number;
   x: number;
   y: number;
   /** Origin, for orbits and line missiles. */

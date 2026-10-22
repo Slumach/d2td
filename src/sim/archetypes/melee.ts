@@ -2,7 +2,7 @@
 // connect). Weapon damage comes from weapons.txt, the skill adds a damage percent, extra
 // swings (Zeal) and elemental damage as a percent of the weapon roll (Vengeance).
 
-import { bleed, canHurt, damageAgainst, dealDamage, dealRaw, effectiveResist, findTarget, poison, withBonus } from '../combat.ts';
+import { bleed, canHurt, damageAgainst, dealDamage, dealRaw, effectiveResist, findTarget, poison, withBonus, within } from '../combat.ts';
 import { idiv } from '../fixed.ts';
 import { rollInt } from '../rng.ts';
 import type { TowerGear } from '../items/gear.ts';
@@ -14,9 +14,15 @@ import type { ArchetypeModule, MeleeDef } from './types.ts';
 
 interface MeleeJson {
   swingsCalc?: string;
+  /** A fixed swing count (Double Swing, Frenzy), when the table has no calc for it. */
+  swings?: number;
   damagePctCalc?: string;
   elementalPctCalcs?: Partial<Record<Element, string>>;
   stunTicks?: number;
+  /** Every swing hits everything in reach (Whirlwind). */
+  hitsAll?: boolean;
+  /** The physical hit lands as this element (Berserk: magic). */
+  convert?: Element;
 }
 
 const ALL = filterFrom(undefined);
@@ -33,13 +39,15 @@ export const melee: ArchetypeModule<MeleeDef> = {
       archetype: 'melee',
       weapon: { min: int(weapon, 'mindam') * 256, max: int(weapon, 'maxdam') * 256 },
       stunTicks: f.stunTicks ?? 0,
+      hitsAll: f.hitsAll === true,
+      ...(f.convert ? { convert: f.convert } : {}),
       levels: perLevel(json, (level) => {
         const elementalPct: Partial<Record<Element, number>> = {};
         for (const [element, column] of Object.entries(f.elementalPctCalcs ?? {}) as [Element, string][]) {
           elementalPct[element] = calcAt(ctx.skillRow, column, level);
         }
         return {
-          swings: f.swingsCalc ? Math.max(1, calcAt(ctx.skillRow, f.swingsCalc, level)) : 1,
+          swings: f.swingsCalc ? Math.max(1, calcAt(ctx.skillRow, f.swingsCalc, level)) : Math.max(1, f.swings ?? 1),
           damagePct: f.damagePctCalc ? calcAt(ctx.skillRow, f.damagePctCalc, level) : 0,
           elementalPct,
         };
@@ -49,14 +57,19 @@ export const melee: ArchetypeModule<MeleeDef> = {
 
   act(sim, tower, skill, lvl, buff) {
     const { swings, damagePct, elementalPct } = skill.levels[lvl]!;
-    const elements = ELEMENTS.filter((e) => e === 'phys' || (elementalPct[e] ?? 0) > 0);
+    const elements = ELEMENTS.filter((e) => e === (skill.convert ?? 'phys') || (elementalPct[e] ?? 0) > 0);
     // The gear's added damage can hurt what the weapon cannot
     const hurting = buff.gear ? ELEMENTS.filter((e) => elements.includes(e) || buff.gear!.adds[e]) : elements;
     let swung = false;
+    const physical = skill.convert ?? 'phys';
+    const inReach = (m: Monster) => hurting.some((e) => canHurt(sim, m, e, ALL));
     for (let i = 0; i < swings; i++) {
-      const target = findTarget(sim, tower, skill.rangeUnits, (m) => hurting.some((e) => canHurt(sim, m, e, ALL)));
-      if (!target) break;
+      const first = findTarget(sim, tower, skill.rangeUnits, inReach);
+      if (!first) break;
       swung = true;
+      // Whirlwind sweeps everything in reach; other skills hit the tower's target
+      const targets = skill.hitsAll ? sim.state.monsters.filter((m) => m.hp > 0 && inReach(m) && within(tower, m, skill.rangeUnits)) : [first];
+      for (const target of targets) {
       const gear = buff.gear;
       const roll = rollInt(sim.state.rng, skill.weapon.min, skill.weapon.max);
       // The physical hit: +% damage to demons or undead adds to its enhanced damage, and
@@ -65,14 +78,15 @@ export const melee: ArchetypeModule<MeleeDef> = {
       const versus = gear ? (def.demon ? gear.demonDamagePct : 0) + (def.undead ? gear.undeadDamagePct : 0) : 0;
       const deadly = gear && gear.deadlyStrikePct > 0 && rollInt(sim.state.rng, 0, 99) < gear.deadlyStrikePct ? 2 : 1;
       const hpBefore = target.hp;
-      dealDamage(sim, target, withBonus(roll, damagePct + buff.damagePct + versus) * deadly, 'phys', ALL);
+      dealDamage(sim, target, withBonus(roll, damagePct + buff.damagePct + versus) * deadly, physical, ALL);
       if (gear) onHit(sim, tower, target, gear, hpBefore);
       for (const e of elements) {
         if (e === 'phys') continue;
         dealDamage(sim, target, withBonus(idiv(roll * elementalPct[e]!, 100), buff.damagePct), e, ALL);
       }
       if (buff.fireMax > 0) dealDamage(sim, target, rollInt(sim.state.rng, buff.fireMin, buff.fireMax), 'fire', ALL);
-      if (skill.stunTicks > 0 && target.hp > 0) target.stunTicks = Math.max(target.stunTicks, skill.stunTicks);
+      if (skill.stunTicks > 0 && target.hp > 0 && target.rank !== 'boss') target.stunTicks = Math.max(target.stunTicks, skill.stunTicks);
+      }
     }
     return swung;
   },

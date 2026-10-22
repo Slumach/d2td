@@ -11,6 +11,23 @@ interface BuffAuraJson {
   radiusCalc?: string;
   /** For a skill with no radius in skills.txt (Enchant targets one ally in D2): a design radius. */
   radiusTenths?: number;
+  /**
+   * A passive (Critical Strike, Pierce): the bonus is in the passivestat columns rather
+   * than aurastat, and is projected to the towers in radiusTenths as a support aura.
+   * passive_critical_strike counts as damage percent (the chance to deal double), and
+   * skill_pierce as the chance a bolt flies on.
+   */
+  passive?: boolean;
+}
+
+/** passivestatN / passivecalcN pairs of a skill at a level, by D2 stat name. */
+function passiveStats(row: Parameters<typeof calcAt>[0], level: number): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (let i = 1; i <= 5; i++) {
+    const stat = String(row[`passivestat${i}`] ?? '');
+    if (stat) out[stat] = calcAt(row, `passivecalc${i}`, level);
+  }
+  return out;
 }
 
 export const buffAura: ArchetypeModule<BuffAuraDef> = {
@@ -24,14 +41,15 @@ export const buffAura: ArchetypeModule<BuffAuraDef> = {
       ...common(json, ctx, false),
       archetype: 'buffAura',
       levels: perLevel(json, (level) => {
-        const stats = auraStats(ctx.skillRow, level);
+        const stats = f.passive ? passiveStats(ctx.skillRow, level) : auraStats(ctx.skillRow, level);
         return {
           radiusUnits:
             f.radiusTenths !== undefined
               ? tenthsToUnits(f.radiusTenths)
               : auraUnits(calcAt(ctx.skillRow, f.radiusCalc ?? 'aurarangecalc', level), ctx.auraRangePerTile),
-          damagePct: stats['damagepercent'] ?? 0,
+          damagePct: (stats['damagepercent'] ?? 0) + (stats['passive_critical_strike'] ?? 0),
           attackSpeedPct: stats['attackrate'] ?? 0,
+          piercePct: Math.min(100, stats['skill_pierce'] ?? 0),
           fireMin: (stats['firemindam'] ?? 0) * shift,
           fireMax: (stats['firemaxdam'] ?? 0) * shift,
         };
@@ -40,7 +58,7 @@ export const buffAura: ArchetypeModule<BuffAuraDef> = {
   },
 
   aura(skill, lvl) {
-    const { radiusUnits, damagePct, attackSpeedPct, fireMin, fireMax } = skill.levels[lvl]!;
-    return { radiusUnits, towers: { damagePct, attackSpeedPct, fireMin, fireMax } };
+    const { radiusUnits, damagePct, attackSpeedPct, piercePct, fireMin, fireMax } = skill.levels[lvl]!;
+    return { radiusUnits, towers: { damagePct, attackSpeedPct, piercePct, fireMin, fireMax } };
   },
 };

@@ -9,7 +9,7 @@
 // impact, like the holy bolts Fist of the Heavens sprays at undead and demons.
 
 import { aliveWithin, canHurt, dealDamage, distSq, findTarget, strike, within, withBonus } from '../combat.ts';
-import { idiv, isqrt } from '../fixed.ts';
+import { d2FramesToTicks, idiv, isqrt } from '../fixed.ts';
 import { TRIG_SCALE, TRIG_STEPS, cos64, homeToward, sin64, spawnMissile, targetOf } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
 import type { Element, Missile, Monster, Sim } from '../state.ts';
@@ -22,6 +22,7 @@ import {
   etype,
   fields,
   filterFrom,
+  lengthAt,
   missileLifetime,
   missileOf,
   missileSpeed,
@@ -32,6 +33,13 @@ import type { ArchetypeModule, SplashDef } from './types.ts';
 
 interface SplashJson {
   delivery: 'missile' | 'strike' | 'orbit' | 'nova';
+  /** The missiles.txt row to use when the skill names none a server missile (Mind Blast's cltmissile). */
+  missile?: string;
+  /** Damage from the missile row rather than the skill row (Phoenix Strike's meteor). */
+  damageFromMissile?: boolean;
+  /** Stun on hit: a skills.txt column in frames (War Cry's calc4), or the row's ELen (Mind Blast). */
+  stunCalc?: string;
+  stunLen?: boolean;
   radiusTenths?: number;
   /** skills.txt column with the radius in D2 units, instead of radiusTenths. */
   radiusCalc?: string;
@@ -55,6 +63,9 @@ function explode(sim: Sim, skill: SplashDef, missile: Missile, center: { x: numb
     const pct = skill.radiusUnits === 0 ? 100 : 100 - idiv((100 - skill.edgeDamagePct) * d, skill.radiusUnits);
     const amount = withBonus(rollInt(sim.state.rng, range.min, range.max), missile.damagePct);
     strike(sim, m, idiv(amount * pct, 100), element(skill), skill.filter, skill, missile.level, missile);
+    // War Cry and Mind Blast stun what they hit; bosses shrug it off
+    const stun = skill.stunTicks[missile.level] ?? 0;
+    if (stun > 0 && m.hp > 0 && m.rank !== 'boss') m.stunTicks = Math.max(m.stunTicks, stun);
     hit.push(m);
   }
   if (skill.subFilter && range.subRadiusUnits > 0) {
@@ -72,9 +83,10 @@ export const splash: ArchetypeModule<SplashDef> = {
 
   resolve(json, ctx) {
     const f = fields<SplashJson>(json);
-    const missile = missileOf(ctx.tables, ctx.skillRow);
+    const missile = missileOf(ctx.tables, ctx.skillRow, f.missile);
     const sub = f.subMissile ? missileOf(ctx.tables, ctx.skillRow, f.subMissile.missile) : undefined;
-    elementalType(json, ctx.skillRow);
+    if (!f.damageFromMissile) elementalType(json, ctx.skillRow);
+    const frames = (v: number) => (v > 0 ? Math.max(1, d2FramesToTicks(v)) : 0);
     const radius = f.radiusCalc
       ? auraUnits(calcAt(ctx.skillRow, f.radiusCalc, json.skillLevels?.[0] ?? 1), ctx.auraRangePerTile)
       : tenthsToUnits(f.radiusTenths ?? 0);
@@ -92,8 +104,9 @@ export const splash: ArchetypeModule<SplashDef> = {
       filter: filterFrom(missile, ctx.filterOverride),
       subFilter: sub ? filterFrom(sub) : undefined,
       subElement: (sub && etype(sub)) || 'mag',
+      stunTicks: perLevel(json, (level) => (f.stunCalc ? frames(calcAt(ctx.skillRow, f.stunCalc, level)) : f.stunLen ? frames(lengthAt(ctx.skillRow, level)) : 0)),
       levels: perLevel(json, (level) => ({
-        ...damageAt(ctx.skillRow, level, 'skill'),
+        ...(f.damageFromMissile ? damageAt(missile, level, 'missile') : damageAt(ctx.skillRow, level, 'skill')),
         sub: sub ? damageAt(sub, level, 'missile') : { min: 0, max: 0 },
         subRadiusUnits:
           sub && f.subMissile ? auraUnits(calcAt(ctx.skillRow, f.subMissile.radiusCalc, level), ctx.auraRangePerTile) : 0,

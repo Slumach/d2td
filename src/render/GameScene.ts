@@ -1444,7 +1444,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private skillName(id: string): string {
-    return this.sim.data.skills[id]?.name ?? id;
+    return this.sim.data.skills[id]?.displayName ?? id;
   }
 
   /** An icon button for a skill, with the game's own name and description on hover. */

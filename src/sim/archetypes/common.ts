@@ -58,15 +58,40 @@ export function lengthAt(row: TableRow, level: number): number {
 }
 
 /**
- * Elemental damage at a level in 1/256 HP: the table value shifted by HitShift. Poison
+ * D2's per-level physical damage of a skill (MinDam, MaxDam and the MinLevDam1 to 5
+ * increments, the same brackets as the elemental columns; missiles.txt names them
+ * MinDamage and MinLevDam1).
+ */
+export function physicalAtLevel(row: TableRow, which: 'min' | 'max', level: number, table: 'skill' | 'missile'): number {
+  const base = table === 'skill' ? (which === 'min' ? 'MinDam' : 'MaxDam') : which === 'min' ? 'MinDamage' : 'MaxDamage';
+  const step = (i: number) => `${which === 'min' ? 'Min' : 'Max'}LevDam${i}`;
+  const brackets: [number, number][] = [
+    [2, 8],
+    [9, 16],
+    [17, 22],
+    [23, 28],
+    [29, 1000],
+  ];
+  let value = int(row, base);
+  brackets.forEach(([from, to], i) => {
+    value += Math.max(0, Math.min(level, to) - from + 1) * int(row, step(i + 1));
+  });
+  return value;
+}
+
+/**
+ * Damage at a level in 1/256 HP: the elemental columns shifted by HitShift, or the
+ * physical columns for a row with no element (Tornado, War Cry, Mind Blast). Poison
  * values are per frame in D2; this returns the whole dose over the poison length.
  */
 export function damageAt(row: TableRow, level: number, table: 'skill' | 'missile'): DamageRange {
   const shift = 2 ** int(row, 'HitShift');
   const frames = etype(row) === 'pois' ? Math.max(1, lengthAt(row, level)) : 1;
+  const physical = !etype(row) && elementalAtLevel(row, 'max', level, table) === 0;
+  const at = physical ? physicalAtLevel : elementalAtLevel;
   return {
-    min: elementalAtLevel(row, 'min', level, table) * shift * frames,
-    max: elementalAtLevel(row, 'max', level, table) * shift * frames,
+    min: at(row, 'min', level, table) * shift * frames,
+    max: at(row, 'max', level, table) * shift * frames,
   };
 }
 
@@ -148,6 +173,7 @@ export function common(json: SkillJson, ctx: ResolveContext, needsRange: boolean
   return {
     id: json.id,
     name: str(row, 'skill'),
+    displayName: json.displayName ?? str(row, 'skill'),
     archetype: json.archetype,
     damageType: json.damageType,
     skillLevels,

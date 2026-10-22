@@ -38,6 +38,7 @@ export function spawnMissile(sim: Sim, tower: Tower, skill: string, lvl: number,
     damagePct: buff.damagePct,
     fireMin: buff.fireMin,
     fireMax: buff.fireMax,
+    piercePct: buff.piercePct ?? 0,
     x: tower.x,
     y: tower.y,
     ox: tower.x,
@@ -74,13 +75,13 @@ export function homeToward(missile: Missile, target: { x: number; y: number }, s
 }
 
 /**
- * Item pierce, after a bolt hits `hit`: when the firing tower's pierce chance rolls, the
+ * Pierce (items, or the Amazon's Pierce aura), after a bolt hits `hit`: when the chance rolls, the
  * bolt flies on along the line it was travelling (`from` is where it was a tick ago) and
  * hits what it meets, no longer homing. Returns true when it flies on.
  */
 export function pierceOn(sim: Sim, missile: Missile, hit: Monster, from: Point, speed: number): boolean {
-  const g = actorGear(sim);
-  if (g.piercePct <= 0 || rollInt(sim.state.rng, 0, 99) >= g.piercePct) return false;
+  const chance = actorGear(sim).piercePct + missile.piercePct;
+  if (chance <= 0 || rollInt(sim.state.rng, 0, 99) >= chance) return false;
   if (!missile.hits.includes(hit.id)) missile.hits.push(hit.id);
   if (missile.targetId !== 0) {
     const origin = distSq(from, missile) > 0 ? from : { x: missile.ox, y: missile.oy };
