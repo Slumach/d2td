@@ -1629,7 +1629,7 @@ export class GameScene extends Phaser.Scene {
     const className = sim.data.classes[tower.cls]?.name ?? tower.cls;
     lines.push(
       recipe
-        ? `${className}, evolved with ${this.skillName(tower.partnerSkill)} built in`
+        ? `${className}, evolved with ${this.skillName(tower.partnerSkill)} built in   Level ${tower.level}`
         : `${className}, ${line?.name ?? 'no line yet'}   Tier ${tower.tier}   Level ${tower.level}`,
     );
     const auras = effectsOn(sim, tower);

@@ -46,7 +46,7 @@ export function auraSources(sim: Sim, tower: Tower): Source[] {
     if (it && aura && aura.radiusUnits > 0) out.push({ tower, skill: it.skill, aura });
   }
   if (tower.evolved && tower.partnerSkill) {
-    const partner = sim.data.skills[tower.partnerSkill]!;
+    const partner = geared(sim, tower, sim.data.skills[tower.partnerSkill]!);
     const aura = archetypeOf(partner).aura?.(partner, tower.partnerLevel);
     if (aura) out.push({ tower, skill: partner, aura: { ...aura, radiusUnits: idiv(aura.radiusUnits, 2) } });
   }

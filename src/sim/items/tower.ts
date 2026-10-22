@@ -4,6 +4,7 @@
 
 import { archetypeOf } from '../archetypes/registry.ts';
 import type { SkillDef, TowerBuff } from '../archetypes/types.ts';
+import { MAX_TOWER_LEVEL } from '../levels.ts';
 import { isAura } from '../dps.ts';
 import { idiv } from '../fixed.ts';
 import type { Element, Sim, Tower } from '../state.ts';
@@ -36,7 +37,7 @@ export function plusLevels(sim: Sim, gear: TowerGear, skill: SkillDef): number {
  */
 export function geared(sim: Sim, tower: Tower, skill: SkillDef): SkillDef {
   const gear = gearOf(sim, tower);
-  const plus = plusLevels(sim, gear, skill);
+  const plus = plusLevels(sim, gear, skill) + boughtLevels(sim, tower);
   const weapon = skill.archetype === 'melee' ? gear.weapon : undefined;
   // An evolved tower's attack and its casting partner hit with the recipe's evolution bonus;
   // a partner aura or curse keeps its own effect
@@ -82,6 +83,13 @@ export function openWoundsDamage(level: number): number {
   const l = Math.max(1, Math.min(99, level));
   const perFrame = l <= 15 ? 9 * l + 31 : l <= 30 ? 18 * l - 104 : l <= 45 ? 27 * l - 374 : l <= 60 ? 36 * l - 779 : 45 * l - 1319;
   return perFrame * 200;
+}
+
+/** skills.txt levels a tower has bought past its ladder's top (an evolved tower's levels past 5), on every skill it casts. */
+export function boughtLevels(sim: Sim, tower: Tower): number {
+  const past = tower.level - MAX_TOWER_LEVEL;
+  if (past <= 0) return 0;
+  return tower.evolved ? past * sim.data.economy.evolvedLevels.skillLevelsPerLevel : 0;
 }
 
 /** D2's diminishing returns on attack and cast speed: effective = 120 x speed / (120 + speed). */

@@ -57,6 +57,18 @@ A tower is a class, a line, a tier and a level. The line is chosen once, the tie
 
 **Evolution (T4).** A recipe names two towers and the minimum tier of each. Both must be adjacent (8 neighbours) and at that tier. Evolving consumes both and places the evolved tower on the attack tower's tile. The freed tile is part of the payoff. The evolved tower fires both lines: its attack skill at its top level and its partner's skill on its own cooldown (an aura partner projects at half radius, itself included). An evolution is a jump of balance.json evolution.dpsPct (250%) over the two parents working side by side: each recipe carries a bonus, computed from the tables at load time, on the damage of its attack and of a partner that casts (an aura or curse partner keeps its own effect), set so the evolved tower is worth 2.5x the pair at their top levels (the attack under the partner's aura or curse, plus the partner's own casts, with the attack's delay dropped where the recipe ignores it). Before Oct 23 an evolution was worth the pair and no more: a maxed Blizzard at 5,109 DPS became a Blizzballer at 5,109 plus its Fire Ball, and the Paladin's aura recipes only looked stronger because a neighbouring aura already gave the attack the same multiplier. Every measurable recipe now lands at 2.50x (npm run dps lists them); the summon and corpse recipes (Summoner, Explosionmancer, Summoner Druid) have no standard number and take a flat 2.5x on their summons' damage and life or their blast.
 
+**Evolved levels.** An evolved tower keeps buying levels past its base level 5 on its own ladder (balance.json evolvedLevels): the first costs 15,000, each next one 180% of the one before, and each adds 2 skills.txt levels to both its skills (its attack and its partner, aura or caster), the way +skills do, so the art, curses and auras stay the same skill. The curve, and what it buys (the evolved tower's value over its level 5, npm run dps's model):
+
+| Level | Gold | Total | Blizzballer | Hammerdin | Light Sorc | Javazon |
+| --- | --- | --- | --- | --- | --- | --- |
+| 6 | 15,000 | 15,000 | x1.11 | x1.17 | x1.09 | x1.14 |
+| 7 | 27,000 | 42,000 | x1.23 | x1.35 | x1.18 | x1.29 |
+| 9 | 87,480 | 178,080 | x1.46 | x1.78 | x1.34 | x1.56 |
+| 11 | 283,435 | 618,979 | x1.69 | x2.25 | x1.52 | x1.85 |
+| 13 | 918,329 | 2,047,491 | x1.92 | x2.78 | x1.70 | x2.14 |
+
+About 10 to 17% a level against a cost that grows 80% a level: worth the first four or five, a stretch after that, and short of what best-in-slot gear does for a tower (2 to 4 times for casters, far more for melee; npm run dps). There is no top: the price is the cap.
+
 **Sell.** 60% of all gold spent on the tower. An evolved tower sells for 60% of both parents combined.
 
 ## Paladin

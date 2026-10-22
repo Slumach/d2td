@@ -539,7 +539,6 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
   }
 
   for (const t of towers) {
-    if (t.evolved) continue;
     const level = upgradeCost(sim, t);
     if (level !== undefined) {
       out.push({ cost: level, gain: gainOf(sim, towers, judge, { ...t, level: t.level + 1 }), commands: [{ type: 'upgrade', towerId: t.id }], damage: isDamage(activeSkill(sim, t)?.skill) });
@@ -547,6 +546,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
     // Toward the next tier: the remaining levels plus the tier, valued by what the next
     // tier's skill gives. Levels 3 to 5 can look worthless on their own (overkill), so
     // without this lookahead a bot never reaches the tier they unlock.
+    if (t.evolved) continue;
     const line = sim.data.classes[t.cls]?.lines[t.line];
     const tierPrice = sim.data.economy.tierCosts[t.tier - 1];
     const established = towers.length >= LOOKAHEAD_MIN_TOWERS;

@@ -4,7 +4,7 @@
 // their own towers.
 
 import { sendHome } from './items/loot.ts';
-import { MAX_TIER, MAX_TOWER_LEVEL, type EvolutionDef } from './data.ts';
+import { MAX_TIER, MAX_TOWER_LEVEL, type EvolutionDef, type OverLevels } from './data.ts';
 import { idiv } from './fixed.ts';
 import { arcAt, inBounds, isBlocked, isPathTile, tileCenter } from './map.ts';
 import { TARGETING_MODES, type Sim, type Targeting, type Tower } from './state.ts';
@@ -52,8 +52,17 @@ export function pendingChoices(sim: Sim, tower: Tower): string[] {
 }
 
 export function upgradeCost(sim: Sim, tower: Tower): number | undefined {
-  if (tower.evolved || !tower.picks[tower.tier - 1] || tower.level >= MAX_TOWER_LEVEL) return undefined;
+  // An evolved tower keeps levelling past its base level 5 on its own steep ladder
+  if (tower.evolved) return overLevelCost(sim.data.economy.evolvedLevels, tower.level - MAX_TOWER_LEVEL);
+  if (!tower.picks[tower.tier - 1] || tower.level >= MAX_TOWER_LEVEL) return undefined;
   return sim.data.economy.levelCosts[tower.tier - 1]?.[tower.level - 1];
+}
+
+/** The gold for the (n + 1)th level past a ladder's top: costBase, then costPctPerLevel percent more each. */
+export function overLevelCost(curve: OverLevels, n: number): number {
+  let cost = curve.costBase;
+  for (let i = 0; i < n; i++) cost = idiv(cost * curve.costPctPerLevel, 100);
+  return cost;
 }
 
 /**

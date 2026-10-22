@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { activeSkill } from './auras.ts';
-import { EVOLVED_LEVEL_INDEX, MAX_TOWER_LEVEL } from './data.ts';
+import { activeSkill, auraSources } from './auras.ts';
+import { baseSkillId, EVOLVED_LEVEL_INDEX, MAX_TOWER_LEVEL } from './data.ts';
 import { buildCostFor, step } from './sim.ts';
 import type { Command, Sim, Tower } from './state.ts';
-import { canBuild, evolutionFor, pendingChoices, sellValue, towerAt } from './towers.ts';
+import { canBuild, evolutionFor, pendingChoices, sellValue, towerAt, upgradeCost } from './towers.ts';
 import { placeTower, testSim } from './testkit.ts';
 
 function run(sim: Sim, ...commands: Command[]): void {
@@ -164,6 +164,26 @@ describe('evolution', () => {
     expect(canBuild(sim, 15, 6)).toBe(true);
   });
 
+  it('levels an evolved tower past 5 on its own steep ladder, each level raising both its skills', () => {
+    const sim = testSim();
+    const { holy, aura } = hammerdinPair(sim, { x: 15, y: 6 });
+    run(sim, { type: 'evolve', towerA: holy.id, towerB: aura.id });
+    const evolved = sim.state.towers[0]!;
+    const curve = sim.data.economy.evolvedLevels;
+    expect(upgradeCost(sim, evolved)).toBe(curve.costBase);
+    sim.state.gold[0] = 1_000_000;
+    run(sim, { type: 'upgrade', towerId: evolved.id });
+    run(sim, { type: 'upgrade', towerId: evolved.id });
+    expect(evolved.level).toBe(7);
+    expect(upgradeCost(sim, evolved)).toBe(Math.trunc((Math.trunc((curve.costBase * curve.costPctPerLevel) / 100) * curve.costPctPerLevel) / 100));
+    const plain = sim.data.skills['blessed-hammer']!;
+    const active = activeSkill(sim, evolved)!;
+    expect(active.skill.skillLevels).toEqual(plain.skillLevels.map((l) => l + 2 * curve.skillLevelsPerLevel));
+    // The partner aura levels too
+    const partner = auraSources(sim, evolved).find((s) => baseSkillId(s.skill.id) === 'concentration')!;
+    expect(partner.skill.skillLevels).toEqual(sim.data.skills['concentration']!.skillLevels.map((l) => l + 2 * curve.skillLevelsPerLevel));
+  });
+
   it('rejects the wrong partner, a missing tier and too little gold', () => {
     const sim = testSim();
     sim.state.gold[0] = 100_000;
@@ -195,13 +215,13 @@ describe('evolution', () => {
     expect(match?.recipe.id).toBe('hammerdin');
   });
 
-  it('evolved towers cannot level, tier or evolve again, and sell for 60% of both parents', () => {
+  it('evolved towers cannot tier or evolve again (their levels are their own ladder), and sell for 60% of both parents', () => {
     const sim = testSim();
     const { holy, aura } = hammerdinPair(sim, { x: 15, y: 6 });
     run(sim, { type: 'evolve', towerA: holy.id, towerB: aura.id });
     const evolved = sim.state.towers[0]!;
     const before = { ...evolved };
-    run(sim, { type: 'upgrade', towerId: evolved.id }, { type: 'upgradeTier', towerId: evolved.id });
+    run(sim, { type: 'upgradeTier', towerId: evolved.id });
     expect(evolved.level).toBe(before.level);
     expect(evolved.tier).toBe(before.tier);
     expect(sellValue(sim, evolved)).toBe(Math.trunc((evolved.spent * 60) / 100));

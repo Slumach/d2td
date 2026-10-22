@@ -16,10 +16,8 @@ export type { TableRow, Tables } from './tables.ts';
 
 export { DIFFICULTIES, DIFFICULTY_NAMES, baseMonsterId, levelVariantId, variantId, type DifficultyName } from './difficulty.ts';
 
-export const MAX_TOWER_LEVEL = 5;
-export const MAX_TIER = 3;
-/** Evolved towers attack at this tower level index: T3 level 5 power. */
-export const EVOLVED_LEVEL_INDEX = MAX_TOWER_LEVEL - 1;
+import { EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL } from './levels.ts';
+export { EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL };
 
 // ---- design data JSON ----
 
@@ -177,6 +175,7 @@ export interface BalanceJson {
   /** Cost to reach T2 and T3. */
   tierCosts: number[];
   evolveCost: number;
+  evolvedLevels: OverLevels;
   sellRefundPct: number;
   bountyPerLevel: number;
   /** Bounty multiplier by rank; bossBountyMultiplier overrides a boss by id. */
@@ -388,6 +387,12 @@ export interface Economy {
   /** tierCosts[0] reaches T2, tierCosts[1] reaches T3. */
   tierCosts: number[];
   evolveCost: number;
+  /**
+   * An evolved tower's levels past its base level 5: the first costs costBase, each next one
+   * costPctPerLevel percent of the one before, and each adds skillLevelsPerLevel skills.txt
+   * levels to both its skills (attack and partner), the way +skills do.
+   */
+  evolvedLevels: OverLevels;
   sellRefundPct: number;
   bountyPerLevel: number;
   rankBountyMultiplier: Record<Rank, number>;
@@ -879,6 +884,13 @@ export function waveLabel(wave: WaveDef): string {
   return wave.tier ? `Endless Tier ${wave.tier} ${wave.actWave}/${wave.actWaves}` : `${stageName(wave.difficulty, wave.act)} ${wave.actWave}/${wave.actWaves}`;
 }
 
+/** Levels bought past a ladder's top: their price curve and what each adds. */
+export interface OverLevels {
+  costBase: number;
+  costPctPerLevel: number;
+  skillLevelsPerLevel: number;
+}
+
 export function economyFrom(balance: BalanceJson): Economy {
   const steps = compound(balance.levelCostPctPerLevel, MAX_TOWER_LEVEL - 1);
   return {
@@ -888,6 +900,7 @@ export function economyFrom(balance: BalanceJson): Economy {
     levelCosts: balance.levelCostBase.map((base) => steps.map((permille) => idiv(base * permille, 1000))),
     tierCosts: balance.tierCosts,
     evolveCost: balance.evolveCost,
+    evolvedLevels: balance.evolvedLevels,
     sellRefundPct: balance.sellRefundPct,
     bountyPerLevel: balance.bountyPerLevel,
     rankBountyMultiplier: balance.rankBountyMultiplier,
