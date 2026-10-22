@@ -427,6 +427,7 @@ export class GameScene extends Phaser.Scene {
     this.notice = this.add.text(GAME_WIDTH / 2, HUD_HEIGHT + 16, '', { ...text, fontSize: '20px', backgroundColor: '#000000a0', padding: { x: 12, y: 6 } }).setOrigin(0.5, 0).setDepth(5500).setVisible(false);
     // The spawn mark toasts, so it waits for the notice text to exist (0.2.3 threw here on launch)
     if (this.sim.players === 1) this.markSpawn();
+    else this.markArcs();
     this.info = this.add.text(16, PANEL_TOP + 8, '', { ...text, fontSize: '20px' }).setDepth(3000);
     this.tooltip = createTooltip(this, 16, PANEL_TOP - 8);
     if (this.d2) {
@@ -458,6 +459,13 @@ export class GameScene extends Phaser.Scene {
     // Tab is the scoreboard (D2's party panel); M, or the panel's button, the automap
     this.input.keyboard?.on('keydown-TAB', () => this.scoreboard.toggle());
     this.input.keyboard?.on('keydown-M', () => this.minimap.toggle());
+    // Home: back to your own arc (in FFA, your own ring)
+    this.input.keyboard?.on('keydown-HOME', () => {
+      const d = this.driver;
+      if (!d) return;
+      if (d.match.state.mode === 'ffa' && this.view !== ringOf(d.match, d.me)) this.watch(ringOf(d.match, d.me));
+      this.lookAtArcOf(d.me);
+    });
     if (online) {
       this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
         const n = Number(e.key);
@@ -516,6 +524,50 @@ export class GameScene extends Phaser.Scene {
       if (this.anims.exists(key)) return key;
     }
     return undefined;
+  }
+
+  /** Team mode: your own arc, outlined and tinted, shown when zoomed out. */
+  private ownArc: Phaser.GameObjects.Graphics | undefined;
+
+  /**
+   * Team mode: each player's name on the path at the handoff corner into their arc, a marker
+   * at their arc's spawn, in their colour, and their own arc ready to stand out zoomed out.
+   */
+  private markArcs(): void {
+    const d = this.driver;
+    if (!d) return;
+    const { map } = this.sim;
+    const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
+    this.camera.asWorld(() => {
+      const marks = this.add.graphics().setDepth(DEPTH.rings + 0.5);
+      map.arcs.forEach((arc, k) => {
+        const owner = arcOwner(d.match, this.view, k);
+        const colour = PLAYER_COLOURS[owner % PLAYER_COLOURS.length]!;
+        const corner = project(positionAt(map, arc.start).x, positionAt(map, arc.start).y);
+        this.add
+          .text(Math.round(corner.x), Math.round(corner.y) - 14, this.nameOf(owner), { fontFamily: FONT, fontSize: '13px', color: hex(colour), stroke: '#000000', strokeThickness: 3 })
+          .setOrigin(0.5, 1)
+          .setResolution(3)
+          .setDepth(DEPTH.overlay);
+        // The spawn: a ring and a point, D2 automap style, in the owner's colour
+        const sp = positionAt(map, arc.spawn);
+        const at = project(sp.x, sp.y);
+        marks.lineStyle(2, colour, 0.9).strokeEllipse(at.x, at.y, 26, 13);
+        marks.fillStyle(colour, 0.9).fillTriangle(at.x, at.y - 16, at.x - 5, at.y - 6, at.x + 5, at.y - 6);
+      });
+      // Your arc: its tiles tinted again and edged, shown when the camera is zoomed out
+      const mine = map.arcs.findIndex((_, k) => arcOwner(d.match, this.view, k) === d.me);
+      if (mine < 0) return;
+      const g = (this.ownArc = this.add.graphics().setDepth(DEPTH.ground + 0.5).setVisible(false));
+      const colour = PLAYER_COLOURS[d.me % PLAYER_COLOURS.length]!;
+      for (let y = 0; y < map.height; y++) {
+        for (let x = 0; x < map.width; x++) {
+          if (isBlocked(map, x, y) || arcAt(map, x, y) !== mine) continue;
+          g.fillStyle(colour, 0.16).fillPoints(tileDiamond(x, y), true);
+          g.lineStyle(1, colour, 0.45).strokePoints(tileDiamond(x, y), true);
+        }
+      }
+    });
   }
 
   /** Alone, the monsters' one spawn is marked on the ground until the first wave: the place to build near. */
@@ -734,6 +786,8 @@ export class GameScene extends Phaser.Scene {
     // Dev: ?speed=N runs N times as many ticks per frame (previews and the smoke test)
     const speed = (this.registry.get('speed') as number | undefined) ?? 1;
     this.camera.update(delta);
+    // Zoomed out on a shared ring, your own arc stands out
+    this.ownArc?.setVisible(this.camera.world.zoom <= 1);
     if (!this.halted) {
       this.driver.advance(delta, speed, () => {
         this.camera.asWorld(() => this.syncTick());
@@ -1409,11 +1463,14 @@ export class GameScene extends Phaser.Scene {
     const stage = this.stage();
     this.stageText?.setText(stage.label);
     if (this.drawBakedMap(stage)) {
-      // On a shared ring, each arc's free tiles keep a faint edge in their owner's colour
-      if ((this.driver?.match.players ?? 1) > 1) {
+      // On a shared ring each arc is tinted in its owner's colour, path and free tiles alike
+      if (this.sim.players > 1) {
         for (let y = 0; y < map.height; y++) {
           for (let x = 0; x < map.width; x++) {
-            if (!isPathTile(map, x, y) && !isBlocked(map, x, y)) g.lineStyle(1, this.arcColour(arcAt(map, x, y)), 0.14).strokePoints(tileDiamond(x, y), true);
+            if (isBlocked(map, x, y)) continue;
+            const colour = this.arcColour(arcAt(map, x, y));
+            g.fillStyle(colour, isPathTile(map, x, y) ? 0.1 : 0.12).fillPoints(tileDiamond(x, y), true);
+            if (!isPathTile(map, x, y)) g.lineStyle(1, colour, 0.18).strokePoints(tileDiamond(x, y), true);
           }
         }
       }
