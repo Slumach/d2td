@@ -19,6 +19,8 @@
 //   chance to cast on hit / on attack             casts the skill, at its level, when the game has it
 //   an aura (item_aura: Infinity, Beast, Pride)    the tower projects it at the item's level
 //   slain monsters rest in peace                   the tower's kills leave no corpse
+//   the armour slot itself (balance.json              1 to 3% damage, attack speed or cast rate by the
+//     implicitGear)                                   base's tier, so every slot is worth filling
 //   magic find, gold find                          on the tower's kills, stacking additively as in D2
 //   defence (armorclass, enhanced defence),        durability: how often monsters miss the tower's
 //     block                                        blocking summons, by D2's chance to hit
@@ -28,6 +30,7 @@
 // Weapons also carry their base damage: a melee tower swings its worn weapon instead of its
 // class weapon, enhanced damage on it as in D2.
 
+import type { ImplicitGear } from '../data.ts';
 import type { Element } from '../state.ts';
 import { CLASS_CODES, SLOTS, type ItemBase, type ItemData, type Slot } from './data.ts';
 import { itemStats, propertyStats, type Item, type StatRoll } from './item.ts';
@@ -65,6 +68,8 @@ export interface TowerGear {
   resistDown: Partial<Record<Element, number>>;
   /** +% to skill damage of an element (passive_*_mastery, the facets). */
   skillDamagePct: Partial<Record<Element, number>>;
+  /** The armour slots' built-in bonus: damage percent on every tower's hits (balance.json implicitGear). */
+  implicitDamagePct: number;
   demonDamagePct: number;
   undeadDamagePct: number;
   /** Auras the items carry (item_aura), by skills.txt name, at the highest level worn. */
@@ -103,6 +108,7 @@ export const NO_GEAR: TowerGear = {
   piercePct: 0,
   resistDown: {},
   skillDamagePct: {},
+  implicitDamagePct: 0,
   demonDamagePct: 0,
   undeadDamagePct: 0,
   auras: [],
@@ -164,7 +170,7 @@ export function gearStats(data: ItemData, gear: Gear): StatRoll[] {
 }
 
 /** The tower effects of the gear a tower of class `towerClass` wears (see the table above). */
-export function towerGear(data: ItemData, gear: Gear, towerClass: string): TowerGear {
+export function towerGear(data: ItemData, gear: Gear, towerClass: string, implicit: ImplicitGear = {}): TowerGear {
   const g: TowerGear = { ...NO_GEAR, adds: {}, plusSkill: {}, plusTab: {}, castOnHit: [], resistDown: {}, skillDamagePct: {}, auras: [] };
   const stats = gearStats(data, gear);
   const sum = (stat: string) => stats.filter((s) => s.stat === stat).reduce((n, s) => n + s.value, 0);
@@ -245,5 +251,16 @@ export function towerGear(data: ItemData, gear: Gear, towerClass: string): Tower
     if (base.block > 0) g.blockPct = Math.min(75, g.blockPct + base.block);
   }
   g.defense = defense;
+  // Every armour slot carries a small built-in bonus by its base's tier, so nothing worn is nothing
+  for (const s of SLOTS) {
+    const item = gear[s];
+    const base = item && data.bases[item.code];
+    const rule = implicit[s];
+    if (!item || !base || !rule || base.kind !== 'armor') continue;
+    const pct = rule.pct[Math.max(0, Math.min(2, base.tier))] ?? 0;
+    if (rule.stat === 'damage') g.implicitDamagePct += pct;
+    else if (rule.stat === 'attackSpeed') g.attackSpeedPct += pct;
+    else g.castSpeedPct += pct;
+  }
   return g;
 }

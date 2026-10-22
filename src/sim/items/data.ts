@@ -244,8 +244,8 @@ export interface ItemRatio {
 /** itemtypes.txt types with TreasureClass 1: the game builds weap3, armo87 and so on from them. */
 export const AUTO_TC_TYPES = ['weap', 'armo', 'bow', 'mele', 'abow'];
 
-/** Item types that never drop or equip here: charms, potions, scrolls, keys, quest items, gold. */
-const EXCLUDED_TYPES = new Set(['char', 'scha', 'mcha', 'lcha', 'hpot', 'mpot', 'rpot', 'spot', 'apot', 'wpot', 'scro', 'book', 'key', 'quest', 'gold', 'body', 'elix', 'herb', 'torch', 'tpot', 'play', 'ques']);
+/** Item types that never drop or equip here: charms, potions, scrolls, keys, quest items, gold, arrows and bolts (no tower needs ammunition). */
+const EXCLUDED_TYPES = new Set(['char', 'scha', 'mcha', 'lcha', 'hpot', 'mpot', 'rpot', 'spot', 'apot', 'wpot', 'scro', 'book', 'key', 'quest', 'gold', 'body', 'elix', 'herb', 'torch', 'tpot', 'play', 'ques', 'bowq', 'xboq']);
 
 function props(row: TableRow, code: (i: number) => string, param: (i: number) => string, min: (i: number) => string, max: (i: number) => string, count: number): PropRoll[] {
   const out: PropRoll[] = [];

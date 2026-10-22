@@ -6,7 +6,7 @@ import { step } from '../sim.ts';
 import type { Tower } from '../state.ts';
 import { addMonster, freeze, placeTower, testSim, ticks } from '../testkit.ts';
 import { canWear, type Item, type StatRoll } from './item.ts';
-import { OPEN_WOUNDS_TICKS, openWoundsDamage } from './tower.ts';
+import { gearOf, OPEN_WOUNDS_TICKS, openWoundsDamage, withGear } from './tower.ts';
 
 const BESIDE = 3000;
 let uid = 0;
@@ -172,6 +172,21 @@ describe('the item stats that act on monsters', () => {
     const aura = placeTower(sim, 7, 5, 'might');
     wear(aura, { amulet: item('amu', [{ stat: 'item_addskill_tab', param: '10', value: 3 }]) });
     expect(activeSkill(sim, aura)!.skill.id).toBe('might+3');
+  });
+
+  it('gives every armour slot its small built-in bonus by base tier', () => {
+    const sim = testSim();
+    const caster = placeTower(sim, 6, 5, 'holy-bolt');
+    // Normal-tier helm and boots: 1% cast rate each; body armour and belt would add damage
+    wear(caster, { helm: item('thl', []), boots: item('thl', []), armor: item('tar', []) });
+    const g = gearOf(sim, caster);
+    expect(g.castSpeedPct).toBe(2);
+    expect(g.implicitDamagePct).toBe(1);
+    const skill = activeSkill(sim, caster)!.skill;
+    expect(withGear({ damagePct: 0, attackSpeedPct: 0, fireMin: 0, fireMax: 0 }, g, skill).damagePct).toBe(1);
+    const melee = placeTower(sim, 6, 4, 'sacrifice');
+    wear(melee, { shield: item('tsh', []), gloves: item('thl', []) });
+    expect(gearOf(sim, melee).attackSpeedPct).toBe(2);
   });
 
   it('refuses missile weapons on every tower: nothing here shoots a bow', () => {

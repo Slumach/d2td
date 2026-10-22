@@ -167,6 +167,8 @@ export interface BalanceJson {
   /** Drops (src/sim/items/drops.ts): the rune multiplier, endless Tier scaling and Smith's Hammer's rarity. */
   drops: DropRules;
   vendorCap: VendorCap;
+  /** Every armour slot's small built-in tower bonus by base tier (normal, exceptional, elite); src/sim/items/gear.ts. */
+  implicitGear: ImplicitGear;
   cow: CowRules;
   /** Cost of the first level-up at T1, T2, T3. */
   levelCostBase: number[];
@@ -443,6 +445,7 @@ export interface GameData {
   monsterVariant: (id: string, difficulty: number, level?: number) => string;
   /** The most a vendor pays for one item, by stage (balance.json vendorCap; src/sim/items/price.ts). */
   vendorCap: VendorCap;
+  implicitGear: ImplicitGear;
   /** skills.txt skill name to its Id, for items that name a skill by number. */
   skillIds: Record<string, string>;
   /**
@@ -465,6 +468,9 @@ export interface GameData {
    */
   itemSkill: (name: string, level: number) => string | undefined;
 }
+
+/** An armour slot's implicit bonus: which tower stat, and the percent at each base tier. */
+export type ImplicitGear = Partial<Record<string, { stat: 'damage' | 'attackSpeed' | 'castRate'; pct: [number, number, number] }>>;
 
 export interface VendorCap {
   /** Normal, Nightmare, Hell: the cap in Act 1 and in Act 5, in a straight line between by act. */
@@ -1175,6 +1181,7 @@ export function buildGameData(
     items: buildItemData(tables),
     drops: design.balance.drops,
     vendorCap: design.balance.vendorCap,
+    implicitGear: design.balance.implicitGear,
     cow: { ...m.cow, ...design.balance.cow },
     monsterVariant: (id: string, difficulty: number, level?: number) => defOf(id, difficulty, level).id,
     skillIds,
