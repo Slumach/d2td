@@ -259,6 +259,24 @@ export function extraTargets(reach: Reach, level: number): number {
   return Math.trunc(Math.max(0, level - reach.fromLevel) / reach.levelsPerTarget);
 }
 
+/**
+ * A count skills.txt grows (Zeal's hits, Multiple Shot's arrows, Chain Lightning's jumps) with
+ * a reach offset: the table's own at the higher level, and at least the reach rule's step on
+ * top of its number now, so a capped calc (Zeal's five, Strafe's ten) still grows on evolving.
+ */
+export function reachCount(row: TableRow, column: string, level: number, reach: Reach, offset: number): number {
+  const now = calcAt(row, column, level);
+  if (offset <= 0) return now;
+  return Math.max(calcAt(row, column, level + offset), now + extraTargets(reach, reach.fromLevel + offset));
+}
+
+/** An area skills.txt gives (in units at a level), with a reach offset: likewise at least the rule's step. */
+export function reachArea(unitsAt: (level: number) => number, level: number, reach: Reach, offset: number): number {
+  const now = unitsAt(level);
+  if (offset <= 0) return now;
+  return Math.max(unitsAt(level + offset), Math.trunc((now * areaPct(reach, reach.fromLevel + offset)) / 100));
+}
+
 /** True when a calc column gives more at a high level than at level 1: the table grows it. */
 export function calcGrows(row: TableRow, column: string): boolean {
   return calcAt(row, column, 60) > calcAt(row, column, 1);

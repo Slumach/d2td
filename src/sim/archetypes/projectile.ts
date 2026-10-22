@@ -9,7 +9,7 @@ import { rollInt } from '../rng.ts';
 import type { Element, Monster } from '../state.ts';
 import { idiv } from '../fixed.ts';
 import { findRow, int } from '../tables.ts';
-import { calcAt, common, damageAt, elementalType, extraTargets, fields, filterFrom, missileLifetime, missileOf, missileSpeed, perLevel } from './common.ts';
+import { calcAt, common, damageAt, elementalType, extraTargets, fields, filterFrom, missileLifetime, missileOf, missileSpeed, perLevel, reachCount } from './common.ts';
 import type { ArchetypeModule, DamageRange, ProjectileDef } from './types.ts';
 
 interface ProjectileJson {
@@ -56,7 +56,7 @@ export const projectile: ArchetypeModule<ProjectileDef> = {
       weaponPct: srcDam > 0 ? Math.trunc((srcDam * 100) / 128) : 100,
       levels: perLevel(json, (level) => ({
         ...(f.damageFromMissile ? damageAt(missile, level, 'missile') : damageAt(ctx.skillRow, level, 'skill')),
-        count: Math.max(1, f.countCalc ? calcAt(ctx.skillRow, f.countCalc, level) : (f.count ?? 1) + extraTargets(ctx.reach, level)),
+        count: Math.max(1, f.countCalc ? reachCount(ctx.skillRow, f.countCalc, level, ctx.reach, ctx.reachOffset) : (f.count ?? 1) + extraTargets(ctx.reach, level + ctx.reachOffset)),
         damagePct: f.damagePctCalc ? calcAt(ctx.skillRow, f.damagePctCalc, level) : 0,
       })),
     };

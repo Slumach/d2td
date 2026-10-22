@@ -49,8 +49,23 @@ export function geared(sim: Sim, tower: Tower, skill: SkillDef): SkillDef {
   const harms = skill.archetype !== 'buffAura' && skill.archetype !== 'debuff';
   const legend = (tower.legend || tower.legendOf !== undefined) && harms ? sim.data.economy.legend.dpsPct : 100;
   const bonus = idiv((boosted ? recipe.bonus : 1000) * legend, 100);
-  if (plus === 0 && !weapon && bonus === 1000) return skill;
-  return sim.data.skills[sim.data.skillVariant(skill.id, plus, weapon, bonus)]!;
+  // Reach only for what has targets or area to grow; an aura or curse keeps its own
+  const reach = skill.archetype === 'buffAura' || skill.archetype === 'debuff' ? 0 : reachOf(sim, tower);
+  if (plus === 0 && !weapon && bonus === 1000 && reach === 0) return skill;
+  return sim.data.skills[sim.data.skillVariant(skill.id, plus, weapon, bonus, reach)]!;
+}
+
+/**
+ * An evolved tower's reach step, in skills.txt levels counted for targets, jumps, arrows,
+ * swings and area alone: balance.json evolution.reachLevels on evolving, reachLevelsPerLevel
+ * more each level past 5; a legend's legend.reachLevels instead, with the same per level.
+ */
+export function reachOf(sim: Sim, tower: Tower): number {
+  if (!tower.evolved) return 0;
+  const { evolutionReach, legend } = sim.data.economy;
+  const past = Math.max(0, tower.level - MAX_TOWER_LEVEL) * evolutionReach.perLevel;
+  const step = tower.legend || tower.legendOf !== undefined ? legend.reachLevels : evolutionReach.levels;
+  return step + past;
 }
 
 /**

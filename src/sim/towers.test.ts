@@ -156,7 +156,8 @@ describe('evolution', () => {
     const recipe = sim.data.evolutions.find((r) => r.id === 'hammerdin')!;
     const active = activeSkill(sim, evolved)!;
     expect(active.lvl).toBe(EVOLVED_LEVEL_INDEX);
-    expect(active.skill.id).toBe(`blessed-hammer+0*${recipe.bonus}`);
+    // and the evolution's reach step (economy.evolutionReach) on its area
+    expect(active.skill.id).toBe(`blessed-hammer+0*${recipe.bonus}~${sim.data.economy.evolutionReach.levels}`);
     expect(recipe.bonus).toBeGreaterThanOrEqual(2500);
     const plain = sim.data.skills['blessed-hammer']!;
     if (plain.archetype !== 'splash' || active.skill.archetype !== 'splash') throw new Error('blessed-hammer should be splash');

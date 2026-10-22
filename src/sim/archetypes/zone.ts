@@ -5,7 +5,7 @@ import { aliveWithin, canHurt, findTarget, strike, withBonus } from '../combat.t
 import { spawnMissile } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
 import type { Element } from '../state.ts';
-import { areaPct, auraUnits, calcAt, calcGrows, common, damageAt, elementalType, fields, filterFrom, missileLifetime, missileOf, perLevel, tenthsToUnits } from './common.ts';
+import { areaPct, auraUnits, calcAt, calcGrows, common, damageAt, elementalType, fields, filterFrom, missileLifetime, missileOf, perLevel, reachArea, tenthsToUnits } from './common.ts';
 import type { ArchetypeModule, ZoneDef } from './types.ts';
 
 interface ZoneJson {
@@ -36,10 +36,10 @@ export const zone: ArchetypeModule<ZoneDef> = {
         ...damageAt(ctx.skillRow, level, 'skill'),
         radiusUnits:
           f.radiusCalc && calcGrows(ctx.skillRow, f.radiusCalc)
-            ? auraUnits(calcAt(ctx.skillRow, f.radiusCalc, level), ctx.auraRangePerTile)
+            ? reachArea((l) => auraUnits(calcAt(ctx.skillRow, f.radiusCalc!, l), ctx.auraRangePerTile), level, ctx.reach, ctx.reachOffset)
             : Math.trunc(
                 ((f.radiusCalc ? auraUnits(calcAt(ctx.skillRow, f.radiusCalc, json.skillLevels?.[0] ?? 1), ctx.auraRangePerTile) : tenthsToUnits(f.radiusTenths ?? 0)) *
-                  areaPct(ctx.reach, level)) /
+                  areaPct(ctx.reach, level + ctx.reachOffset)) /
                   100,
               ),
       })),

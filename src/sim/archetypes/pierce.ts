@@ -6,7 +6,7 @@ import { idiv } from '../fixed.ts';
 import { LINE_HIT_RADIUS, pierceOn, spawnMissile, velocityToward } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
 import type { Element, Monster, Sim } from '../state.ts';
-import { auraUnits, calcAt, common, damageAt, elementalType, extraTargets, fields, filterFrom, missileLifetime, missileOf, missileSpeed, perLevel, tenthsToUnits } from './common.ts';
+import { auraUnits, calcAt, common, damageAt, elementalType, extraTargets, fields, filterFrom, missileLifetime, missileOf, missileSpeed, perLevel, reachCount, tenthsToUnits } from './common.ts';
 import type { ArchetypeModule, PierceDef } from './types.ts';
 
 interface PierceJson {
@@ -52,7 +52,7 @@ export const pierce: ArchetypeModule<PierceDef> = {
       filter: filterFrom(missile, ctx.filterOverride),
       levels: perLevel(json, (level) => ({
         ...(f.damageFromMissile ? damageAt(missile, level, 'missile') : damageAt(ctx.skillRow, level, 'skill')),
-        hops: f.mode !== 'chain' ? 0 : f.hopsCalc ? calcAt(ctx.skillRow, f.hopsCalc, level) : (f.hops ?? 0) + extraTargets(ctx.reach, level),
+        hops: f.mode !== 'chain' ? 0 : f.hopsCalc ? reachCount(ctx.skillRow, f.hopsCalc, level, ctx.reach, ctx.reachOffset) : (f.hops ?? 0) + extraTargets(ctx.reach, level + ctx.reachOffset),
         jumpUnits: f.mode !== 'chain' ? 0 : f.jumpCalc ? auraUnits(calcAt(ctx.skillRow, f.jumpCalc, level), ctx.auraRangePerTile) : tenthsToUnits(f.jumpTenths ?? 0),
       })),
     };

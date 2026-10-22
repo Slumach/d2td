@@ -185,7 +185,7 @@ export interface BalanceJson {
    * T5 legends: the fee to combine three evolved towers, the damage they then do (percent of
    * what the three did), and the legend's own level ladder past its level 5.
    */
-  legend: { cost: number; dpsPct: number; levels: OverLevels };
+  legend: { cost: number; dpsPct: number; reachLevels: number; levels: OverLevels };
   evolvedLevels: OverLevels;
   /**
    * Levels past 5 within a tier, by tier (T1, T2, T3): steep below the top so a line climbs,
@@ -260,7 +260,12 @@ export interface BalanceJson {
    */
   tierLadder: { dpsPct: Record<string, number>; auraPct: number; caps: Record<string, number>; referenceSkill: string; debuffTargetResist: number };
   /** An evolved tower is worth dpsPct of its two parents together at their top levels. */
-  evolution?: { dpsPct: number };
+  /**
+   * An evolution's damage over its parents (dpsPct), and its reach: reachLevels extra skills.txt
+   * levels on its skills' targets, jumps, arrows, swings and area alone, reachLevelsPerLevel
+   * more for each evolved level past 5 (a legend: legend.reachLevels).
+   */
+  evolution?: { dpsPct: number; reachLevels?: number; reachLevelsPerLevel?: number };
   /**
    * D2 hardcodes these mod effects, so they are design values; resistances add to the
    * monster's own. House rule: Magic Resistant also resists magic (D2's only covers fire,
@@ -425,12 +430,14 @@ export interface Economy {
   levelCosts: number[][];
   /** tierCosts[0] reaches T2, tierCosts[1] reaches T3. */
   tierCosts: number[];
+  /** An evolution's reach step and its growth per evolved level, in skills.txt levels for reach alone. */
+  evolutionReach: { levels: number; perLevel: number };
   evolveCost: number;
   /**
    * T5 legends: the fee to combine three evolved towers, the damage they then do (percent of
    * what the three did), and the legend's own level ladder past its level 5.
    */
-  legend: { cost: number; dpsPct: number; levels: OverLevels };
+  legend: { cost: number; dpsPct: number; reachLevels: number; levels: OverLevels };
   /**
    * An evolved tower's levels past its base level 5: the first costs costBase, each next one
    * costPctPerLevel percent of the one before, and each adds skillLevelsPerLevel skills.txt
@@ -526,7 +533,8 @@ export interface GameData {
    * skill swinging `weapon` (whole HP). Built once and kept in `skills` under the returned
    * id, so missiles and curses look it up like any skill.
    */
-  skillVariant: (id: string, plus: number, weapon?: { min: number; max: number }, bonus?: number) => string;
+  /** A skill at +plus levels, with a worn weapon, a damage bonus (per mille) and a reach offset (skill levels for reach alone). */
+  skillVariant: (id: string, plus: number, weapon?: { min: number; max: number }, bonus?: number, reach?: number) => string;
   /**
    * A skill an item casts or projects (chance to cast, item auras), by its skills.txt name
    * at a skills.txt level: the key of a SkillDef kept in `skills` whose level index 0 is
@@ -1025,6 +1033,7 @@ export function economyFrom(balance: BalanceJson): Economy {
     levelCosts: balance.levelCostBase.map((base) => steps.map((permille) => idiv(base * permille, 1000))),
     tierCosts: balance.tierCosts,
     evolveCost: balance.evolveCost,
+    evolutionReach: { levels: balance.evolution?.reachLevels ?? 0, perLevel: balance.evolution?.reachLevelsPerLevel ?? 0 },
     legend: balance.legend,
     evolvedLevels: balance.evolvedLevels,
     lineLevels: balance.levelCostBase.map((base, i) => {
@@ -1076,6 +1085,7 @@ export function resolveSkill(
   design: DesignData,
   weapon: string | undefined,
   skillLevels: number[] | undefined = json.skillLevels,
+  reachOffset = 0,
 ): SkillDef {
   const archetype = ARCHETYPES[json.archetype];
   if (!archetype) throw new Error(`${json.id}: unknown archetype ${json.archetype}`);
@@ -1088,6 +1098,7 @@ export function resolveSkill(
       weapon,
       auraRangePerTile: design.balance.auraRangePerTile,
       reach: design.balance.reach,
+      reachOffset,
       filterOverride: design.balance.skillOverrides[json.id],
     },
   );
@@ -1315,14 +1326,14 @@ export function buildGameData(
         }
       : undefined;
 
-  const skillVariant = (id: string, plus: number, weapon?: { min: number; max: number }, bonus = 1000) => {
-    const key = `${id}+${plus}${weapon ? `@${weapon.min}-${weapon.max}` : ''}${bonus !== 1000 ? `*${bonus}` : ''}`;
+  const skillVariant = (id: string, plus: number, weapon?: { min: number; max: number }, bonus = 1000, reach = 0) => {
+    const key = `${id}+${plus}${weapon ? `@${weapon.min}-${weapon.max}` : ''}${bonus !== 1000 ? `*${bonus}` : ''}${reach ? `~${reach}` : ''}`;
     if (skills[key]) return key;
     const json = jsonById.get(id);
     if (!json) throw new Error(`No skill ${id} to raise`);
     const ladder = ladders.find((l) => l.skill === (json.castBy ?? id));
     const levels = (ladder?.levels ?? json.skillLevels ?? (json.castBy ? jsonById.get(json.castBy)?.skillLevels : undefined) ?? []).map((l) => l + plus);
-    let def = resolveSkill(tables, json, design, weaponFor(id), levels);
+    let def = resolveSkill(tables, json, design, weaponFor(id), levels, reach);
     if (ladder) def = withTierBonus(def, ladder.tierBonus);
     if (weapon && def.archetype === 'melee') def = { ...def, weapon: { min: weapon.min * 256, max: weapon.max * 256 } };
     def = withDamageBonus(def, bonus);

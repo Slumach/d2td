@@ -26,7 +26,7 @@
   "levelCostPctPerLevel": 220,
   "tierCosts": [400, 10000],
   "evolveCost": 45000,
-  "legend": { "cost": 150000, "dpsPct": 250, "levels": { "costBase": 100000, "costPctPerLevel": 115, "skillLevelsPerLevel": 5 } },
+  "legend": { "cost": 150000, "dpsPct": 250, "reachLevels": 50, "levels": { "costBase": 100000, "costPctPerLevel": 115, "skillLevelsPerLevel": 5 } },
   "evolvedLevels": { "costBase": 30000, "costPctPerLevel": 115, "skillLevelsPerLevel": 5 },
   "lineLevels": { "costPctPerLevel": [180, 180, 115], "skillLevelsPerLevel": [2, 2, 4] },
   "sellRefundPct": 60,
@@ -66,7 +66,7 @@
       }
     }
   },
-  "evolution": { "dpsPct": 400 },
+  "evolution": { "dpsPct": 400, "reachLevels": 25, "reachLevelsPerLevel": 5 },
   "tierLadder": { "dpsPct": { "2": 110, "3": 300 }, "auraPct": 110, "caps": { "2": 24, "3": 40 }, "referenceSkill": "holy-bolt", "debuffTargetResist": 50 },
   "monsterMods": {
     "extraFast": { "speedPct": 50 },

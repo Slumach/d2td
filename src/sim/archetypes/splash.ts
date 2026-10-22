@@ -13,7 +13,7 @@ import { d2FramesToTicks, idiv, isqrt } from '../fixed.ts';
 import { TRIG_SCALE, TRIG_STEPS, cos64, homeToward, sin64, spawnMissile, targetOf } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
 import type { Element, Missile, Monster, Sim } from '../state.ts';
-import { areaPct, auraUnits, calcAt, calcGrows, common, damageAt, elementalType, etype, fields, filterFrom, lengthAt, missileLifetime, missileOf, missileSpeed, perLevel, tenthsToUnits } from './common.ts';
+import { areaPct, auraUnits, calcAt, calcGrows, common, damageAt, elementalType, etype, fields, filterFrom, lengthAt, missileLifetime, missileOf, missileSpeed, perLevel, reachArea, tenthsToUnits } from './common.ts';
 import type { ArchetypeModule, SplashDef } from './types.ts';
 
 interface SplashJson {
@@ -80,8 +80,8 @@ export const splash: ArchetypeModule<SplashDef> = {
     // The area at a level: the table's own when it grows, else the reach rule's
     const radiusAt = (level: number) =>
       f.delivery !== 'nova' && f.radiusCalc && calcGrows(ctx.skillRow, f.radiusCalc)
-        ? auraUnits(calcAt(ctx.skillRow, f.radiusCalc, level), ctx.auraRangePerTile)
-        : Math.trunc((base * areaPct(ctx.reach, level)) / 100);
+        ? reachArea((l) => auraUnits(calcAt(ctx.skillRow, f.radiusCalc!, l), ctx.auraRangePerTile), level, ctx.reach, ctx.reachOffset)
+        : Math.trunc((base * areaPct(ctx.reach, level + ctx.reachOffset)) / 100);
     return {
       ...common(json, ctx, true),
       archetype: 'splash',

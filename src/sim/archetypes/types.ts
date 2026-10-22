@@ -290,6 +290,11 @@ export interface ResolveContext {
   auraRangePerTile: number;
   /** balance.json reach: how top-tier skills hit more per attack where skills.txt does not say. */
   reach: import('./common.ts').Reach;
+  /**
+   * Extra skills.txt levels for reach alone (targets, jumps, arrows, swings, area), never
+   * damage: an evolved tower's or a legend's step (balance.json evolution, legend reachLevels).
+   */
+  reachOffset: number;
   /** balance.json skillOverrides for this skill, if any. */
   filterOverride: Partial<HitFilter> | undefined;
 }

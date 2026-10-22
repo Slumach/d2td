@@ -6,7 +6,7 @@ import { aliveWithin, dealDamage, distSq, withBonus } from '../combat.ts';
 import { idiv } from '../fixed.ts';
 import { rollInt } from '../rng.ts';
 import type { Corpse, Element } from '../state.ts';
-import { auraUnits, calcAt, common, fields, filterFrom, perLevel, tenthsToUnits } from './common.ts';
+import { areaPct, auraUnits, calcAt, common, fields, filterFrom, perLevel, reachArea, tenthsToUnits } from './common.ts';
 import type { ArchetypeModule, CorpseDef } from './types.ts';
 
 interface CorpseJson {
@@ -29,7 +29,10 @@ export const corpse: ArchetypeModule<CorpseDef> = {
       archetype: 'corpse',
       filter: filterFrom(undefined, ctx.filterOverride),
       levels: perLevel(json, (level) => ({
-        radiusUnits: f.radiusCalc ? auraUnits(calcAt(ctx.skillRow, f.radiusCalc, level), ctx.auraRangePerTile) : tenthsToUnits(f.radiusTenths ?? 0),
+        // An evolved tower's blast reaches further (reach offset), as every evolution's attack does
+        radiusUnits: f.radiusCalc
+          ? reachArea((l) => auraUnits(calcAt(ctx.skillRow, f.radiusCalc!, l), ctx.auraRangePerTile), level, ctx.reach, ctx.reachOffset)
+          : Math.trunc((tenthsToUnits(f.radiusTenths ?? 0) * (ctx.reachOffset > 0 ? areaPct(ctx.reach, ctx.reach.fromLevel + ctx.reachOffset) : 100)) / 100),
         minPct: calcAt(ctx.skillRow, f.minPctCalc, level),
         maxPct: calcAt(ctx.skillRow, f.maxPctCalc, level),
         physicalPct: f.physicalPctCalc ? calcAt(ctx.skillRow, f.physicalPctCalc, level) : 0,
