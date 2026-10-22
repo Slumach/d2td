@@ -243,7 +243,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   preload(): void {
-    for (const name of TABLE_NAMES) this.load.json(name, `data/${name}.json`);
+    // The menu may have loaded the item tables already
+    for (const name of TABLE_NAMES) if (!this.cache.json.exists(name)) this.load.json(name, `data/${name}.json`);
     preloadAssets(this);
     preloadSounds(this);
     preloadHud(this);
@@ -347,7 +348,7 @@ export class GameScene extends Phaser.Scene {
           onMenu: () => this.openMenu(),
         })
       : undefined;
-    this.inventory = hudArt && ItemPanels.available(this, hudArt) ? new ItemPanels(this, hudArt, this.itemHost()) : undefined;
+    this.inventory = hudArt && ItemPanels.available(this, hudArt) ? new ItemPanels(this, hudArt, this.itemHost(), this.d2?.beltSpots() ?? []) : undefined;
     // The plain HUD and panel backgrounds sit over the map, so tall scenery never paints across them
     if (!this.d2) this.add.graphics().setDepth(DEPTH.chrome).fillStyle(0x1a1a14).fillRect(0, 0, GAME_WIDTH, HUD_HEIGHT).fillRect(0, PANEL_TOP, GAME_WIDTH, GAME_HEIGHT - PANEL_TOP);
     this.camera.asWorld(() => {

@@ -30,6 +30,9 @@ class Hasher {
       for (let i = 0; i < v.length; i++) this.word(v.charCodeAt(i));
     } else if (typeof v === 'boolean') {
       this.word(v ? 3 : 4);
+    } else if (v === null) {
+      // An empty slot (a belt slot with nothing in it)
+      this.word(7);
     } else if (Array.isArray(v)) {
       this.word(5);
       this.word(v.length);

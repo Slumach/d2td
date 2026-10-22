@@ -1,8 +1,10 @@
 // Main menu, dressed as D2R's logo screen: black, the burning logo with TOWER DEFENSE
 // under it, and D2's stone buttons stacked down the middle: Single Player, Multiplayer
-// (Host or Join), Continue when there is a save, Options, Exit. Options opens D2R's
-// options panel for volume, name and the D2R folder. Without the frontend art (an
-// extraction from before it existed) the plain look stands in.
+// (Host or Join), Continue when there is a save, Options, Exit. Single Player opens a page
+// in the manner of D2's character select: the player's profile (name, the stash's worth,
+// the best wave reached) with Play and Continue. Options opens D2R's options panel for
+// volume, name and the D2R folder. Without the frontend art (an extraction from before it
+// existed) the plain look stands in.
 
 import Phaser from 'phaser';
 
@@ -11,6 +13,10 @@ import { FONT, button } from '../render/ui.ts';
 import { loadCheckpoint } from '../render/saves.ts';
 import type { Checkpoint } from '../sim/checkpoint.ts';
 import { stageName } from '../sim/data.ts';
+import { buildItemData, type ItemData } from '../sim/items/data.ts';
+import { itemCost, SELL_DIVISOR } from '../sim/items/price.ts';
+import type { Tables } from '../sim/tables.ts';
+import { loadProfile, type Profile } from './profile.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
 import type { LauncherApi, LauncherState } from './api.ts';
 import { burningLogo, frontendManifest, menuMusic, optionsPanel, preloadFrontend, smoothHd, stoneButton } from './frontend.ts';
@@ -27,7 +33,13 @@ const LOGO_SCALE = 1.25;
 const BUTTONS_TOP = 470;
 const BUTTON_STEP = 92;
 
-type Page = 'main' | 'multiplayer' | 'options';
+type Page = 'main' | 'character' | 'multiplayer' | 'options';
+
+/** The item tables the character page needs to price the stash (GameScene loads the rest). */
+const ITEM_TABLES: (keyof Tables)[] = [
+  'weapons', 'armor', 'misc', 'uniqueitems', 'setitems', 'sets', 'magicprefix', 'magicsuffix', 'rareprefix', 'raresuffix',
+  'gems', 'runes', 'itemtypes', 'properties', 'itemstatcost', 'treasureclassex', 'itemratio', 'itemstrings',
+];
 
 export class MenuScene extends Phaser.Scene {
   private api!: LauncherApi;
@@ -38,6 +50,9 @@ export class MenuScene extends Phaser.Scene {
   /** The single-player checkpoint, if there is one: Continue carries it on. */
   private saved: Checkpoint | undefined;
   private nameField: TextField | undefined;
+  /** The profile, for the character page. */
+  private profile: Profile | undefined;
+  private items: ItemData | undefined;
 
   constructor() {
     super('Menu');
@@ -45,6 +60,7 @@ export class MenuScene extends Phaser.Scene {
 
   preload(): void {
     preloadFrontend(this);
+    for (const name of ITEM_TABLES) if (!this.cache.json.exists(name)) this.load.json(name, `data/${name}.json`);
   }
 
   create(): void {
@@ -53,6 +69,14 @@ export class MenuScene extends Phaser.Scene {
     void this.api.mpLeave();
     this.page = 'main';
     this.saved = undefined;
+    this.profile = undefined;
+    if (ITEM_TABLES.every((n) => this.cache.json.exists(n))) {
+      this.items = buildItemData(Object.fromEntries(ITEM_TABLES.map((n) => [n, this.cache.json.get(n)])) as unknown as Tables);
+      void loadProfile(this.api, this.items).then((p) => {
+        this.profile = p;
+        if (this.state && this.page === 'character') this.draw();
+      });
+    }
     void loadCheckpoint(this.api, 'solo').then((cp) => {
       this.saved = cp;
       if (this.state) this.draw();
@@ -95,6 +119,7 @@ export class MenuScene extends Phaser.Scene {
     add(this.add.text(16, GAME_HEIGHT - 28, `v${this.state.version}   non-commercial fan project, not affiliated with Blizzard`, { ...MUTED, fontSize: '14px' }).setDepth(3100));
 
     if (this.page === 'options') return this.drawOptions(d2);
+    if (this.page === 'character') return this.drawCharacter(d2);
     const saved = this.saved;
     const items: [string, () => void][] =
       this.page === 'multiplayer'
@@ -104,7 +129,7 @@ export class MenuScene extends Phaser.Scene {
             ['Back', () => this.go('main')],
           ]
         : [
-            ['Single Player', () => this.startGame()],
+            ['Single Player', () => this.go('character')],
             ['Multiplayer', () => this.go('multiplayer')],
             ...(saved ? [[`Continue: ${stageName(saved.difficulty, saved.act)}`, () => this.startGame(saved)] as [string, () => void]] : []),
             ['Options', () => this.go('options')],
@@ -112,6 +137,36 @@ export class MenuScene extends Phaser.Scene {
           ];
     items.forEach(([label, onClick], i) => {
       const y = BUTTONS_TOP + i * BUTTON_STEP;
+      if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 330 }));
+      else this.parts.push(...button(this, CX - 180, y - 18, { label, onClick, width: 360 }));
+    });
+  }
+
+  /**
+   * Single Player, as D2's character select: the profile's card (name, what the stash and
+   * inventory are worth to a vendor before any cap, items held, the best wave reached), and
+   * Play, Continue when there is a save, Back.
+   */
+  private drawCharacter(d2: boolean): void {
+    const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
+    const p = this.profile;
+    const all = p ? [...p.inventory.map((i) => i.item), ...p.stash.flat().map((i) => i.item), ...p.inPlay, ...p.belt.flatMap((b) => (b ? [b] : []))] : [];
+    const worth = this.items ? all.reduce((n, item) => n + Math.trunc(itemCost(this.items!, item) / SELL_DIVISOR), 0) : 0;
+    const top = BUTTONS_TOP - 70;
+    add(this.add.rectangle(CX, top + 40, 520, 150, 0x000000, 0.75).setStrokeStyle(1, 0x7a6440).setDepth(3000));
+    add(this.add.text(CX, top - 10, this.state.name || 'Player', { ...TEXT, fontSize: '28px', color: '#c7b377' }).setOrigin(0.5).setDepth(3001));
+    const lines = p
+      ? [`Stash value: ${worth.toLocaleString('en-US')} gold`, `Items: ${all.length}`, `Best wave: ${p.bestWave > 0 ? p.bestWave : 'none yet'}`]
+      : ['Reading the profile...'];
+    lines.forEach((l, k) => add(this.add.text(CX, top + 30 + k * 28, l, TEXT).setOrigin(0.5).setDepth(3001)));
+    const saved = this.saved;
+    const items: [string, () => void][] = [
+      ['Play', () => this.startGame()],
+      ...(saved ? [[`Continue: ${stageName(saved.difficulty, saved.act)}`, () => this.startGame(saved)] as [string, () => void]] : []),
+      ['Back', () => this.go('main')],
+    ];
+    items.forEach(([label, onClick], i) => {
+      const y = BUTTONS_TOP + 140 + i * BUTTON_STEP;
       if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 330 }));
       else this.parts.push(...button(this, CX - 180, y - 18, { label, onClick, width: 360 }));
     });

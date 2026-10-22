@@ -119,6 +119,30 @@ describe('inventory commands', () => {
   });
 });
 
+describe('the belt', () => {
+  it('holds gems, runes and jewels, sockets from its slots, and gives them back', () => {
+    const sim = testSim();
+    const sword = item('tsw', { sockets: 2 });
+    const r1 = item('r01');
+    const helm = item('thl');
+    run(sim, { type: 'loadInventory', items: [{ item: sword, x: 0, y: 0 }, { item: r1, x: 2, y: 0 }, { item: helm, x: 3, y: 0 }] });
+    run(sim, { type: 'toBelt', uid: helm.uid, slot: 0 });
+    expect(sim.state.belts[0]![0]).toBeNull();
+    run(sim, { type: 'toBelt', uid: r1.uid, slot: 2 });
+    expect(sim.state.belts[0]![2]?.uid).toBe(r1.uid);
+    expect(codes(sim)).toEqual(['tsw', 'thl']);
+    run(sim, { type: 'socket', target: { uid: sword.uid }, uid: r1.uid });
+    expect(sim.state.belts[0]![2]).toBeNull();
+    expect(inv(sim)[0]!.item.socketed.map((s) => s.code)).toEqual(['r01']);
+    const r2 = item('r02');
+    run(sim, { type: 'loadInventory', items: [] });
+    sim.state.belts[0]![1] = r2;
+    run(sim, { type: 'fromBelt', slot: 1, x: 9, y: 3 });
+    expect(sim.state.belts[0]![1]).toBeNull();
+    expect(inv(sim).find((i) => i.item.uid === r2.uid)).toMatchObject({ x: 9, y: 3 });
+  });
+});
+
 describe('trading', () => {
   it('swaps items and gold when both accept, and any change clears the accepts', () => {
     const match = createMatch(fixtureGameData(3), 1, 'team', 2);

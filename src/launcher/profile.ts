@@ -21,12 +21,14 @@ export interface Profile {
   stash: InvItem[][];
   /** Items out in a game not yet left: they come home on the next load. */
   inPlay: Item[];
+  /** The belt's four slots. */
+  belt: (Item | null)[];
   /** The furthest wave reached, for the character screen. */
   bestWave: number;
 }
 
 export function emptyProfile(): Profile {
-  return { version: 1, inventory: [], stash: [[]], inPlay: [], bestWave: 0 };
+  return { version: 1, inventory: [], stash: [[]], inPlay: [], belt: [null, null, null, null], bestWave: 0 };
 }
 
 /** The first free spot in a w x h grid, column by column from the top left. */
@@ -93,6 +95,7 @@ export function parseProfile(json: string | null, data: ItemData): Profile {
     inventory: grid(raw['inventory']),
     stash: stash.length > 0 ? stash : [[]],
     inPlay: Array.isArray(raw['inPlay']) ? raw['inPlay'].flatMap((v) => item(v) ?? []) : [],
+    belt: [0, 1, 2, 3].map((k) => (Array.isArray(raw['belt']) ? (item(raw['belt'][k]) ?? null) : null)),
     bestWave: Number.isInteger(raw['bestWave']) ? (raw['bestWave'] as number) : 0,
   };
 }

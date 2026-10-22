@@ -103,7 +103,7 @@ export interface TradeView {
 }
 
 /** Where a held item came from. */
-type Source = { from: 'inv'; uid: string } | { from: 'stash'; uid: string; page: number } | { from: 'tower'; towerId: number; slot: Slot };
+type Source = { from: 'inv'; uid: string } | { from: 'stash'; uid: string; page: number } | { from: 'tower'; towerId: number; slot: Slot } | { from: 'belt'; slot: number };
 
 interface Held {
   item: Item;
@@ -127,13 +127,74 @@ export class ItemPanels {
   private left: 'stash' | 'trade' = 'stash';
   private tradeTexts: { theirName?: Phaser.GameObjects.Text; theirGold?: Phaser.GameObjects.Text; myName?: Phaser.GameObjects.Text; myGold?: Phaser.GameObjects.Text; theirReady?: Phaser.GameObjects.Image; myReady?: Phaser.GameObjects.Image } = {};
 
+  private beltParts: Phaser.GameObjects.GameObject[] = [];
+  private beltKey = '';
+
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly m: HudManifest,
     private readonly host: ItemPanelHost,
+    /** The HUD's belt slots on screen; the belt is always on, panels open or not. */
+    private readonly beltSpots: { x: number; y: number; size: number }[] = [],
   ) {
     this.tip = new ItemTip(scene, DEPTH + 50);
     scene.input.on('pointermove', (p: Phaser.Input.Pointer) => this.heldSprite?.setPosition(p.x, p.y));
+    this.beltSpots.forEach((spot, slot) => {
+      const zone = scene.add.zone(spot.x, spot.y, spot.size, spot.size).setDepth(3200).setInteractive();
+      zone.on('pointerdown', (ptr: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
+        e.stopPropagation();
+        if (ptr.rightButtonDown()) return this.dropHeld();
+        this.clickBelt(slot);
+      });
+      zone.on('pointerover', () => this.hoverBelt(slot, spot.x, spot.y - spot.size / 2 - 6));
+      zone.on('pointerout', () => this.tip.hide());
+    });
+  }
+
+  /** This player's belt in the sim. */
+  private belt(): (Item | null)[] {
+    return this.host.sim()?.state.belts[this.host.seat()] ?? [];
+  }
+
+  /** Draws the belt's items when they change. */
+  private syncBelt(): void {
+    const heldSlot = this.held?.source.from === 'belt' ? this.held.source.slot : -1;
+    const key = JSON.stringify([this.belt(), heldSlot]);
+    if (key === this.beltKey) return;
+    this.beltKey = key;
+    for (const o of this.beltParts) o.destroy();
+    this.beltParts = [];
+    this.belt().forEach((item, slot) => {
+      const spot = this.beltSpots[slot];
+      if (!item || !spot || slot === heldSlot) return;
+      const tex = itemTexture(this.scene, this.host.data, item);
+      const size = spot.size * 0.8;
+      if (tex) this.beltParts.push(this.scene.add.image(spot.x, spot.y, tex).setDisplaySize(size, size).setDepth(3150));
+    });
+  }
+
+  /** A belt slot clicked: take its item, or put a held gem, rune or jewel from the inventory in it. */
+  clickBelt(slot: number): void {
+    const item = this.belt()[slot];
+    if (!this.held) {
+      if (item) this.pickUp(item, { from: 'belt', slot });
+      return;
+    }
+    const { item: held, source } = this.held;
+    const hb = this.host.data.bases[held.code];
+    if (source.from === 'belt') return this.dropHeld();
+    if (!hb || !(hb.isGem || hb.isRune || hb.isJewel)) return this.host.toast('The belt holds gems, runes and jewels');
+    if (source.from !== 'inv') return this.host.toast('Put it in the inventory first');
+    if (item) return this.host.toast('That belt slot is full');
+    this.host.issue({ type: 'toBelt', uid: held.uid, slot });
+    this.placed();
+  }
+
+  private hoverBelt(slot: number, x: number, y: number): void {
+    if (this.held) return;
+    const item = this.belt()[slot];
+    if (item) this.tipFor(item, x, y);
+    else this.tip.show([{ text: `Belt slot ${slot + 1}`, colour: TIP.white }, { text: 'Gems, runes and jewels to socket from', colour: TIP.grey }], x, y);
   }
 
   static available(scene: Phaser.Scene, m: HudManifest | undefined): boolean {
@@ -431,6 +492,7 @@ export class ItemPanels {
 
   /** Redraws the items when the inventory, the stash page, the selected tower's gear or the held item changed. */
   sync(): void {
+    this.syncBelt();
     const trade = this.host.trade();
     // A trade opening (on either side) brings the panels up; its window replaces the stash
     if (trade && !this.shown) this.show();
@@ -588,7 +650,7 @@ export class ItemPanels {
     const data = this.host.data;
     const hb = data.bases[item.code];
     // A gem, rune or jewel on a socketed item, or Smith's Hammer on an item: in the inventory only
-    if (under && grid === 'inv' && source.from === 'inv' && under.item.uid !== item.uid) {
+    if (under && grid === 'inv' && (source.from === 'inv' || source.from === 'belt') && under.item.uid !== item.uid) {
       if (hb && (hb.isGem || hb.isRune || hb.isJewel) && under.item.sockets > under.item.socketed.length && !under.item.runeword) {
         this.host.issue({ type: 'socket', target: { uid: under.item.uid }, uid: item.uid });
         return this.placed();
@@ -602,6 +664,7 @@ export class ItemPanels {
     if (grid === 'inv') {
       if (!fitsAt(sim, this.inventory().filter((i) => i.item.uid !== item.uid), item, at.x, at.y)) return this.host.toast('No room there');
       if (source.from === 'inv') this.host.issue({ type: 'moveItem', uid: item.uid, x: at.x, y: at.y });
+      else if (source.from === 'belt') this.host.issue({ type: 'fromBelt', slot: source.slot, x: at.x, y: at.y });
       else if (source.from === 'stash') {
         this.host.keeper.sendOut(item, tick);
         this.host.issue({ type: 'stashOut', item, x: at.x, y: at.y });
@@ -611,6 +674,7 @@ export class ItemPanels {
     // Into the stash
     if (under && under.item.uid !== item.uid) return this.host.toast('No room there');
     if (at.x < 0 || at.y < 0 || at.x + (hb?.width ?? 1) > STASH_W || at.y + (hb?.height ?? 1) > STASH_H) return this.host.toast('No room there');
+    if (source.from === 'belt') return this.host.toast('Put it in the inventory first');
     if (source.from === 'stash') {
       if (!this.host.keeper.moveInStash(item.uid, this.page, at)) return this.host.toast('No room there');
     } else if (source.from === 'inv') {
@@ -643,7 +707,7 @@ export class ItemPanels {
     }
     const { item, source } = this.held;
     const hb = this.host.data.bases[item.code];
-    if (worn && source.from === 'inv' && hb && (hb.isGem || hb.isRune || hb.isJewel) && worn.sockets > worn.socketed.length && !worn.runeword) {
+    if (worn && (source.from === 'inv' || source.from === 'belt') && hb && (hb.isGem || hb.isRune || hb.isJewel) && worn.sockets > worn.socketed.length && !worn.runeword) {
       this.host.issue({ type: 'socket', target: { towerId: tower.id, slot }, uid: item.uid });
       return this.placed();
     }
@@ -655,6 +719,7 @@ export class ItemPanels {
       if (source.towerId === tower.id && source.slot === slot) return this.dropHeld();
       return this.host.toast('Put it in the inventory first');
     }
+    if (source.from === 'belt') return this.host.toast('Gems and runes go in sockets');
     const others = { ...tower.gear };
     delete others[slot];
     if (!canWear(this.host.data, item, slot, tower.cls, others)) return this.host.toast(wearRefusal(this.host.data, item, slot, tower));

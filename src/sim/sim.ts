@@ -21,7 +21,7 @@ import { updateSummons } from './archetypes/summon.ts';
 import { geared, gearOf, withGear } from './items/tower.ts';
 import { collectCleared, pickup } from './items/loot.ts';
 import { cowWavesDue, openCowPortal, startCowWave } from './cow.ts';
-import { equip, hammer, loadInventory, moveItem, sellItem, socket, stashIn, stashOut, unequip } from './items/inventory.ts';
+import { equip, fromBelt, hammer, loadInventory, moveItem, sellItem, socket, stashIn, stashOut, toBelt, unequip } from './items/inventory.ts';
 import { build, evolve, pickBranch, pickSkill, sell, setTargeting, towerById, upgrade, upgradeTier } from './towers.ts';
 
 export type * from './state.ts';
@@ -70,6 +70,7 @@ export function createSim(data: GameData, seed: number, opts: SimOptions = {}): 
       drops: [],
       inventories: Array.from({ length: players }, () => []),
       homeward: Array.from({ length: players }, () => []),
+      belts: Array.from({ length: players }, () => [null, null, null, null]),
       spawns: [],
       waves: [],
     },
@@ -129,7 +130,11 @@ function applyCommand(sim: Sim, command: Command): void {
   if (command.type === 'cowPortal') return openCowPortal(sim, player, command.uid);
   switch (command.type) {
     case 'loadInventory':
-      return loadInventory(sim, player, command.items);
+      return loadInventory(sim, player, command.items, command.belt);
+    case 'toBelt':
+      return toBelt(sim, player, command.uid, command.slot);
+    case 'fromBelt':
+      return fromBelt(sim, player, command.slot, command.x, command.y);
     case 'moveItem':
       return moveItem(sim, player, command.uid, command.x, command.y);
     case 'stashIn':

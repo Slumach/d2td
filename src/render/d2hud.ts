@@ -7,8 +7,8 @@
 // What they mean here: the life globe fills with this player's share of the current wave's
 // kills and its number is their kills in all; the mana globe fills with the alive weight
 // on the ring and its number is that weight (full is the loss). The skill buttons show the
-// selected tower's line skills with its level in the corner. The belt is kept for items
-// and runes. The stamina bar drains with the wave timer, the experience bar fills across
+// selected tower's line skills with its level in the corner. The belt holds gems, runes
+// and jewels. The stamina bar drains with the wave timer, the experience bar fills across
 // the act. Build choices open as D2R's skill-select tray over the panel; the selected
 // tower gets a stone panel. GameScene decides what to show; this only draws it.
 
@@ -334,24 +334,13 @@ export class D2Hud {
     img.on('pointerup', () => img.setFrame(this.running ? 5 : 2));
   }
 
-  /** Four empty belt slots: items and runes go here later. */
-  private drawBelt(): void {
+  /** The belt's slots are drawn and handled by the item panels (itempanels.ts): only their spots live here. */
+  private drawBelt(): void {}
+
+  /** Where the four belt slots are on screen: centres and size. */
+  beltSpots(): { x: number; y: number; size: number }[] {
     const size = LAYOUT.belt.size * this.scale;
-    LAYOUT.belt.xs.forEach((bx, i) => {
-      const p = this.at(bx, LAYOUT.belt.y);
-      const zone = this.scene.add.zone(p.x, p.y, size, size).setDepth(DEPTH.over).setInteractive();
-      const frame = this.scene.add.image(p.x, p.y, hudKey('slot'), 0).setDisplaySize(size + 4, size + 4).setDepth(DEPTH.frame).setVisible(false);
-      zone.on('pointerover', () => {
-        frame.setVisible(true);
-        this.tooltip.move(p.x - 80, p.y - size / 2 - 8);
-        this.tooltip.show(`Belt slot ${i + 1}`, 'Empty. Items and runes come later.');
-      });
-      zone.on('pointerout', () => {
-        frame.setVisible(false);
-        this.tooltip.hide();
-      });
-      zone.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => e.stopPropagation());
-    });
+    return LAYOUT.belt.xs.map((bx) => ({ ...this.at(bx, LAYOUT.belt.y), size }));
   }
 
   /** The left and right skill buttons: the selected tower's skills, or the empty squares. */

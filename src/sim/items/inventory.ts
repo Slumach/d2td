@@ -35,10 +35,40 @@ export function fitsAt(sim: Sim, inv: readonly InvItem[], item: Item, x: number,
 }
 
 /** The game starts with the player's inventory from their profile. Only into an empty one. */
-export function loadInventory(sim: Sim, player: number, items: readonly InvItem[]): void {
+export function loadInventory(sim: Sim, player: number, items: readonly InvItem[], belt: readonly (Item | null)[] = []): void {
   const inv = invOf(sim, player);
   if (!inv || inv.length > 0) return;
   for (const i of items) if (fitsAt(sim, inv, i.item, i.x, i.y)) inv.push({ item: i.item, x: i.x, y: i.y });
+  const b = sim.state.belts[player];
+  if (b) belt.slice(0, BELT_SLOTS).forEach((item, k) => (b[k] = item && beltable(sim, item) ? item : null));
+}
+
+/** The belt: four quick slots for gems, runes and jewels, to socket from. */
+export const BELT_SLOTS = 4;
+
+function beltable(sim: Sim, item: Item): boolean {
+  const b = sim.data.items.bases[item.code];
+  return !!b && (b.isGem || b.isRune || b.isJewel);
+}
+
+/** A gem, rune or jewel from the inventory into an empty belt slot. */
+export function toBelt(sim: Sim, player: number, uid: string, slot: number): void {
+  const inv = invOf(sim, player);
+  const belt = sim.state.belts[player];
+  const k = inv?.findIndex((i) => i.item.uid === uid) ?? -1;
+  if (!inv || !belt || k < 0 || slot < 0 || slot >= BELT_SLOTS || belt[slot] || !beltable(sim, inv[k]!.item)) return;
+  belt[slot] = inv[k]!.item;
+  inv.splice(k, 1);
+}
+
+/** A belt slot's item back into the inventory at x, y. */
+export function fromBelt(sim: Sim, player: number, slot: number, x: number, y: number): void {
+  const inv = invOf(sim, player);
+  const belt = sim.state.belts[player];
+  const item = belt?.[slot];
+  if (!inv || !belt || !item || !fitsAt(sim, inv, item, x, y)) return;
+  inv.push({ item, x, y });
+  belt[slot] = null;
 }
 
 export function moveItem(sim: Sim, player: number, uid: string, x: number, y: number): void {
@@ -138,12 +168,19 @@ function consume(sim: Sim, player: number, uid: string): Item | undefined {
 export function socket(sim: Sim, player: number, target: ItemRef, fillerUid: string): void {
   const data = sim.data.items;
   const t = resolve(sim, player, target);
-  const fillerAt = invOf(sim, player)?.find((i) => i.item.uid === fillerUid);
-  if (!t || !fillerAt || t.item.uid === fillerUid) return;
-  const fb = data.bases[fillerAt.item.code];
+  // The filler comes from the inventory or the belt
+  const belt = sim.state.belts[player] ?? [];
+  const inBelt = belt.findIndex((i) => i?.uid === fillerUid);
+  const fillerItem = invOf(sim, player)?.find((i) => i.item.uid === fillerUid)?.item ?? belt[inBelt] ?? undefined;
+  if (!t || !fillerItem || t.item.uid === fillerUid) return;
+  const fb = data.bases[fillerItem.code];
   if (!fb || !(fb.isGem || fb.isRune || fb.isJewel)) return;
   if (t.item.socketed.length >= t.item.sockets || t.item.runeword) return;
-  const filler = consume(sim, player, fillerUid)!;
+  let filler: Item;
+  if (inBelt >= 0) {
+    filler = belt[inBelt]!;
+    belt[inBelt] = null;
+  } else filler = consume(sim, player, fillerUid)!;
   const next: Item = { ...t.item, socketed: [...t.item.socketed, filler] };
   const rw = runewordFor(data, next);
   if (rw) makeRuneword(data, sim.state.dropRng, next, rw);

@@ -106,8 +106,18 @@ export function validCommand(v: unknown): Command | null {
     case 'loadInventory': {
       if (!Array.isArray(c['items']) || c['items'].length > 40) return null;
       const items = c['items'].map(validInvItem);
-      return items.every((i) => i) ? { type: 'loadInventory', items: items as InvItem[] } : null;
+      if (!items.every((i) => i)) return null;
+      if (c['belt'] === undefined) return { type: 'loadInventory', items: items as InvItem[] };
+      const raw = c['belt'];
+      if (!Array.isArray(raw) || raw.length > 4) return null;
+      const belt = raw.map((b: unknown) => (b === null ? null : validItem(b)));
+      if (belt.some((b, k) => b === null && raw[k] !== null)) return null;
+      return { type: 'loadInventory', items: items as InvItem[], belt };
     }
+    case 'toBelt':
+      return str(c['uid']) && int(c['slot'], 3) ? { type: 'toBelt', uid: c['uid'] as string, slot: c['slot'] as number } : null;
+    case 'fromBelt':
+      return int(c['slot'], 3) && int(c['x'], 9) && int(c['y'], 3) ? { type: 'fromBelt', slot: c['slot'] as number, x: c['x'] as number, y: c['y'] as number } : null;
     case 'moveItem':
       return str(c['uid']) && int(c['x'], 9) && int(c['y'], 3) ? { type: 'moveItem', uid: c['uid'] as string, x: c['x'] as number, y: c['y'] as number } : null;
     case 'stashIn':

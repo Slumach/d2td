@@ -78,7 +78,9 @@ export type CommandBody =
   /** Right-clicks Wirt's Leg: opens the Secret Cow Level (src/sim/cow.ts). */
   | { type: 'cowPortal'; uid: string }
   /** Inventory, stash and gear (src/sim/items/inventory.ts); items from outside the sim travel whole. */
-  | { type: 'loadInventory'; items: InvItem[] }
+  | { type: 'loadInventory'; items: InvItem[]; belt?: (Item | null)[] }
+  | { type: 'toBelt'; uid: string; slot: number }
+  | { type: 'fromBelt'; slot: number; x: number; y: number }
   | { type: 'moveItem'; uid: string; x: number; y: number }
   | { type: 'stashIn'; uid: string }
   | { type: 'stashOut'; item: Item; x: number; y: number }
@@ -308,6 +310,8 @@ export interface SimState {
   cow?: CowState;
   /** Items leaving the game for each player's stash (a sold tower's gear with no room in the inventory). */
   homeward: Item[][];
+  /** Each player's belt: four quick slots for gems, runes and jewels. */
+  belts: (Item | null)[][];
 }
 
 /** An aura source this tick, kept for the renderer's radius rings. */

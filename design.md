@@ -364,6 +364,11 @@ Missed, and why:
 - Best in slot reaches waves 106 to 120, not 175 to 225. It is a wall, not a slope: with endless scaling at 1% or 2% a wave instead of 3% (npm run loot -- --set endless.hpPctPerWave=1 --set endless.damagePctPerWave=1) PALADIN still dies on 119 and TWOLINE on 119; only MIXED3 moves (131 at 1%). The endless Tiers walk Hell's regular waves with their immunities, and a Tier's fourth wave brings monsters immune to everything a two-line Paladin does. The levers are the immunity schedule in the Tiers, the boss HP ramp, and giving item stats that cut resistance (D2's -enemy resistance and pierce stats, now ignored) an effect; Stage A and B's numbers were left as they are, since moving them does not reach these targets.
 - MIXED3 with the whole campaign's loot dies in endless Tier 3, on target; with Normal and Nightmare loot it gets past Hell (wave 77) rather than dying in Hell Act 4 or 5.
 
+### Stage G: the belt and the character page (Oct 22)
+
+- The belt's four slots hold gems, runes and jewels (sim state, carried in the profile). Click a slot to take its item onto the cursor, click a socketed item in the inventory or on the selected tower to socket it, or an empty inventory cell to put it back; hold a gem, rune or jewel from the inventory over an empty slot and click to belt it. It works with the panels closed too: socketing a tower's gear straight from the belt.
+- Single Player opens a page in the manner of D2's character select: the profile's card (the player's name, what everything they own would fetch from a vendor before the stage cap, how many items, the best wave reached) with Play, Continue when there is a save, and Back.
+
 ### The Secret Cow Level (Oct 22)
 
 - Wirt's Leg is the real item (weapons.txt leg, its own HD sprite), stackable here. It drops only in Hell and the endless Tiers: 20 in a million from any kill, 2% from each of Griswold's pack (balance.json cow legPpm and griswoldLegPpm; a named monster's pack carries its id, so the Griswold wave knows its own).

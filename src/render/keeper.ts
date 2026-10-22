@@ -61,7 +61,7 @@ export class Keeper {
       this.started = true;
       this.profile.inventory = this.laidOut(this.profile.inventory);
       this.save();
-      issue({ type: 'loadInventory', items: this.profile.inventory });
+      issue({ type: 'loadInventory', items: this.profile.inventory, belt: this.profile.belt });
     };
     if (this.loaded) go();
     else void this.load().then(go);
@@ -89,12 +89,14 @@ export class Keeper {
       this.dirty = true;
     }
     const inPlay = sim.state.towers.filter((t) => t.owner === seat).flatMap((t) => Object.values(t.gear ?? {}));
-    const mirror = JSON.stringify([sim.state.inventories[seat] ?? [], inPlay, sim.state.wave]);
+    const belt = sim.state.belts[seat] ?? [];
+    const mirror = JSON.stringify([sim.state.inventories[seat] ?? [], inPlay, belt, sim.state.wave]);
     if (mirror === this.mirrored && !this.dirty) return;
     this.mirrored = mirror;
     this.dirty = false;
     p.inventory = structuredClone(sim.state.inventories[seat] ?? []);
     p.inPlay = structuredClone(inPlay);
+    p.belt = structuredClone(belt);
     p.bestWave = Math.max(p.bestWave, sim.state.wave);
     this.save();
   }
