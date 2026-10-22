@@ -1,3 +1,10 @@
+0.3.1
+
+- Evolutions are a real jump: an evolved tower fires both its lines and is worth about 2.5 times the two towers it replaced (a maxed Blizzard evolved into a Blizzballer at the same damage before).
+- Evolved towers keep levelling: each level past 5 raises both their skills, at a price that grows 80% a level.
+- Every line levels forever: past level 5 a tower keeps growing in its own tier (Holy Freeze, Might, any line), so tiering up is a choice, never forced.
+- A new tower stays affordable late in the game: past the fifth tower the price rises 30% a tower instead of 120%.
+
 0.3.0
 
 - Four new classes: the Amazon (bow, javelin, passives), the Barbarian (combat, whirlwind, war cries), the Druid (fire, wind, summoning) and the Assassin (traps, martial arts, shadow), each with three lines, three tiers and three evolutions, their D2R figures, missiles and summons, and their class items equipping on them.
