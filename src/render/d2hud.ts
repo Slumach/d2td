@@ -151,6 +151,7 @@ export class D2Hud {
   private readonly health: Phaser.GameObjects.Sprite;
   private readonly mana: Phaser.GameObjects.Sprite;
   private readonly killsText: Phaser.GameObjects.Text;
+  private readonly goldText: Phaser.GameObjects.Text;
   private readonly aliveText: Phaser.GameObjects.Text;
   private readonly stageText: Phaser.GameObjects.Text;
   private readonly timerText: Phaser.GameObjects.Text;
@@ -209,7 +210,15 @@ export class D2Hud {
     this.drawRunButton();
     this.drawMiniMenu();
     this.drawBelt();
-    this.setSkills(undefined, undefined);
+    this.setSkills(undefined);
+    // The right skill slot holds the gold, always: D2's gold pile and the number
+    const gp = this.at(LAYOUT.rightSkill.x + LAYOUT.skillSize / 2, LAYOUT.rightSkill.y + LAYOUT.skillSize / 2);
+    const gsize = LAYOUT.skillSize * this.scale;
+    if (this.has('gold')) {
+      const pile = scene.add.image(gp.x, gp.y - gsize * 0.12, hudKey('gold')).setDepth(DEPTH.over);
+      pile.setDisplaySize(gsize * 0.55, (gsize * 0.55 * pile.height) / Math.max(1, pile.width));
+    }
+    this.goldText = scene.add.text(gp.x, gp.y + gsize * 0.3, '', { fontFamily: FONT, fontSize: '17px', color: '#e8c060' }).setOrigin(0.5).setDepth(DEPTH.frame).setShadow(1, 1, '#000000', 2);
 
     stoneButton(scene, GAME_WIDTH - 158, 44, 'Send Wave', on.onCallWave, { width: 280 });
   }
@@ -271,6 +280,7 @@ export class D2Hud {
     // Life over the life globe: what is alive against the limit; kills over the mana globe
     this.killsText.setText(`Alive: ${n.alive} / ${n.aliveLimit}`);
     this.aliveText.setText(`Kills: ${n.kills}`);
+    this.goldText.setText(n.gold.toLocaleString('en-US'));
     this.stageText.setText(n.wave);
     this.timerText.setText(n.timer);
     this.nextWave = n.nextWave;
@@ -348,11 +358,12 @@ export class D2Hud {
   }
 
   /** The left and right skill buttons: the selected tower's skills, or the empty squares. */
-  setSkills(left: SkillSlot | undefined, right: SkillSlot | undefined): void {
+  /** The left skill slot shows the selected tower's current skill; the right one is the gold readout. */
+  setSkills(left: SkillSlot | undefined): void {
     for (const o of this.skillParts) o.destroy();
     this.skillParts = [];
     const size = LAYOUT.skillSize * this.scale;
-    for (const [spot, slot] of [[LAYOUT.leftSkill, left], [LAYOUT.rightSkill, right]] as const) {
+    for (const [spot, slot] of [[LAYOUT.leftSkill, left]] as const) {
       const p = this.at(spot.x + LAYOUT.skillSize / 2, spot.y + LAYOUT.skillSize / 2);
       if (!slot) continue;
       const icon = slot.icon && this.scene.textures.exists(slot.icon) ? this.scene.add.image(p.x, p.y, slot.icon) : this.scene.add.rectangle(p.x, p.y, size, size, 0x2a2018);

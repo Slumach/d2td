@@ -1575,8 +1575,9 @@ export class GameScene extends Phaser.Scene {
       d2.setTabs([]);
       d2.setTowerPanel(undefined);
     }
-    const [left, right] = tower ? this.skillSlots(tower) : [undefined, undefined];
-    d2.setSkills(left, right);
+    // The current skill in the left slot; the right slot is the gold readout
+    const [, right] = tower ? this.skillSlots(tower) : [undefined, undefined];
+    d2.setSkills(right);
   }
 
   /**
