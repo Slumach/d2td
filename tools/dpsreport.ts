@@ -13,13 +13,12 @@ import { activeSkill } from '../src/sim/auras.ts';
 import { buildGameData, EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, type GameData } from '../src/sim/data.ts';
 import { standardDps } from '../src/sim/dps.ts';
 import { SLOTS } from '../src/sim/items/data.ts';
-import type { Gear } from '../src/sim/items/gear.ts';
-import { canWear, itemName } from '../src/sim/items/item.ts';
+import { itemName } from '../src/sim/items/item.ts';
 import { gearOf, plusLevels, withGear } from '../src/sim/items/tower.ts';
 import { tileCenter } from '../src/sim/map.ts';
 import { createSim } from '../src/sim/sim.ts';
 import type { Sim, Tower } from '../src/sim/state.ts';
-import { bisCatalogue, gearScore } from './outfit.ts';
+import { bisCatalogue, dress } from './outfit.ts';
 import { loadTables } from './lib/load-tables.ts';
 
 const NO_BUFF = { damagePct: 0, attackSpeedPct: 0, fireMin: 0, fireMax: 0 };
@@ -30,26 +29,6 @@ function tower(sim: Sim, cls: string, line: string, picks: string[], tier: numbe
     id: 1, owner: 0, cls, tileX: 6, tileY: 5, x: c.x, y: c.y, line, tier, level: MAX_TOWER_LEVEL, picks, spent: 0, cooldown: 0, targeting: 'first',
     evolved, partnerSkill, partnerLevel, summonCooldown: 0, partnerCooldown: 0,
   };
-}
-
-/** The best-in-slot gear for a tower: the outfitter's greedy pick, slot by slot. */
-function dress(sim: Sim, t: Tower, pool: ReturnType<typeof bisCatalogue>): Gear {
-  let gear: Gear = {};
-  for (const slot of SLOTS) {
-    let best: Gear = gear;
-    let bestScore = gearScore(sim, t, gear);
-    for (const item of pool) {
-      if (!canWear(sim.data.items, item, slot, t.cls, gear)) continue;
-      const trial = { ...gear, [slot]: item };
-      const score = gearScore(sim, t, trial);
-      if (score > bestScore) {
-        best = trial;
-        bestScore = score;
-      }
-    }
-    gear = best;
-  }
-  return gear;
 }
 
 interface Row {

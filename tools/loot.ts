@@ -15,6 +15,7 @@
 //
 //   npm run loot
 //   npm run loot -- --bots PALADIN,NECRO --seeds 1,2 --sets nm,bis --jobs 6
+//   LOOTBUILD builds around the loot it is handed (tools/outfit.ts lootBuilds); LOOT_DEBUG=1 prints its lines
 //   npm run loot -- --set endless.hpPctPerWave=4      try a balance.json number without editing it
 
 import { spawn } from 'node:child_process';
@@ -30,7 +31,7 @@ import { loadTables } from './lib/load-tables.ts';
 
 const { values: args } = parseArgs({
   options: {
-    bots: { type: 'string', default: 'TWOLINE,PALADIN,NECRO,MIXED3' },
+    bots: { type: 'string', default: 'TWOLINE,PALADIN,NECRO,MIXED3,LOOTBUILD' },
     seeds: { type: 'string', default: '1,2' },
     sets: { type: 'string', default: LOOT_SETS.join(',') },
     jobs: { type: 'string', default: String(Math.max(1, availableParallelism() - 1)) },

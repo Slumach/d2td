@@ -19,7 +19,9 @@
 
 import { activeSkill } from '../src/sim/sim.ts';
 import type { GameData } from '../src/sim/data.ts';
-import { standardDps } from '../src/sim/dps.ts';
+import { auraMultiplier, isAura, standardDps } from '../src/sim/dps.ts';
+import { MAX_TOWER_LEVEL } from '../src/sim/levels.ts';
+import type { SkillDef } from '../src/sim/archetypes/types.ts';
 import { SLOTS, isType, maxSocketsAt, type ItemData } from '../src/sim/items/data.ts';
 import { rollKillDrops } from '../src/sim/items/drops.ts';
 import type { Gear } from '../src/sim/items/gear.ts';
@@ -106,6 +108,68 @@ export function gearScore(sim: Sim, tower: Tower, gear: Gear): number {
   const cut = g.resistDown[active.skill.damageType as Element] ?? 0;
   const pierce = active.skill.archetype === 'projectile' || active.skill.archetype === 'pierce' ? g.piercePct : 0;
   return Math.trunc(((dps + (active.skill.archetype === 'melee' ? adds : 0)) * (100 + buff.attackSpeedPct + pierce) * (100 + buff.damagePct + cut)) / 10_000) + extra;
+}
+
+/** The best gear a tower could wear from a pool: the outfitter's greedy pick, slot by slot. */
+export function dress(sim: Sim, tower: Tower, pool: readonly Item[]): Gear {
+  let gear: Gear = {};
+  for (const slot of SLOTS) {
+    let best: Gear = gear;
+    let bestScore = gearScore(sim, tower, gear);
+    for (const item of pool) {
+      if (!canWear(sim.data.items, item, slot, tower.cls, gear)) continue;
+      const trial = { ...gear, [slot]: item };
+      const score = gearScore(sim, tower, trial);
+      if (score > bestScore) {
+        best = trial;
+        bestScore = score;
+      }
+    }
+    gear = best;
+  }
+  return gear;
+}
+
+/**
+ * The lines a bot handed `pool` should build (their T1 skills): every line's T3 skill is
+ * dressed from the pool and scored by its standard damage per second in that gear; of the
+ * lines the pool at least doubles, the two strongest, and the aura line whose T3 lifts the
+ * strongest of them most. Grief and Breath of the Dying make two melee lines; a pile of
+ * +skills makes casters'.
+ */
+export function lootBuilds(sim: Sim, pool: readonly Item[]): string[] {
+  const at = (cls: string, line: string, picks: string[]): Tower => ({
+    id: -1, owner: 0, cls, tileX: 0, tileY: 0, x: 0, y: 0, line, tier: picks.length, level: MAX_TOWER_LEVEL, picks, spent: 0, cooldown: 0, targeting: 'first',
+    evolved: '', partnerSkill: '', partnerLevel: 0, summonCooldown: 0, partnerCooldown: 0,
+  });
+  const attacks: { t1: string; line: string; score: number; gain: number; skill: SkillDef }[] = [];
+  const auras: { t1: string; skill: SkillDef }[] = [];
+  for (const cls of Object.values(sim.data.classes)) {
+    for (const [lineId, line] of Object.entries(cls.lines)) {
+      const t1 = line.tiers[0]?.[0];
+      if (!t1 || line.tiers.length < 3) continue;
+      for (const top of line.tiers[2]!) {
+        const tower = at(cls.id, lineId, [t1, line.tiers[1]![0]!, top]);
+        const dressed: Tower = { ...tower, gear: dress(sim, tower, pool) };
+        const active = activeSkill(sim, dressed);
+        if (!active) continue;
+        if (isAura(active.skill)) auras.push({ t1, skill: active.skill });
+        else if (standardDps(active.skill, active.lvl) > 0) {
+          const score = gearScore(sim, tower, dressed.gear!);
+          attacks.push({ t1, line: `${cls.id}.${lineId}`, score, gain: score / Math.max(1, gearScore(sim, tower, {})), skill: active.skill });
+        }
+      }
+    }
+  }
+  // Around the loot: the lines it at least doubles (Grief and Breath of the Dying do that for melee),
+  // strongest first; a pool that doubles nothing leaves every line in the running
+  const doubled = attacks.filter((a) => a.gain >= 2);
+  const ranked = (doubled.length > 0 ? doubled : attacks).sort((a, b) => b.score - a.score);
+  const first = ranked[0];
+  if (!first) return [];
+  const second = ranked.find((a) => a.line !== first.line);
+  const aura = auras.map((a) => ({ ...a, lift: auraMultiplier(a.skill, MAX_TOWER_LEVEL - 1, first.skill, 50) })).sort((a, b) => b.lift - a.lift)[0];
+  return [...new Set([first.t1, ...(second ? [second.t1] : []), ...(aura ? [aura.t1] : [])])];
 }
 
 /**

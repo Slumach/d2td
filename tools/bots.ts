@@ -24,10 +24,11 @@ import { tileCenter, isPathTile } from '../src/sim/map.ts';
 import { activeSkill, aliveLimitOf, buildCostFor, canBuild, createSim, waveAt, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
 import { withMods } from '../src/sim/combat.ts';
 import { freeSpot } from '../src/sim/items/loot.ts';
-import { lootPool, outfit, type LootSet } from './outfit.ts';
+import { lootBuilds, lootPool, outfit, type LootSet } from './outfit.ts';
+import type { Item } from '../src/sim/items/item.ts';
 import { ELEMENTS, type Command, type Element, type Sim, type TimedCommand, type Tower } from '../src/sim/state.ts';
 
-export type Strategy = 'BOLT' | 'HOLY' | 'TWOLINE' | 'PALADIN' | 'SORC' | 'NECRO' | 'MIXED3' | 'AMAZON' | 'BARB' | 'DRUID' | 'ASSASSIN';
+export type Strategy = 'BOLT' | 'HOLY' | 'TWOLINE' | 'PALADIN' | 'SORC' | 'NECRO' | 'MIXED3' | 'AMAZON' | 'BARB' | 'DRUID' | 'ASSASSIN' | 'LOOTBUILD';
 /** The Normal balance targets' bots; the class bots play the Hell gate. */
 export const STRATEGIES: Strategy[] = ['BOLT', 'HOLY', 'TWOLINE', 'PALADIN'];
 export const HELL_STRATEGIES: Strategy[] = ['PALADIN', 'SORC', 'NECRO', 'MIXED3', 'AMAZON', 'BARB', 'DRUID', 'ASSASSIN'];
@@ -786,7 +787,15 @@ CONFIGS.MIXED3 = {
   elements: true,
 };
 
-export function createBot(strategy: Strategy, sim: Sim): Bot {
+/**
+ * LOOTBUILD builds around the loot it is handed (tools/outfit.ts lootBuilds): the attack lines
+ * strongest in that gear and the aura that lifts them most; with no loot it plays MIXED3.
+ */
+export function createBot(strategy: Strategy, sim: Sim, pool?: readonly Item[]): Bot {
+  if (strategy === 'LOOTBUILD') {
+    const builds = pool && pool.length > 0 ? lootBuilds(sim, pool) : [];
+    return engineBot({ ...CONFIGS.MIXED3!, strategy, ...(builds.length > 0 ? { builds } : {}) }, sim);
+  }
   return engineBot(CONFIGS[strategy]!, sim);
 }
 
@@ -889,7 +898,8 @@ export function runBot(
   // Stage F: the bot's towers wear items from a loot set, re-dressed once a wave
   const loot = extra.loot && extra.loot !== 'none' ? lootPool(data, extra.loot) : undefined;
   const sim = createSim(data, seed);
-  const bot = createBot(strategy, sim);
+  const bot = createBot(strategy, sim, loot?.pool);
+  if (strategy === 'LOOTBUILD' && loot && process.env['LOOT_DEBUG']) console.error(`[lootbuild] ${extra.loot}: ${lootBuilds(sim, loot.pool).join(', ')}`);
   const log: TimedCommand[] = [];
   const margins = new MarginLog();
   let topTier = 0;
