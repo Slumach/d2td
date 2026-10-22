@@ -52,6 +52,9 @@ export function createSim(data: GameData, seed: number, opts: SimOptions = {}): 
       nextWaveTick: data.economy.firstWaveTicks,
       status: 'playing',
       kills: 0,
+      killsBy: Array.from({ length: players }, () => 0),
+      waveKillsBy: Array.from({ length: players }, () => 0),
+      waveSize: 0,
       nextId: 1,
       monsters: [],
       towers: [],
@@ -181,6 +184,8 @@ function startWave(sim: Sim): void {
   s.spawns.sort((a, b) => a.tick - b.tick);
   s.waves.push({ remaining: count });
   s.wave++;
+  s.waveSize = count;
+  s.waveKillsBy.fill(0);
 }
 
 const NO_BUFF: TowerBuff = { damagePct: 0, attackSpeedPct: 0, fireMin: 0, fireMax: 0 };

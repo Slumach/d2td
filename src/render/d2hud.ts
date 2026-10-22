@@ -1,19 +1,25 @@
-// The in-game HUD as D2's control panel, from the player's files (ui/hud): the stone bar
-// across the bottom with the angel's life globe on the left filling as monsters pile up on
-// the ring (full is a lost run), gold in
-// the long slot, the wave counter over the centre with the next wave on hover, build
-// buttons as skill icons in the belt slots, and the selected tower in a small stone panel.
-// GameScene decides what to show; this only draws it.
+// The in-game HUD as D2R's control panel, from the player's files (ui/hud), laid out from
+// D2R's own layout (global/ui/layouts/hudpanelhd.json) and drawn at the size D2R draws it
+// at 1080p: the stone bar across the bottom with the angel's life globe and the demon's
+// mana globe, the two skill buttons either side of the centre, the four belt slots, the
+// run/walk button, the stamina and experience bars and the row of mini-menu buttons.
+//
+// What they mean here: the life globe fills with this player's share of the current wave's
+// kills and its number is their kills in all; the mana globe fills with the alive weight
+// on the ring and its number is that weight (full is the loss). The skill buttons show the
+// selected tower's line skills with its level in the corner. The belt is kept for items
+// and runes. The stamina bar drains with the wave timer, the experience bar fills across
+// the act. Build choices open as D2R's skill-select tray over the panel; the selected
+// tower gets a stone panel. GameScene decides what to show; this only draws it.
 
 import Phaser from 'phaser';
 
-import { frontendManifest, stoneButton, stonePanel } from '../launcher/frontend.ts';
+import { HD_SCALE, frontendManifest, stoneButton, stonePanel } from '../launcher/frontend.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from './layout.ts';
 import { FONT, createTooltip, type Tooltip } from './ui.ts';
 
 export const HUD_KEY = 'hud:manifest';
 export const hudKey = (name: string) => `hud:${name}`;
-const GLOBE_ANIM = 'hud:globe';
 
 interface Sheet {
   image: string;
@@ -22,12 +28,10 @@ interface Sheet {
   frames: number;
 }
 
-export interface HudManifest {
-  panel: Sheet;
-  globe: Sheet;
-  gold: Sheet;
-  slot: Sheet;
-}
+export type HudManifest = Record<string, Sheet>;
+
+/** The sheets the panel cannot do without; the rest are drawn when present. */
+const REQUIRED = ['panel', 'globe', 'slot'];
 
 export function preloadHud(scene: Phaser.Scene): void {
   if (scene.cache.json.exists(HUD_KEY)) return;
@@ -42,26 +46,51 @@ export function preloadHud(scene: Phaser.Scene): void {
 /** The HUD art and the frontend's stone buttons, or undefined to keep the plain panel. */
 export function hudManifest(scene: Phaser.Scene): HudManifest | undefined {
   const m = scene.cache.json.get(HUD_KEY) as HudManifest | undefined;
-  return m && Object.keys(m).every((k) => scene.textures.exists(hudKey(k))) && frontendManifest(scene) ? m : undefined;
+  return m && REQUIRED.every((k) => m[k] && scene.textures.exists(hudKey(k))) && frontendManifest(scene) ? m : undefined;
 }
 
-/** Where things sit on D2R's front_panel, in its own pixels (2822 x 415). */
-const SPOTS = {
-  globe: { x: 440, y: 198, r: 165 },
-  gold: { x: 700, y: 334 },
-  wave: { x: 1420, y: 128 },
+/**
+ * Where things sit on D2R's front_panel (2822 x 415), in its own pixels, from
+ * hudpanelhd.json with the overlay's 34 px offset taken off. Rects are top-left corners.
+ */
+const LAYOUT = {
+  /** The liquids' 348 x 350 frames; the glass is part of the panel art. */
+  health: { x: 260, y: 65, size: 348 },
+  mana: { x: 2234, y: 65, size: 348 },
+  /** The value text's line above each globe. */
+  valueY: 35,
+  leftSkill: { x: 1223, y: 271 },
+  rightSkill: { x: 1494, y: 271 },
+  skillSize: 130,
   belt: { xs: [1727, 1852, 1978, 2104], y: 337, size: 112 },
+  beltArrow: { x: 1661, y: 253 },
+  run: { x: 685, y: 281 },
+  stamina: { x: 731, y: 292 },
+  exp: { x: 660, y: 234 },
+  /** The mini-menu row, left to right as D2R orders it. */
+  menu: { y: 324, size: 72, buttons: [['character', 680], ['skilltree', 751], ['questlog', 824], ['inventory', 894], ['automap', 964], ['messages', 1034], ['pausemenu', 1104]] as [string, number][] },
 };
 /** The stone bar's top edge in panel pixels; above it the panel is open except for the statues. */
 const BAR_TOP = 150;
+const GLOBE_ANIM = 'hud:globe';
+const MANA_ANIM = 'hud:globemana';
+const DEPTH = { liquid: 2899, panel: 2900, over: 2903, frame: 2905 };
 
 export interface HudNumbers {
   gold: number;
+  /** This player's kills in all, and their share of the current wave's monsters killed, 0 to 1. */
+  kills: number;
+  waveShare: number;
   /** The alive weight on the ring, and the limit that loses the run. */
   alive: number;
   aliveLimit: number;
-  /** "Hell 12/30". */
+  /** "Normal Act 1 3/6", the stage line under the bar. */
   wave: string;
+  /** "Next wave in 23 s, send now for 46 gold", or empty. */
+  timer: string;
+  /** Time left on the wave timer, 0 to 1 (the stamina bar), and how far through the act (the experience bar). */
+  timerFrac: number;
+  actFrac: number;
   /** The next wave's tooltip, or undefined after the last. */
   nextWave?: { title: string; body: string };
 }
@@ -87,111 +116,292 @@ export interface TowerPanelModel {
   buttons: PanelButton[];
 }
 
+/** What a skill button shows: the skill's icon, the tower's level in the corner, and its tooltip. */
+export interface SkillSlot {
+  icon?: string;
+  level: number;
+  title: string;
+  body: string;
+}
+
+export interface HudCallbacks {
+  onCallWave: () => void;
+  onInventory: () => void;
+  onAutomap: () => void;
+  onMenu: () => void;
+}
+
+const MENU_TIPS: Record<string, [string, string]> = {
+  character: ['Character', 'Not in Tower Defense'],
+  skilltree: ['Skill Tree', 'A tower’s skills are on the tower: click one'],
+  questlog: ['Quest Log', 'Not in Tower Defense'],
+  inventory: ['Inventory', 'I'],
+  automap: ['Automap', 'Tab'],
+  messages: ['Party', 'Not in Tower Defense'],
+  pausemenu: ['Menu', 'Esc'],
+};
+
 export class D2Hud {
-  private readonly scale: number;
-  private readonly panelHeight: number;
-  private readonly globe: Phaser.GameObjects.Sprite;
-  private readonly globeTop: number;
-  private readonly globeSize: number;
+  /** Panel pixels to screen pixels. */
+  private readonly scale = HD_SCALE;
+  private readonly left: number;
+  private readonly top: number;
+  private readonly health: Phaser.GameObjects.Sprite;
+  private readonly mana: Phaser.GameObjects.Sprite;
+  private readonly killsText: Phaser.GameObjects.Text;
   private readonly aliveText: Phaser.GameObjects.Text;
-  private readonly goldText: Phaser.GameObjects.Text;
-  private readonly waveText: Phaser.GameObjects.Text;
+  private readonly stageText: Phaser.GameObjects.Text;
+  private readonly timerText: Phaser.GameObjects.Text;
+  private readonly stamina: Phaser.GameObjects.Image | undefined;
+  private readonly exp: Phaser.GameObjects.Image | undefined;
   readonly tooltip: Tooltip;
   private nextWave: HudNumbers['nextWave'];
   private slots: Phaser.GameObjects.GameObject[] = [];
   private tabs: Phaser.GameObjects.GameObject[] = [];
   private towerParts: Phaser.GameObjects.GameObject[] = [];
-  private lastAliveFrac = -1;
+  private skillParts: Phaser.GameObjects.GameObject[] = [];
+  private lastHealth = -1;
+  private lastMana = -1;
+  private lastStamina = -1;
+  private lastExp = -1;
+  private running = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
-    m: HudManifest,
-    onCallWave: () => void,
+    private readonly m: HudManifest,
+    private readonly on: HudCallbacks,
   ) {
-    for (const name of Object.keys(m)) scene.textures.get(hudKey(name)).setFilter(Phaser.Textures.FilterMode.LINEAR);
-    this.scale = GAME_WIDTH / m.panel.frameWidth;
-    this.panelHeight = m.panel.frameHeight;
-    const at = (x: number, y: number) => this.at(x, y);
+    for (const name of Object.keys(m)) if (scene.textures.exists(hudKey(name))) scene.textures.get(hudKey(name)).setFilter(Phaser.Textures.FilterMode.LINEAR);
+    const panelW = m.panel!.frameWidth * this.scale;
+    this.left = Math.round((GAME_WIDTH - panelW) / 2);
+    this.top = GAME_HEIGHT - m.panel!.frameHeight * this.scale;
 
-    // The life globe's liquid sits under the panel's glass, filled from the bottom
-    // The sheet wraps into rows; only its first `frames` cells hold frames
-    const globeFrames = scene.anims.generateFrameNumbers(hudKey('globe'), { start: 0, end: m.globe.frames - 1 });
-    if (!scene.anims.exists(GLOBE_ANIM)) scene.anims.create({ key: GLOBE_ANIM, frames: globeFrames, frameRate: 12, repeat: -1 });
-    const g = at(SPOTS.globe.x, SPOTS.globe.y);
-    this.globeSize = SPOTS.globe.r * 2 * this.scale;
-    this.globe = scene.add.sprite(g.x, g.y, hudKey('globe')).setDisplaySize(this.globeSize, this.globeSize).setDepth(2899).play(GLOBE_ANIM);
-    this.globeTop = g.y - this.globeSize / 2;
-    const panel = scene.add.image(0, GAME_HEIGHT, hudKey('panel')).setOrigin(0, 1).setScale(this.scale).setDepth(2900);
+    // The liquids sit under the panel's glass, cropped from the top as they empty
+    this.health = this.liquid('globe', GLOBE_ANIM, LAYOUT.health, 12);
+    this.mana = this.liquid(this.has('globeMana') ? 'globeMana' : 'globe', MANA_ANIM, LAYOUT.mana, 10);
+    const panel = scene.add.image(this.left, GAME_HEIGHT, hudKey('panel')).setOrigin(0, 1).setScale(this.scale).setDepth(DEPTH.panel);
     // Clicks on the panel's stone never reach the map; its open parts let them through
     panel.setInteractive({ pixelPerfect: true, alphaTolerance: 1 });
-    // The globe glass in the art is dark; the liquid shows through it
-    this.globe.setDepth(2902).setBlendMode(Phaser.BlendModes.SCREEN);
 
-    const big = { fontFamily: FONT, fontSize: '28px', color: '#f0e6d0' };
-    this.aliveText = scene.add.text(g.x, g.y, '', big).setOrigin(0.5).setDepth(2903).setShadow(2, 2, '#000000', 3);
+    // D2R's Show Health and Mana Values line: Exocet over each globe
+    const value = { fontFamily: FONT, fontSize: '20px', color: '#e6e0d4' };
+    const hx = this.at(LAYOUT.health.x + LAYOUT.health.size / 2, LAYOUT.valueY);
+    const mx = this.at(LAYOUT.mana.x + LAYOUT.mana.size / 2, LAYOUT.valueY);
+    this.killsText = scene.add.text(hx.x, hx.y, '', value).setOrigin(0.5).setDepth(DEPTH.over).setShadow(1, 1, '#000000', 3);
+    this.aliveText = scene.add.text(mx.x, mx.y, '', value).setOrigin(0.5).setDepth(DEPTH.over).setShadow(1, 1, '#000000', 3);
 
-    const gold = at(SPOTS.gold.x, SPOTS.gold.y);
-    const coin = scene.add.image(gold.x, gold.y, hudKey('gold')).setDisplaySize(38, 38).setDepth(2903);
-    this.goldText = scene.add.text(coin.x + 28, gold.y, '', { ...big, fontSize: '24px', color: '#e6c868' }).setOrigin(0, 0.5).setDepth(2903).setShadow(1, 1, '#000000', 2);
-
-    const wave = at(SPOTS.wave.x, SPOTS.wave.y);
-    this.waveText = scene.add
-      .text(wave.x, wave.y, '', { ...big, fontSize: '24px', color: '#e8b45a' })
-      .setOrigin(0.5)
-      .setDepth(2903)
-      .setStroke('#140a04', 4)
-      .setInteractive({ useHandCursor: false });
+    // The stage and the wave timer over the bar's middle, where D2R shows nothing
+    const mid = this.at(m.panel!.frameWidth / 2, BAR_TOP);
+    this.stageText = scene.add.text(mid.x, mid.y - 36, '', { fontFamily: FONT, fontSize: '16px', color: '#e8b45a' }).setOrigin(0.5).setDepth(DEPTH.over).setShadow(1, 1, '#000000', 2).setInteractive();
+    this.timerText = scene.add.text(mid.x, mid.y - 16, '', { fontFamily: FONT, fontSize: '14px', color: '#c8bc98' }).setOrigin(0.5).setDepth(DEPTH.over).setShadow(1, 1, '#000000', 2);
+    const waveTip = createTooltip(scene, mid.x - 170, mid.y - 48);
+    this.stageText.on('pointerover', () => this.nextWave && waveTip.show(this.nextWave.title, this.nextWave.body));
+    this.stageText.on('pointerout', () => waveTip.hide());
     this.tooltip = createTooltip(scene, 0, 0);
-    const waveTip = createTooltip(scene, wave.x - 170, wave.y - 22);
-    this.waveText.on('pointerover', () => this.nextWave && waveTip.show(this.nextWave.title, this.nextWave.body));
-    this.waveText.on('pointerout', () => waveTip.hide());
 
-    stoneButton(scene, GAME_WIDTH - 158, 44, 'Send Wave', onCallWave, { width: 280 });
+    // The bars: experience along the top of the bar, stamina beside the run button
+    this.exp = this.has('expBar') ? this.image('expBar', LAYOUT.exp.x, LAYOUT.exp.y) : undefined;
+    this.stamina = this.has('staminaBar') ? this.image('staminaBar', LAYOUT.stamina.x, LAYOUT.stamina.y, 1) : undefined;
+    if (this.has('staminaBar')) this.image('staminaBar', LAYOUT.stamina.x, LAYOUT.stamina.y, 0).setDepth(DEPTH.over - 1);
+    if (this.has('beltArrow')) this.image('beltArrow', LAYOUT.beltArrow.x, LAYOUT.beltArrow.y);
+    this.drawRunButton();
+    this.drawMiniMenu();
+    this.drawBelt();
+    this.setSkills(undefined, undefined);
+
+    stoneButton(scene, GAME_WIDTH - 158, 44, 'Send Wave', on.onCallWave, { width: 280 });
+  }
+
+  private has(name: string): boolean {
+    return this.m[name] !== undefined && this.scene.textures.exists(hudKey(name));
   }
 
   /** Screen position of a point on the panel art. */
   private at(x: number, y: number): { x: number; y: number } {
-    return { x: x * this.scale, y: GAME_HEIGHT - (this.panelHeight - y) * this.scale };
+    return { x: this.left + x * this.scale, y: this.top + y * this.scale };
+  }
+
+  /** An image placed by its top-left corner in panel pixels. */
+  private image(name: string, x: number, y: number, frame = 0): Phaser.GameObjects.Image {
+    const p = this.at(x, y);
+    return this.scene.add.image(p.x, p.y, hudKey(name), frame).setOrigin(0).setScale(this.scale).setDepth(DEPTH.over);
+  }
+
+  private liquid(name: string, anim: string, spot: { x: number; y: number; size: number }, fps: number): Phaser.GameObjects.Sprite {
+    const sheet = this.m[name]!;
+    if (!this.scene.anims.exists(anim)) {
+      // The sheet wraps into rows; only its first `frames` cells hold frames
+      this.scene.anims.create({ key: anim, frames: this.scene.anims.generateFrameNumbers(hudKey(name), { start: 0, end: sheet.frames - 1 }), frameRate: fps, repeat: -1 });
+    }
+    const p = this.at(spot.x, spot.y);
+    return this.scene.add.sprite(p.x, p.y, hudKey(name)).setOrigin(0).setScale(this.scale).setDepth(DEPTH.liquid).play(anim);
+  }
+
+  /** Keeps the bottom `frac` of a sprite's frame. */
+  private crop(sprite: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image, frac: number, fromLeft = false): void {
+    const f = Math.max(0, Math.min(1, frac));
+    const w = sprite.frame.width;
+    const h = sprite.frame.height;
+    if (fromLeft) sprite.setCrop(0, 0, Math.round(w * f), h);
+    else {
+      const keep = Math.round(h * f);
+      sprite.setCrop(0, h - keep, w, keep);
+    }
   }
 
   /** True where the panel covers the map: the bar, and the globes with their statues. */
   covers(x: number, y: number): boolean {
-    if (y >= this.at(0, BAR_TOP).y) return true;
-    const left = this.at(SPOTS.globe.x, SPOTS.globe.y);
-    const r = (SPOTS.globe.r + 40) * this.scale;
-    return Math.hypot(x - left.x, y - left.y) < r || Math.hypot(x - (GAME_WIDTH - left.x), y - left.y) < r;
+    const bar = this.at(0, BAR_TOP);
+    const right = this.at(this.m.panel!.frameWidth, 0).x;
+    if (y >= bar.y && x >= this.left && x <= right) return true;
+    const r = (LAYOUT.health.size / 2 + 40) * this.scale;
+    const h = this.at(LAYOUT.health.x + LAYOUT.health.size / 2, LAYOUT.health.y + LAYOUT.health.size / 2);
+    const mc = this.at(LAYOUT.mana.x + LAYOUT.mana.size / 2, LAYOUT.mana.y + LAYOUT.mana.size / 2);
+    return Math.hypot(x - h.x, y - h.y) < r || Math.hypot(x - mc.x, y - mc.y) < r;
+  }
+
+  /** The panel's top edge on screen, for whatever stands just above it. */
+  get barTop(): number {
+    return this.at(0, BAR_TOP).y;
   }
 
   update(n: HudNumbers): void {
-    this.goldText.setText(String(n.gold));
-    this.aliveText.setText(String(n.alive));
-    this.waveText.setText(n.wave);
+    this.killsText.setText(`Kills: ${n.kills}`);
+    this.aliveText.setText(`Alive: ${n.alive} / ${n.aliveLimit}`);
+    this.stageText.setText(n.wave);
+    this.timerText.setText(n.timer);
     this.nextWave = n.nextWave;
-    const frac = Math.max(0, Math.min(1, n.alive / Math.max(1, n.aliveLimit)));
-    if (frac !== this.lastAliveFrac) {
-      this.lastAliveFrac = frac;
-      // Crop in texture pixels: keep the bottom `frac` of the liquid
-      const h = this.globe.frame.height;
-      const keep = Math.round(h * frac);
-      this.globe.setCrop(0, h - keep, this.globe.frame.width, keep);
+    if (n.waveShare !== this.lastHealth) {
+      this.lastHealth = n.waveShare;
+      this.crop(this.health, n.waveShare);
+    }
+    const mana = n.alive / Math.max(1, n.aliveLimit);
+    if (mana !== this.lastMana) {
+      this.lastMana = mana;
+      this.crop(this.mana, mana);
+    }
+    if (this.stamina && n.timerFrac !== this.lastStamina) {
+      this.lastStamina = n.timerFrac;
+      this.crop(this.stamina, n.timerFrac, true);
+    }
+    if (this.exp && n.actFrac !== this.lastExp) {
+      this.lastExp = n.actFrac;
+      this.crop(this.exp, n.actFrac, true);
     }
   }
 
-  /** The belt slots: build choices, or nothing. */
+  /** A square button from a frames sheet: normal, pressed and hover frames, a tooltip, and a click. */
+  private button(name: string, x: number, y: number, frames: [number, number, number], tip: [string, string], onClick?: () => void): Phaser.GameObjects.Image {
+    const img = this.image(name, x, y, frames[0]).setInteractive({ useHandCursor: onClick !== undefined });
+    img.on('pointerover', () => {
+      img.setFrame(frames[2]);
+      const b = img.getBounds();
+      this.tooltip.move(b.centerX - 60, b.top - 6);
+      this.tooltip.show(tip[0], tip[1]);
+    });
+    img.on('pointerout', () => {
+      img.setFrame(frames[0]);
+      this.tooltip.hide();
+    });
+    img.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
+      e.stopPropagation();
+      img.setFrame(frames[1]);
+    });
+    img.on('pointerup', () => {
+      img.setFrame(frames[2]);
+      this.tooltip.hide();
+      onClick?.();
+    });
+    return img;
+  }
+
+  private drawMiniMenu(): void {
+    const actions: Record<string, () => void> = { inventory: this.on.onInventory, automap: this.on.onAutomap, pausemenu: this.on.onMenu };
+    for (const [name, x] of LAYOUT.menu.buttons) {
+      if (!this.has(name)) continue;
+      this.button(name, x, LAYOUT.menu.y, [0, 1, 2], MENU_TIPS[name] ?? [name, ''], actions[name]);
+    }
+  }
+
+  /** Walk or run: the ring never stops, so this only changes the little figure. */
+  private drawRunButton(): void {
+    if (!this.has('sprint')) return;
+    const img = this.button('sprint', LAYOUT.run.x, LAYOUT.run.y, [0, 1, 2], ['Run / Walk', 'Monsters keep their own pace'], () => {
+      this.running = !this.running;
+      img.setFrame(this.running ? 3 : 0);
+    });
+    img.on('pointerout', () => img.setFrame(this.running ? 3 : 0));
+    img.on('pointerup', () => img.setFrame(this.running ? 5 : 2));
+  }
+
+  /** Four empty belt slots: items and runes go here later. */
+  private drawBelt(): void {
+    const size = LAYOUT.belt.size * this.scale;
+    LAYOUT.belt.xs.forEach((bx, i) => {
+      const p = this.at(bx, LAYOUT.belt.y);
+      const zone = this.scene.add.zone(p.x, p.y, size, size).setDepth(DEPTH.over).setInteractive();
+      const frame = this.scene.add.image(p.x, p.y, hudKey('slot'), 0).setDisplaySize(size + 4, size + 4).setDepth(DEPTH.frame).setVisible(false);
+      zone.on('pointerover', () => {
+        frame.setVisible(true);
+        this.tooltip.move(p.x - 80, p.y - size / 2 - 8);
+        this.tooltip.show(`Belt slot ${i + 1}`, 'Empty. Items and runes come later.');
+      });
+      zone.on('pointerout', () => {
+        frame.setVisible(false);
+        this.tooltip.hide();
+      });
+      zone.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => e.stopPropagation());
+    });
+  }
+
+  /** The left and right skill buttons: the selected tower's skills, or the empty squares. */
+  setSkills(left: SkillSlot | undefined, right: SkillSlot | undefined): void {
+    for (const o of this.skillParts) o.destroy();
+    this.skillParts = [];
+    const size = LAYOUT.skillSize * this.scale;
+    for (const [spot, slot] of [[LAYOUT.leftSkill, left], [LAYOUT.rightSkill, right]] as const) {
+      const p = this.at(spot.x + LAYOUT.skillSize / 2, spot.y + LAYOUT.skillSize / 2);
+      if (!slot) continue;
+      const icon = slot.icon && this.scene.textures.exists(slot.icon) ? this.scene.add.image(p.x, p.y, slot.icon) : this.scene.add.rectangle(p.x, p.y, size, size, 0x2a2018);
+      icon.setDisplaySize(size, size).setDepth(DEPTH.over).setInteractive();
+      if (icon instanceof Phaser.GameObjects.Image) icon.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+      // The level where D2R writes the hotkey
+      const level = this.scene.add
+        .text(p.x + size / 2 - 4, p.y - size / 2 + 2, String(slot.level), { fontFamily: FONT, fontSize: '15px', color: '#e6e0d4' })
+        .setOrigin(1, 0)
+        .setDepth(DEPTH.frame)
+        .setShadow(1, 1, '#000000', 2);
+      icon.on('pointerover', () => {
+        this.tooltip.move(p.x - 100, p.y - size / 2 - 8);
+        this.tooltip.show(slot.title, slot.body);
+      });
+      icon.on('pointerout', () => this.tooltip.hide());
+      icon.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => e.stopPropagation());
+      this.skillParts.push(icon, level);
+    }
+  }
+
+  /** D2R's skill-select tray over the panel: the build choices as a row of icons. */
   setSlots(items: SlotItem[]): void {
     for (const o of this.slots) o.destroy();
     this.slots = [];
     this.tooltip.hide();
-    const size = SPOTS.belt.size * this.scale;
-    items.slice(0, SPOTS.belt.xs.length).forEach((item, i) => {
-      const p = this.at(SPOTS.belt.xs[i]!, SPOTS.belt.y);
-      const icon = item.icon && this.scene.textures.exists(item.icon) ? this.scene.add.image(p.x, p.y, item.icon) : this.scene.add.rectangle(p.x, p.y, size, size, 0x3a2c1c);
-      icon.setDisplaySize(size - 6, size - 6).setDepth(2904).setAlpha(item.enabled ? 1 : 0.4);
+    if (items.length === 0) return;
+    const size = LAYOUT.skillSize * this.scale;
+    const gap = 10;
+    const y = this.barTop - 70;
+    const x0 = GAME_WIDTH / 2 - ((items.length - 1) * (size + gap)) / 2;
+    items.forEach((item, i) => {
+      const x = x0 + i * (size + gap);
+      const back = this.scene.add.rectangle(x, y, size + 8, size + 8, 0x000000, 0.55).setDepth(DEPTH.over - 1);
+      const icon = item.icon && this.scene.textures.exists(item.icon) ? this.scene.add.image(x, y, item.icon) : this.scene.add.rectangle(x, y, size, size, 0x3a2c1c);
+      icon.setDisplaySize(size, size).setDepth(DEPTH.over).setAlpha(item.enabled ? 1 : 0.4);
       if (icon instanceof Phaser.GameObjects.Image) icon.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
-      const frame = this.scene.add.image(p.x, p.y, hudKey('slot'), 0).setDisplaySize(size + 4, size + 4).setDepth(2905).setVisible(false);
+      const frame = this.scene.add.image(x, y, hudKey('slot'), 1).setDisplaySize(size + 8, size + 8).setDepth(DEPTH.frame).setVisible(false);
       icon.setInteractive({ useHandCursor: item.enabled });
       icon.on('pointerover', () => {
         frame.setVisible(true);
+        this.tooltip.move(x - 110, y - size / 2 - 10);
         this.tooltip.show(item.title, item.body);
       });
       icon.on('pointerout', () => {
@@ -205,32 +415,25 @@ export class D2Hud {
           item.onClick();
         });
       }
-      this.slots.push(icon, frame);
+      this.slots.push(back, icon, frame);
     });
-    // The shared tooltip sits above the belt and its class tabs
-    this.moveTooltip(this.at(SPOTS.belt.xs[0]!, 0).x - 40, this.at(0, BAR_TOP).y - 52);
   }
 
-  /** Stone tabs over the belt (the build menu's classes); the chosen one stands out. */
+  /** Stone tabs over the tray (the build menu's classes); the chosen one stands out. */
   setTabs(tabs: { label: string; chosen: boolean; onClick: () => void }[]): void {
     for (const o of this.tabs) o.destroy();
     this.tabs = [];
-    const y = this.at(0, BAR_TOP).y - 24;
-    const centre = this.at((SPOTS.belt.xs[0]! + SPOTS.belt.xs[SPOTS.belt.xs.length - 1]!) / 2, 0).x;
-    // Narrow and a little right of the belt's middle, clear of the wave counter
+    if (tabs.length === 0) return;
+    const y = this.barTop - 130;
     const width = 128;
     tabs.forEach((tab, i) => {
-      const x = Math.min(GAME_WIDTH - width / 2 - 8, centre + 40 + (i - (tabs.length - 1) / 2) * (width + 6));
+      const x = GAME_WIDTH / 2 + (i - (tabs.length - 1) / 2) * (width + 6);
       const parts = stoneButton(this.scene, x, y, tab.label, tab.onClick, { size: 'med', width, fontSize: 13 });
       for (const o of parts) {
         if (!tab.chosen) (o as Phaser.GameObjects.Image).setAlpha(0.6);
         this.tabs.push(o);
       }
     });
-  }
-
-  private moveTooltip(x: number, bottom: number): void {
-    this.tooltip.move(x, bottom);
   }
 
   /** The selected tower's stone panel, or none. */
@@ -243,7 +446,7 @@ export class D2Hud {
     const width = 380;
     const rows = Math.ceil(model.buttons.length / 2);
     const height = 136 + model.lines.length * 24 + rows * 52;
-    const top = this.at(0, BAR_TOP).y - height - 30;
+    const top = this.barTop - height - 30;
     const panel = stonePanel(this.scene, left + width / 2, top + height / 2, width, height);
     if (panel) add(panel.setInteractive());
     if (model.icon && this.scene.textures.exists(model.icon)) {

@@ -30,8 +30,10 @@ export const CHECKSUM_FILE = 'checksums.json';
  * 7: Green TD pacing: Act 1's twelve superuniques ride inside waves; the old road's bake is gone.
  * 8: the campaign: levels.txt for the placeholder acts' monster levels.
  * 9: Act 1's ring maps: the Blood Moor and Catacombs 4.
+ * 10: D2R's menu and HUD: the burning logo, the pause menu, the mini-menu buttons, the
+ *     inventory panel.
  */
-export const EXTRACT_VERSION = 9;
+export const EXTRACT_VERSION = 10;
 /** What verifyGame reports when the extraction is from an older version of the game. */
 export const OUTDATED = 'version';
 

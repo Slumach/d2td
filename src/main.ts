@@ -8,11 +8,14 @@ import { startGame } from './render/start.ts';
 //   ?rich      plenty of starting gold, so autoplay reaches tiers and an evolution
 //   ?plan=sorceress or ?plan=necromancer   autoplay builds that class instead
 //   ?speed=4   run the sim 4 times as fast
+//   ?menu      the launcher's menus on a stub of the Electron API, to look at them in a browser
 const params = new URLSearchParams(window.location.search);
 // The cursor and font come from the extraction; before first setup they simply are not there
 await loadFeel();
 if (window.d2td) {
   startGame({ launcher: window.d2td });
+} else if (params.has('menu')) {
+  startGame({ launcher: (await import('./launcher/stub.ts')).stubLauncher() });
 } else {
   startGame({
     m0: params.has('m0'),

@@ -176,8 +176,11 @@ export function killMonster(sim: Sim, monster: Monster): void {
   const s = sim.state;
   monster.hp = 0;
   const gold = bounty(sim, monster);
-  s.gold[Math.min(monster.lastHit, s.gold.length - 1)]! += gold;
+  const killer = Math.min(monster.lastHit, s.gold.length - 1);
+  s.gold[killer]! += gold;
   s.kills++;
+  s.killsBy[killer]!++;
+  s.waveKillsBy[killer]!++;
   s.corpses.push({
     id: s.nextId++,
     def: monster.def,

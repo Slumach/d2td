@@ -58,7 +58,8 @@ import {
   preloadAssets,
   type IconIndex,
 } from './assets.ts';
-import { D2Hud, hudManifest, preloadHud, type PanelButton, type SlotItem, type TowerPanelModel } from './d2hud.ts';
+import { D2Hud, hudManifest, preloadHud, type HudNumbers, type PanelButton, type SkillSlot, type SlotItem, type TowerPanelModel } from './d2hud.ts';
+import { InventoryPanel } from './inventory.ts';
 import { angle64, spriteDirection } from './directions.ts';
 import { LocalDriver, NetDriver, type Driver } from './driver.ts';
 import { facingFromVector, type Facing8 } from './facing.ts';
@@ -186,6 +187,8 @@ export class GameScene extends Phaser.Scene {
   private waveSeen = 0;
   private stageText!: Phaser.GameObjects.Text;
   private minimap!: Minimap;
+  /** D2R's inventory panel, with the HUD art. */
+  private inventory: InventoryPanel | undefined;
   private aliveGfx!: Phaser.GameObjects.Graphics;
   private aliveText!: Phaser.GameObjects.Text;
   private groundGfx: Phaser.GameObjects.Graphics | undefined;
@@ -321,7 +324,15 @@ export class GameScene extends Phaser.Scene {
     this.sounds.startLoops();
 
     const hudArt = hudManifest(this);
-    this.d2 = hudArt ? new D2Hud(this, hudArt, () => this.issue({ type: 'callWave' })) : undefined;
+    this.d2 = hudArt
+      ? new D2Hud(this, hudArt, {
+          onCallWave: () => this.issue({ type: 'callWave' }),
+          onInventory: () => this.toggleInventory(),
+          onAutomap: () => this.minimap.toggle(),
+          onMenu: () => this.openMenu(),
+        })
+      : undefined;
+    this.inventory = hudArt && InventoryPanel.available(this, hudArt) ? new InventoryPanel(this, hudArt) : undefined;
     // The plain HUD and panel backgrounds sit over the map, so tall scenery never paints across them
     if (!this.d2) this.add.graphics().setDepth(DEPTH.chrome).fillStyle(0x1a1a14).fillRect(0, 0, GAME_WIDTH, HUD_HEIGHT).fillRect(0, PANEL_TOP, GAME_WIDTH, GAME_HEIGHT - PANEL_TOP);
     this.camera.asWorld(() => {
@@ -329,7 +340,7 @@ export class GameScene extends Phaser.Scene {
       this.ringGfx = this.add.graphics().setDepth(DEPTH.rings);
       this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
     });
-    this.minimap = new Minimap(this, this.camera, GAME_WIDTH - WORLD_WIDTH / 16 - 12, 84, 3100);
+    this.minimap = new Minimap(this, this.camera, GAME_WIDTH - WORLD_WIDTH / 8 - 12, 84, 3100);
     this.aliveGfx = this.add.graphics().setDepth(3100);
     this.aliveText = this.add
       .text(GAME_WIDTH / 2, ALIVE_BAR.y + ALIVE_BAR.height / 2, '', { fontFamily: FONT, fontSize: '15px', color: '#f0e6d0' })
@@ -342,6 +353,8 @@ export class GameScene extends Phaser.Scene {
       .setDepth(3101)
       .setShadow(1, 1, '#000000', 2);
     this.stageText.setText(this.stage().label);
+    // With D2R's panel the globes and its stage line carry these
+    if (this.d2) this.stageText.setVisible(false);
     this.lookAtArcOf(this.driver.me);
 
     const text = { fontFamily: FONT, fontSize: '24px', color: '#e8e0c0' };
@@ -370,11 +383,13 @@ export class GameScene extends Phaser.Scene {
     this.input.mouse?.disableContextMenu();
     // Keys 1 to n: on a team ring, look at that player's arc; in FFA, watch their ring
     this.input.keyboard?.on('keydown-ESC', () => {
-      if (!this.scene.isActive() || this.scene.isActive('Pause')) return;
-      // An online game cannot stop for one player: the menu opens over it while it runs
-      if (!online) this.scene.pause();
-      this.scene.launch('Pause', { online });
+      // As in D2, Escape closes an open panel before it opens the menu
+      if (this.inventory?.open) return this.inventory.hide();
+      this.openMenu();
     });
+    this.input.keyboard?.on('keydown-I', () => this.toggleInventory());
+    this.input.keyboard?.addCapture('TAB');
+    this.input.keyboard?.on('keydown-TAB', () => this.minimap.toggle());
     if (online) {
       this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
         const n = Number(e.key);
@@ -392,6 +407,7 @@ export class GameScene extends Phaser.Scene {
 
   private tileAt(p: Phaser.Input.Pointer): { x: number; y: number } | undefined {
     if (this.d2 ? this.d2.covers(p.x, p.y) : p.y < HUD_HEIGHT || p.y >= PANEL_TOP) return undefined;
+    if (this.inventory?.covers(p.x, p.y) || this.minimap.covers(p.x, p.y)) return undefined;
     const w = this.camera.worldPoint(p.x, p.y);
     return tileAtWorld(w.x, w.y);
   }
@@ -445,6 +461,35 @@ export class GameScene extends Phaser.Scene {
     void saveCheckpoint(launcher, this.saves, takeCheckpoint(match, this.seed, this.driver!.log, ring));
     const wave = match.zones[ring]!.data.waves[this.waveSeen - 1]!;
     this.toast(`${stageName(wave.difficulty, wave.act)}: saved`);
+  }
+
+  /** The Escape menu over the game: paused in single player, running on underneath online. */
+  private openMenu(): void {
+    if (!this.scene.isActive() || this.scene.isActive('Pause')) return;
+    const online = this.driver?.online === true;
+    // An online game cannot stop for one player: the menu opens over it while it runs
+    if (!online) this.scene.pause();
+    this.scene.launch('Pause', { online });
+  }
+
+  private toggleInventory(): void {
+    if (!this.inventory || !this.scene.isActive() || this.scene.isActive('Pause')) return;
+    this.inventory.toggle(this.gold);
+  }
+
+  /** Whether this player may save: single player, or the host of a multiplayer game. */
+  get canSave(): boolean {
+    return this.saves !== undefined && this.driver !== undefined;
+  }
+
+  /** The Escape menu's Save: the run as it stands, in the same slot the act boundaries use. */
+  saveNow(): void {
+    if (!this.canSave) return;
+    const match = this.driver!.match;
+    const ring = ringOf(match, this.driver!.me);
+    const launcher = this.registry.get('launcher') as LauncherApi | undefined;
+    void saveCheckpoint(launcher, this.saves!, takeCheckpoint(match, this.seed, this.driver!.log, ring));
+    this.toast('Saved');
   }
 
   /** A fresh single-player run on the next seed: the end-of-run click and the pause menu's Restart. */
@@ -1115,6 +1160,7 @@ export class GameScene extends Phaser.Scene {
   private drawAlive(alive: number): void {
     const limit = this.sim.data.rules.aliveLimit;
     const frac = Math.max(0, Math.min(1, alive / limit));
+    if (this.d2) return;
     const { width, height, y } = ALIVE_BAR;
     const x = GAME_WIDTH / 2 - width / 2;
     const colour = frac < 0.5 ? 0x60a040 : frac < 0.8 ? 0xd0a030 : 0xd03020;
@@ -1127,8 +1173,8 @@ export class GameScene extends Phaser.Scene {
     if (this.driver?.online) return this.drawOnlineHud();
     this.drawAlive(state.alive);
     this.hud.setText(`Gold ${this.gold}   Wave ${state.wave}/${data.waves.length}   Kills ${state.kills}`);
-    this.hud2.setText(this.waveTimer());
-    this.d2?.update({ gold: this.gold, alive: state.alive, aliveLimit: data.rules.aliveLimit, wave: this.waveLabel(state.wave), nextWave: this.nextWaveTip(state.wave) });
+    this.hud2.setText(this.d2 ? '' : this.waveTimer());
+    this.d2?.update(this.hudNumbers(data.rules.aliveLimit));
     if (state.status !== 'playing' && !this.endOverlay.visible) {
       const why = state.status === 'won' ? 'Victory' : `Defeat: ${data.rules.aliveLimit} alive on the ring`;
       this.endOverlay.setText(`${why}\nwave ${state.wave}, ${state.kills} kills\nclick to play again`).setVisible(true);
@@ -1144,11 +1190,11 @@ export class GameScene extends Phaser.Scene {
     const watching = !this.onOwnRing ? `   (watching ${this.nameOf(this.view)})` : '';
     this.drawAlive(s.alive);
     this.hud.setText(`Gold ${this.onOwnRing ? this.gold : '-'}   Alive ${s.alive}   Wave ${s.wave}/${waves}   Kills ${s.kills}${watching}`);
-    this.d2?.update({ gold: this.onOwnRing ? this.gold : 0, alive: s.alive, aliveLimit: match.data.rules.aliveLimit, wave: this.waveLabel(s.wave), nextWave: this.nextWaveTip(s.wave) });
+    this.d2?.update(this.hudNumbers(match.data.rules.aliveLimit));
 
     const parts: string[] = [];
     const timer = this.waveTimer();
-    if (timer) parts.push(timer);
+    if (timer && !this.d2) parts.push(timer);
     const names = Array.from({ length: match.players }, (_, p) => {
       const tag = m.mode === 'ffa' ? (match.zones[p]!.state.status === 'lost' ? ' out' : ` ${aliveOf(match, p)}`) : '';
       const here = m.mode === 'ffa' ? p === this.view : p === driver.me;
@@ -1166,6 +1212,28 @@ export class GameScene extends Phaser.Scene {
           : won ? 'You win!' : m.winners.length > 0 ? `${m.winners.map((w) => this.nameOf(w)).join(' and ')} won` : 'Nobody survived';
       this.endOverlay.setText(`${title}\nwave ${s.wave}\nclick to return to the menu`).setFontSize(48).setVisible(true);
     }
+  }
+
+  /** What D2R's panel shows for the ring on screen: this player's kills and wave share, the alive weight, the timers. */
+  private hudNumbers(aliveLimit: number): HudNumbers {
+    const sim = this.sim;
+    const s = sim.state;
+    const seat = this.onOwnRing ? this.seat : 0;
+    const last = sim.data.waves[s.wave - 1];
+    const left = s.status === 'playing' && s.wave < sim.data.waves.length ? (s.nextWaveTick - s.tick) / sim.data.economy.waveTicks : 0;
+    this.inventory?.setGold(this.gold);
+    return {
+      gold: this.onOwnRing ? this.gold : 0,
+      kills: s.killsBy[seat] ?? 0,
+      waveShare: s.waveSize > 0 ? (s.waveKillsBy[seat] ?? 0) / s.waveSize : 0,
+      alive: s.alive,
+      aliveLimit,
+      wave: this.waveLabel(s.wave),
+      timer: this.waveTimer(),
+      timerFrac: Math.max(0, Math.min(1, left)),
+      actFrac: last ? last.actWave / last.actWaves : 0,
+      nextWave: this.nextWaveTip(s.wave),
+    };
   }
 
   /** "Next wave in 23 s, send now for 46 gold": the ring's wave timer and what sending early pays. */
@@ -1318,6 +1386,24 @@ export class GameScene extends Phaser.Scene {
       d2.setTabs([]);
       d2.setTowerPanel(undefined);
     }
+    const [left, right] = tower ? this.skillSlots(tower) : [undefined, undefined];
+    d2.setSkills(left, right);
+  }
+
+  /**
+   * The panel's two skill buttons for a tower: its current skill on the right with its
+   * level, and on the left the skill the tier before it (or, evolved, its partner's).
+   */
+  private skillSlots(tower: Tower): [SkillSlot | undefined, SkillSlot | undefined] {
+    const slot = (id: string | undefined, level: number): SkillSlot | undefined => {
+      if (!id) return undefined;
+      const spec = this.skillButton(id, '', () => undefined);
+      return { icon: spec.icon, level, title: spec.tooltip?.title ?? this.skillName(id), body: `Level ${level}\n${spec.tooltip?.body ?? ''}`.trim() };
+    };
+    const current = tower.picks[tower.tier - 1];
+    const right = slot(current, tower.level);
+    const left = tower.evolved ? slot(tower.partnerSkill, tower.partnerLevel + 1) : slot(tower.picks[tower.tier - 2], MAX_TOWER_LEVEL);
+    return [left, right];
   }
 
   /** What a tower with no standard damage number does, in a few words. */

@@ -1,6 +1,7 @@
-// Main menu, dressed as D2's: the stone game-select backdrop, the logo's flames over
-// "TOWER DEFENSE" in Exocet, and D2's stone buttons stacked down the middle. Options opens
-// the stone panel for volume, name and the D2R folder. Without the frontend art (an
+// Main menu, dressed as D2R's logo screen: black, the burning logo with TOWER DEFENSE
+// under it, and D2's stone buttons stacked down the middle: Single Player, Multiplayer
+// (Host or Join), Continue when there is a save, Options, Exit. Options opens D2R's
+// options panel for volume, name and the D2R folder. Without the frontend art (an
 // extraction from before it existed) the plain look stands in.
 
 import Phaser from 'phaser';
@@ -12,7 +13,7 @@ import type { Checkpoint } from '../sim/checkpoint.ts';
 import { stageName } from '../sim/data.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
 import type { LauncherApi, LauncherState } from './api.ts';
-import { frontendKey, frontendManifest, menuMusic, preloadFrontend, smoothHd, stoneButton, stonePanel } from './frontend.ts';
+import { burningLogo, frontendManifest, menuMusic, optionsPanel, preloadFrontend, smoothHd, stoneButton } from './frontend.ts';
 import { shortPath } from './paths.ts';
 import { TextField } from './TextField.ts';
 import { LAUNCHER_KEY } from './SetupScene.ts';
@@ -20,16 +21,20 @@ import { LAUNCHER_KEY } from './SetupScene.ts';
 const CX = GAME_WIDTH / 2;
 const TEXT = { fontFamily: FONT, fontSize: '22px', color: '#d8c89a' };
 const MUTED = { ...TEXT, fontSize: '17px', color: '#9a9078' };
-const FLAMES_ANIM = 'frontend:flames';
-const TITLE_Y = 312;
+/** The logo as the intro shows it: big, its top near the top of the screen. */
+const LOGO_TOP = 10;
+const LOGO_SCALE = 1.25;
 const BUTTONS_TOP = 470;
 const BUTTON_STEP = 92;
+
+type Page = 'main' | 'multiplayer' | 'options';
 
 export class MenuScene extends Phaser.Scene {
   private api!: LauncherApi;
   private state!: LauncherState;
   private parts: Phaser.GameObjects.GameObject[] = [];
-  private settingsOpen = false;
+  private logo: Phaser.GameObjects.GameObject[] = [];
+  private page: Page = 'main';
   /** The single-player checkpoint, if there is one: Continue carries it on. */
   private saved: Checkpoint | undefined;
   private nameField: TextField | undefined;
@@ -46,45 +51,21 @@ export class MenuScene extends Phaser.Scene {
     this.api = this.registry.get(LAUNCHER_KEY) as LauncherApi;
     // Whatever path led here, no lobby or game connection outlives the main menu
     void this.api.mpLeave();
-    this.settingsOpen = false;
+    this.page = 'main';
     this.saved = undefined;
     void loadCheckpoint(this.api, 'solo').then((cp) => {
       this.saved = cp;
       if (this.state) this.draw();
     });
     const m = frontendManifest(this);
-    if (m) {
-      smoothHd(this, m);
-      if (m.flames && !this.anims.exists(FLAMES_ANIM)) {
-        // The sheet wraps into rows; only its first `frames` cells hold frames
-        const frames = this.anims.generateFrameNumbers(frontendKey('flames'), { start: 0, end: m.flames.frames - 1 });
-        this.anims.create({ key: FLAMES_ANIM, frames, frameRate: 18, repeat: -1 });
-      }
-      this.drawBackdrop();
-    }
+    this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000).setOrigin(0).setDepth(0);
+    if (m) smoothHd(this, m);
+    this.logo = burningLogo(this, CX, LOGO_TOP, LOGO_SCALE, 2);
     menuMusic(this, true);
     void this.api.getState().then((state) => {
       this.state = state;
       this.draw();
     });
-  }
-
-  /** The parts that never change: backdrop, flames and title. */
-  private drawBackdrop(): void {
-    // The 800 x 600 classic backdrop at 2x, nearest-neighbour, cropped to the canvas
-    this.add.image(CX, GAME_HEIGHT / 2, frontendKey('bg'), 0).setScale(2).setDepth(0);
-    // A dark glow behind the title; it also hides the backdrop's own "Expansion Set" lettering
-    const glow = this.add.graphics().setDepth(1);
-    for (let i = 10; i > 0; i--) glow.fillStyle(0x000000, 0.11).fillEllipse(CX, TITLE_Y - 20, 300 + i * 60, 120 + i * 18);
-    if (this.textures.exists(frontendKey('flames'))) {
-      this.add.sprite(CX, TITLE_Y - 60, frontendKey('flames')).setScale(2.4).setDepth(2).setBlendMode(Phaser.BlendModes.ADD).play(FLAMES_ANIM);
-    }
-    this.add
-      .text(CX, TITLE_Y, 'TOWER DEFENSE', { fontFamily: FONT, fontSize: '68px', color: '#e8b45a' })
-      .setOrigin(0.5)
-      .setDepth(3)
-      .setStroke('#2a1206', 6)
-      .setShadow(0, 0, '#ff6a00', 18, true, true);
   }
 
   private async setVolume(volume: number): Promise<void> {
@@ -101,32 +82,34 @@ export class MenuScene extends Phaser.Scene {
     this.nameField = undefined;
   }
 
+  private go(page: Page): void {
+    this.page = page;
+    this.draw();
+  }
+
   private draw(): void {
     this.clear();
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
     const d2 = frontendManifest(this) !== undefined;
-    if (!d2) {
-      add(this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x14120e).setOrigin(0));
-      add(this.add.text(CX, 200, 'D2 Tower Defense', { ...TEXT, fontSize: '56px' }).setOrigin(0.5));
-    }
+    for (const o of this.logo) (o as unknown as Phaser.GameObjects.Components.Visible).setVisible(this.page !== 'options');
     add(this.add.text(16, GAME_HEIGHT - 28, `v${this.state.version}   non-commercial fan project, not affiliated with Blizzard`, { ...MUTED, fontSize: '14px' }).setDepth(3100));
 
-    if (this.settingsOpen) return this.drawSettings(d2);
+    if (this.page === 'options') return this.drawOptions(d2);
     const saved = this.saved;
-    const items: [string, () => void][] = [
-      ...(saved ? [[`Continue: ${stageName(saved.difficulty, saved.act)}`, () => this.startGame(saved)] as [string, () => void]] : []),
-      ['Single Player', () => this.startGame()],
-      ['Host Game', () => this.scene.start('Lobby', { role: 'host' })],
-      ['Join Game', () => this.scene.start('Lobby', { role: 'join' })],
-      [
-        'Options',
-        () => {
-          this.settingsOpen = true;
-          this.draw();
-        },
-      ],
-      ['Exit', () => this.api.quit()],
-    ];
+    const items: [string, () => void][] =
+      this.page === 'multiplayer'
+        ? [
+            ['Host Game', () => this.scene.start('Lobby', { role: 'host' })],
+            ['Join Game', () => this.scene.start('Lobby', { role: 'join' })],
+            ['Back', () => this.go('main')],
+          ]
+        : [
+            ['Single Player', () => this.startGame()],
+            ['Multiplayer', () => this.go('multiplayer')],
+            ...(saved ? [[`Continue: ${stageName(saved.difficulty, saved.act)}`, () => this.startGame(saved)] as [string, () => void]] : []),
+            ['Options', () => this.go('options')],
+            ['Exit', () => this.api.quit()],
+          ];
     items.forEach(([label, onClick], i) => {
       const y = BUTTONS_TOP + i * BUTTON_STEP;
       if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 330 }));
@@ -140,19 +123,22 @@ export class MenuScene extends Phaser.Scene {
     this.scene.start('Game', (resume ? { resume } : {}) satisfies SoloStart);
   }
 
-  private drawSettings(d2: boolean): void {
+  /** D2R's options panel with our settings: name, volume, the D2R folder. */
+  private drawOptions(d2: boolean): void {
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
-    const top = 410;
-    const panel = d2 ? stonePanel(this, CX, top + 230, 720, 540) : undefined;
-    if (panel) this.parts.push(panel);
-    const left = CX - 300;
+    const height = 760;
+    const panel = d2 ? optionsPanel(this, CX, GAME_HEIGHT / 2 - 30, height, 'optionsBg') : undefined;
+    if (panel) add(panel);
+    const w = panel ? panel.displayWidth : 760;
+    const top = GAME_HEIGHT / 2 - 30 - height / 2;
+    const left = CX - w / 2 + w * 0.12;
     const med = (x: number, y: number, label: string, onClick: () => void, width: number, enabled = true) => {
       if (d2) this.parts.push(...stoneButton(this, x + width / 2, y + 18, label, onClick, { size: 'med', width, enabled, fontSize: 18 }));
       else this.parts.push(...button(this, x, y, { label, onClick, width, enabled }));
     };
-    let y = top;
-    add(this.add.text(CX, y, 'OPTIONS', { ...TEXT, fontSize: '34px', color: '#e8b45a' }).setOrigin(0.5).setDepth(3101));
-    y += 60;
+    let y = top + 70;
+    add(this.add.text(CX, y, 'Options', { ...TEXT, fontSize: '34px', color: '#c7b377' }).setOrigin(0.5).setDepth(3101));
+    y += 70;
 
     add(this.add.text(left, y, 'Your name in multiplayer games', MUTED).setDepth(3101));
     y += 30;
@@ -183,11 +169,8 @@ export class MenuScene extends Phaser.Scene {
     med(left + 300, y, 'Open log folder', () => void this.api.openLogFolder(), 260);
     y += 90;
 
-    const back = () => {
-      this.settingsOpen = false;
-      this.draw();
-    };
-    if (d2) this.parts.push(...stoneButton(this, CX, y + 10, 'Back', back, { width: 300 }));
+    const back = () => this.go('main');
+    if (d2) this.parts.push(...stoneButton(this, CX, top + height - 60, 'Back', back, { width: 300 }));
     else this.parts.push(...button(this, CX - 150, y, { label: 'Back', onClick: back, width: 300 }));
   }
 }

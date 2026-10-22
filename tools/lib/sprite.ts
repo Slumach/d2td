@@ -5,7 +5,8 @@
 // Frames sit side by side in equal slots of sheet width / frame count; the slot is a
 // little wider than the frame (132 for 130 px icons), and the frame starts at the slot's left.
 // Some frontend sheets instead pack frames with a 1 px gap and no trailing gap (521 px
-// buttons on a 2087 px sheet), so the slot is what is left over spread across the gaps.
+// buttons on a 2087 px sheet), so the slot is what is left over spread across the gaps; a
+// few HUD buttons (72 px frames on a 433 px sheet) carry a spare column at the end.
 
 const MAGIC = 'SpA1';
 const HEADER_SIZE = 0x28;
@@ -66,6 +67,9 @@ function slotOf(sheetWidth: number, frameWidth: number, frameCount: number): num
     const slot = (sheetWidth - frameWidth) / (frameCount - 1);
     if (slot >= frameWidth) return slot;
   }
+  // Equal slots with a few spare columns after the last frame
+  const slot = Math.floor(sheetWidth / frameCount);
+  if (slot >= frameWidth && sheetWidth - slot * frameCount < frameCount) return slot;
   return undefined;
 }
 

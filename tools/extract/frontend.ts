@@ -8,6 +8,12 @@
 //   ui/frontend/button.png    the wide stone button: normal, hover, pressed, disabled
 //   ui/frontend/buttonmed.png the medium stone button, same states
 //   ui/frontend/panel.png     the stone modal panel for Settings and the pause menu
+//   ui/frontend/logo.png      D2R's burning logo, still (HD only)
+//   ui/frontend/logoanim.png  the logo's fire animation, 27 frames, and fullglow.png its
+//                             glow, 6 frames: D2R's pause-menu logo (HD only)
+//   ui/frontend/pausebutton.png   D2R's pause-menu button: normal, hover, disabled, pressed
+//   ui/frontend/settingspanel.png D2R's in-game options panel, and optionsbg.png the
+//                             front end's (HD only)
 //   ui/frontend/frontend.json sizes and frame counts for the renderer
 
 import { decodeDc6, decodeDc6Frame } from '../lib/dc6.ts';
@@ -38,6 +44,12 @@ export interface FrontendManifest {
   button: FrontendSheet;
   buttonMed: FrontendSheet;
   panel: FrontendSheet;
+  logo: FrontendSheet | null;
+  logoAnim: FrontendSheet | null;
+  fullGlow: FrontendSheet | null;
+  pauseButton: FrontendSheet | null;
+  settingsPanel: FrontendSheet | null;
+  optionsBg: FrontendSheet | null;
 }
 
 interface Piece {
@@ -52,6 +64,12 @@ const PIECES: Piece[] = [
   { name: 'button', hd: `${HD}frontend_buttonmain.sprite`, classic: { file: `${CLASSIC}widebuttonblank.dc6`, palette: PAL_UNITS, states: [[0, 1], [0, 1], [2, 3], [0, 1]] } },
   { name: 'buttonMed', hd: `${HD}frontend_buttonmed.sprite`, classic: { file: `${CLASSIC}mediumbuttonblank.dc6`, palette: PAL_UNITS, states: [[0], [0], [1], [0]] } },
   { name: 'panel', hd: `${HD}frontend_difficultymodal.sprite`, classic: { file: `${CLASSIC}popuplargest.dc6`, palette: PAL_UNITS, states: [[0, 1, 2, 3]] } },
+  { name: 'logo', hd: `${HD}frontend_logo.sprite` },
+  { name: 'logoAnim', hd: 'hd/global/ui/logoanimation/logoanimation.sprite' },
+  { name: 'fullGlow', hd: 'hd/global/ui/logoanimation/fullglow_pc.sprite' },
+  { name: 'pauseButton', hd: 'hd/global/ui/pausemenu/pausebutton.sprite' },
+  { name: 'settingsPanel', hd: 'hd/global/ui/pausemenu/settingspanel.sprite' },
+  { name: 'optionsBg', hd: 'hd/global/ui/panel/options/frontendoptionsbg.sprite' },
 ];
 const BG = { file: `${CLASSIC}gameselectscreenexp.dc6`, palette: PAL_SKY, cols: 4 };
 /** Where the backdrop says "Expansion Set / Lord of Destruction"; our title goes there instead. */

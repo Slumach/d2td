@@ -243,6 +243,11 @@ export interface SimState {
   nextWaveTick: number;
   status: Status;
   kills: number;
+  /** Kills by player (as gold), and each player's kills since the newest wave started. */
+  killsBy: number[];
+  waveKillsBy: number[];
+  /** How many monsters the newest wave puts on this ring in all, for the kill share. */
+  waveSize: number;
   nextId: number;
   monsters: Monster[];
   towers: Tower[];

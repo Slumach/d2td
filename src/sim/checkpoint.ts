@@ -8,7 +8,7 @@ import type { GameData } from './data.ts';
 import { createMatch, type Match, type MatchMode, type MatchState, type PlayerCommand } from './match.ts';
 import type { SimState } from './state.ts';
 
-export const CHECKPOINT_VERSION = 1;
+export const CHECKPOINT_VERSION = 2;
 
 export interface TimedPlayerCommand extends PlayerCommand {
   tick: number;
