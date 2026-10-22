@@ -10,7 +10,8 @@ import Phaser from 'phaser';
 import { WORLD_HEIGHT, WORLD_WIDTH } from './iso.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from './layout.ts';
 
-export const ZOOMS = [1, 2, 3] as const;
+/** Wheel steps. 1.5 draws sprites with uneven pixel doubling (nearest neighbour, no blur); see design.md Visuals. */
+export const ZOOMS = [1, 1.5, 2, 3] as const;
 /** World pixels per second the keys pan at zoom 1. */
 const KEY_PAN = 900;
 /** A press that moves less than this is a click, not a drag. */
@@ -78,7 +79,7 @@ export class WorldView {
     }
   }
 
-  /** A whole-number zoom, keeping the world point under `at` (or the centre) where it is. */
+  /** A zoom step, keeping the world point under `at` (or the centre) where it is. */
   zoomTo(zoom: number, at?: { x: number; y: number }): void {
     const cam = this.world;
     if (zoom === cam.zoom) return;
