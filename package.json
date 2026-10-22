@@ -17,6 +17,7 @@
     "drops": "tsx tools/drops.ts",
     "cow": "tsx tools/cow.ts",
     "loot": "tsx tools/loot.ts",
+    "dps": "tsx tools/dpsreport.ts",
     "balance": "tsx tools/balance.ts",
     "ladders": "tsx tools/ladders.ts",
     "build:app": "tsc --noEmit && tsc --noEmit -p electron && vite build && vite build -c vite.electron.config.ts",

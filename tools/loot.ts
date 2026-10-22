@@ -1,5 +1,6 @@
-// Item harness (Stage F): bots play with no items, with the loot of Normal and Nightmare,
-// with the loot of the whole campaign, and in best-in-slot gear, and this prints the wave
+// Item harness (Stage F): bots play with no items, with the loot of three Normal and
+// Nightmare clears at 50% magic find, with the loot of three full clears at 150%, and in
+// best-in-slot gear (tools/outfit.ts has the sets), and this prints the wave
 // each run ends on and its towers then, beside the targets. MIXED3, the bot that plays
 // every class, is the reference bot and is held to them:
 //

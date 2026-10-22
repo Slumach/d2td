@@ -2,8 +2,10 @@
 // campaign, a best-in-slot catalogue, and an outfitter that dresses the bot's towers from
 // either. All items are real ones rolled from the tables; nothing is hand-listed.
 //
-//   nm     every drop of one pass through Normal and Nightmare (each monster killed once)
-//   hell   the same through Hell as well
+//   nm     every drop of three clears of Normal and Nightmare (each monster killed once a
+//          clear) at 50% magic find; the outfitter picks the best of them for every slot
+//   hell   every drop of three clears of the whole campaign at 150% magic find, nothing
+//          lost to a full inventory (it all goes to the stash)
 //   bis    every unique, set item and runeword at its best rolls, runewords on the best
 //          base that takes them; the outfitter picks the best of them for every slot
 //
@@ -29,26 +31,32 @@ import type { Command, Element, Sim, Tower } from '../src/sim/state.ts';
 export type LootSet = 'none' | 'nm' | 'hell' | 'bis';
 export const LOOT_SETS: LootSet[] = ['none', 'nm', 'hell', 'bis'];
 
-/** Every drop of one pass through the campaign's waves up to a difficulty (0 Normal, 2 Hell). */
-export function campaignLoot(data: GameData, upTo: number, seed = 7): Item[] {
+/**
+ * Every drop of `clears` passes through the campaign's waves up to a difficulty (0 Normal,
+ * 2 Hell), every monster killed once a pass by a tower with `magicFind`; nothing is lost
+ * to a full inventory.
+ */
+export function campaignLoot(data: GameData, upTo: number, clears = 1, magicFind = 0, seed = 7): Item[] {
   const rng = createRng(seed);
   const out: Item[] = [];
   let n = 0;
-  for (const wave of data.waves) {
-    if (wave.difficulty > upTo || wave.tier) continue;
-    for (const g of wave.groups) {
-      const def = data.monsters[g.monster]!;
-      const tc = g.rank === 'champion' ? def.treasure[1] : g.rank === 'unique' ? def.treasure[2] : def.treasure[0];
-      if (!tc) continue;
-      for (let k = 0; k < g.count; k++) {
-        out.push(
-          ...rollKillDrops(data.items, rng, {
-            tc,
-            ctx: { mlvl: def.level, magicFind: 0, runePct: data.drops.runeMultiplierPct, noDropPct: 100 },
-            hammerPpm: 0,
-            uid: `loot${n++}`,
-          }),
-        );
+  for (let clear = 0; clear < clears; clear++) {
+    for (const wave of data.waves) {
+      if (wave.difficulty > upTo || wave.tier) continue;
+      for (const g of wave.groups) {
+        const def = data.monsters[g.monster]!;
+        const tc = g.rank === 'champion' ? def.treasure[1] : g.rank === 'unique' ? def.treasure[2] : def.treasure[0];
+        if (!tc) continue;
+        for (let k = 0; k < g.count; k++) {
+          out.push(
+            ...rollKillDrops(data.items, rng, {
+              tc,
+              ctx: { mlvl: def.level, magicFind, runePct: data.drops.runeMultiplierPct, noDropPct: 100 },
+              hammerPpm: 0,
+              uid: `loot${n++}`,
+            }),
+          );
+        }
       }
     }
   }
@@ -143,8 +151,8 @@ export function outfit(sim: Sim, pool: Item[], reuse: boolean): Command[] {
 
 /** The pool a loot set starts with. */
 export function lootPool(data: GameData, set: LootSet): { pool: Item[]; reuse: boolean } {
-  if (set === 'nm') return { pool: campaignLoot(data, 1), reuse: false };
-  if (set === 'hell') return { pool: campaignLoot(data, 2), reuse: false };
+  if (set === 'nm') return { pool: campaignLoot(data, 1, 3, 50), reuse: false };
+  if (set === 'hell') return { pool: campaignLoot(data, 2, 3, 150), reuse: false };
   if (set === 'bis') return { pool: bisCatalogue(data.items), reuse: true };
   return { pool: [], reuse: false };
 }

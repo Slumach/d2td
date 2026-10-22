@@ -29,3 +29,4 @@ The full design lives in @docs/design.md. Read it before planning any feature.
 - Follow the milestones in the design doc in order; each has a gate. Do not start the next until the gate passes.
 - Small commits with plain messages. Ask before adding a dependency.
 - No em-dashes anywhere, including comments and UI text.
+- Never `rm -rf` anything above a single file. A git worktree goes away with `git worktree remove`, never by deleting its folder (a junction inside it deletes what it points at). `assets-extracted/` and `node_modules/` are never deleted by hand: the extractor and npm own them.

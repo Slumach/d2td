@@ -19,7 +19,7 @@
 
 import type { HitFilter, SkillDef } from '../src/sim/archetypes/types.ts';
 import { auraSources } from '../src/sim/auras.ts';
-import { EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, type GameData } from '../src/sim/data.ts';
+import { baseSkillId, EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, type GameData } from '../src/sim/data.ts';
 import { tileCenter, isPathTile } from '../src/sim/map.ts';
 import { activeSkill, buildCostFor, canBuild, createSim, waveAt, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
 import { withMods } from '../src/sim/combat.ts';
@@ -332,8 +332,9 @@ function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number, foe
     for (const t of towers) {
       if ((t.x - tower.x) ** 2 + (t.y - tower.y) ** 2 > aura.radiusUnits ** 2) continue;
       const per = buffs.get(t.id) ?? new Map<string, Buff>();
-      const prev = per.get(skill.id) ?? { damagePct: 0, attackSpeedPct: 0, fire: 0 };
-      per.set(skill.id, {
+      // The same aura from two towers counts once, whatever +skills either carries
+      const prev = per.get(baseSkillId(skill.id)) ?? { damagePct: 0, attackSpeedPct: 0, fire: 0 };
+      per.set(baseSkillId(skill.id), {
         damagePct: Math.max(prev.damagePct, aura.towers.damagePct),
         attackSpeedPct: Math.max(prev.attackSpeedPct, aura.towers.attackSpeedPct),
         fire: Math.max(prev.fire, avg({ min: aura.towers.fireMin, max: aura.towers.fireMax })),
@@ -435,7 +436,15 @@ interface Option {
   stepCost?: number;
   gain: number;
   commands: Command[];
+  /** Buys damage (anything but an aura or a debuff): what a bot in trouble spends on. */
+  damage: boolean;
 }
+
+/** True for a skill that kills by itself rather than helping others. */
+const isDamage = (skill: SkillDef | undefined) => !!skill && skill.archetype !== 'buffAura' && skill.archetype !== 'debuff';
+
+/** Alive weight past which a bot stops saving and buys the best damage it can afford now. */
+const PANIC_ALIVE = 60;
 
 interface Judge {
   cov: Coverage;
@@ -444,9 +453,19 @@ interface Judge {
   before: number;
 }
 
-/** Gain from replacing (or adding) one tower, and removing others. */
+/** The auras a tower projects, by base skill (its own skill, an evolved tower's partner). */
+function aurasOf(sim: Sim, t: Tower): string[] {
+  return auraSources(sim, t).map((s) => baseSkillId(s.skill.id));
+}
+
+/**
+ * Gain from replacing (or adding) one tower, and removing others. A tower bringing an aura
+ * another tower already projects is worth nothing: the same aura never counts twice.
+ */
 function gainOf(sim: Sim, towers: Tower[], judge: Judge, changed: Tower, removed: number[] = []): number {
   const after = towers.filter((t) => t.id !== changed.id && !removed.includes(t.id));
+  const mine = aurasOf(sim, changed);
+  if (mine.length > 0 && after.some((t) => aurasOf(sim, t).some((a) => mine.includes(a)))) return 0;
   after.push(changed);
   return totalPower(sim, after, judge.cov, judge.hpCap, judge.foes) - judge.before;
 }
@@ -494,6 +513,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
         cost: buildCostFor(sim, 0),
         gain: gainOf(sim, towers, judge, fresh),
         commands: [{ type: 'build', x: spot.x, y: spot.y, cls, skill }],
+        damage: isDamage(sim.data.skills[skill]),
       });
     }
   }
@@ -511,6 +531,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
           cost: e.evolveCost,
           gain: gainOf(sim, towers, judge, merged, [partner.id]),
           commands: [{ type: 'evolve', towerA: attack.id, towerB: partner.id }],
+          damage: true,
         });
       }
     }
@@ -520,7 +541,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
     if (t.evolved) continue;
     const level = upgradeCost(sim, t);
     if (level !== undefined) {
-      out.push({ cost: level, gain: gainOf(sim, towers, judge, { ...t, level: t.level + 1 }), commands: [{ type: 'upgrade', towerId: t.id }] });
+      out.push({ cost: level, gain: gainOf(sim, towers, judge, { ...t, level: t.level + 1 }), commands: [{ type: 'upgrade', towerId: t.id }], damage: isDamage(activeSkill(sim, t)?.skill) });
     }
     // Toward the next tier: the remaining levels plus the tier, valued by what the next
     // tier's skill gives. Levels 3 to 5 can look worthless on their own (overkill), so
@@ -540,7 +561,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
         // Pay only for the next step now; the option is judged on the whole path
         const stepCost = t.level < MAX_TOWER_LEVEL ? level! : tierPrice;
         const gain = (gainOf(sim, towers, judge, next) * LOOKAHEAD_DISCOUNT_PCT) / 100;
-        out.push({ cost: remaining, stepCost, gain, commands });
+        out.push({ cost: remaining, stepCost, gain, commands, damage: isDamage(sim.data.skills[skill]) });
       }
     }
   }
@@ -655,7 +676,7 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
 
   // The best option depends only on the wave (the coming monsters) and the
   // towers, not on gold or the monsters out, so it is worked out again only when one changes
-  let cached: { key: string; best: Option | undefined } | undefined;
+  let cached: { key: string; best: Option | undefined; all: Option[] } | undefined;
   const keyOf = (s: Sim) =>
     `${s.state.wave}|${s.state.towers.map((t) => `${t.id}:${t.tileX},${t.tileY}:${t.tier}.${t.level}:${t.picks.join('+')}:${t.evolved}:${t.partnerSkill}.${t.partnerLevel}`).join(';')}`;
 
@@ -672,15 +693,27 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
       const key = keyOf(s);
       if (cached?.key !== key) {
         let pick: Option | undefined;
-        for (const o of options(s, config, ranged, melee, cov)) {
+        const all = options(s, config, ranged, melee, cov);
+        for (const o of all) {
           if (o.gain <= 0) continue;
           if (!pick || o.gain / o.cost > pick.gain / pick.cost) pick = o;
         }
-        cached = { key, best: pick };
+        cached = { key, best: pick, all };
       }
+      const gold = s.state.gold[0] ?? 0;
       const best = cached.best;
-      if (!best || (s.state.gold[0] ?? 0) < (best.stepCost ?? best.cost)) return out;
-      return [...best.commands, ...out];
+      if (best && gold >= (best.stepCost ?? best.cost)) return [...best.commands, ...out];
+      // The ring is filling: no more saving, the best damage affordable now. (Buying the
+      // cheapest thing when the model rates nothing was tried and made every bot worse.)
+      if (s.state.alive >= PANIC_ALIVE) {
+        let now: Option | undefined;
+        for (const o of cached.all) {
+          if (o.gain <= 0 || !o.damage || gold < (o.stepCost ?? o.cost)) continue;
+          if (!now || o.gain / o.cost > now.gain / now.cost) now = o;
+        }
+        if (now) return [...now.commands, ...out];
+      }
+      return out;
     },
   };
 }
