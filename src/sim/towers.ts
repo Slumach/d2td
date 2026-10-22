@@ -72,7 +72,7 @@ export function sellValue(sim: Sim, tower: Tower): number {
 }
 
 /** True if the tower has learned `skill` and has reached at least `minTier`. */
-function meets(sim: Sim, tower: Tower, req: { skill: string; minTier: number }): boolean {
+export function meets(sim: Sim, tower: Tower, req: { skill: string; minTier: number }): boolean {
   const line = lineOf(sim, tower);
   if (tower.evolved || !line || tower.tier < req.minTier) return false;
   const tierIndex = line.tiers.findIndex((options) => options.includes(req.skill));

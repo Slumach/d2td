@@ -20,6 +20,7 @@ import { GroundDrops } from './drops.ts';
 import { standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
 import { aliveOf, arcOwner, ringOf, seatOf, type MatchMode } from '../sim/match.ts';
+import { meets } from '../sim/towers.ts';
 import { ARC_COUNT, arcAt, isBlocked, isPathTile, positionAt } from '../sim/map.ts';
 import {
   activeSkill,
@@ -444,6 +445,23 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ---- input and commands ----
+
+  /** Why this tower cannot evolve yet: the recipes its line is part of, what it still needs and what must stand beside it. */
+  private evolveHint(tower: Tower): string {
+    const sim = this.sim;
+    const line = sim.data.classes[tower.cls]?.lines[tower.line];
+    const ofLine = new Set(line?.tiers.flat() ?? []);
+    const recipes = sim.data.evolutions.filter((r) => ofLine.has(r.attack.skill) || ofLine.has(r.partner.skill));
+    if (recipes.length === 0) return 'Evolve: this line is in no evolution';
+    const parts = recipes.slice(0, 2).map((r) => {
+      const own = ofLine.has(r.attack.skill) ? r.attack : r.partner;
+      const other = own === r.attack ? r.partner : r.attack;
+      return meets(sim, tower, own)
+        ? `${r.name} needs an adjacent ${this.skillName(other.skill)} at tier ${other.minTier}`
+        : `${r.name} needs this tower at ${this.skillName(own.skill)} tier ${own.minTier}, beside ${this.skillName(other.skill)} at tier ${other.minTier}`;
+    });
+    return `Evolve: ${parts.join('; ')}`;
+  }
 
   /** Alone, the monsters' one spawn is marked on the ground until the first wave: the place to build near. */
   private markSpawn(): void {
@@ -1667,11 +1685,14 @@ export class GameScene extends Phaser.Scene {
         buttons.push({ label: options.length > 1 ? `Tier up: ${this.skillName(skill)}` : `Tier up ${tier}g`, enabled: this.gold >= tier, onClick: () => this.issue(...commands) });
       }
     }
+    let evolvable = false;
     for (const other of sim.state.towers) {
       const match = evolutionFor(sim, tower, other);
       if (!match) continue;
-      buttons.push({ label: `Evolve ${match.recipe.name}`, enabled: this.gold >= e.evolveCost, onClick: () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }) });
+      evolvable = true;
+      buttons.push({ label: `Evolve ${match.recipe.name} ${e.evolveCost}g`, enabled: this.gold >= e.evolveCost, onClick: () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }) });
     }
+    if (!evolvable && !tower.evolved && active) lines.push(this.evolveHint(tower));
     const next = TARGETING_MODES[(TARGETING_MODES.indexOf(tower.targeting) + 1) % TARGETING_MODES.length]!;
     buttons.push({ label: 'Targeting', enabled: true, onClick: () => this.issue({ type: 'setTargeting', towerId: tower.id, mode: next }) });
     buttons.push({

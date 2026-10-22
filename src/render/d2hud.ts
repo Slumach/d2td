@@ -15,7 +15,7 @@
 import Phaser from 'phaser';
 
 import { HD_SCALE, frontendManifest, stoneButton, stonePanel } from '../launcher/frontend.ts';
-import { GAME_HEIGHT, GAME_WIDTH } from './layout.ts';
+import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT } from './layout.ts';
 import { FONT, createTooltip, type Tooltip } from './ui.ts';
 
 export const HUD_KEY = 'hud:manifest';
@@ -425,7 +425,11 @@ export class D2Hud {
     });
   }
 
-  /** The selected tower's stone panel, or none. */
+  /**
+   * The selected tower's stone panel, or none. The texts are laid out first and measured,
+   * so wrapped lines stack without overlapping, and the panel is sized to them; it sits
+   * above the life globe, never over it, and never above the top bar.
+   */
   setTowerPanel(model: TowerPanelModel | undefined): void {
     for (const o of this.towerParts) o.destroy();
     this.towerParts = [];
@@ -433,20 +437,28 @@ export class D2Hud {
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.towerParts.push(o), o);
     const left = 16;
     const width = 380;
+    const gap = 6;
+    const title = add(this.scene.add.text(left + 92, 0, model.title, { fontFamily: FONT, fontSize: '20px', color: '#e8b45a', wordWrap: { width: width - 120 } }).setDepth(3101));
+    const lines = model.lines.map((line) => add(this.scene.add.text(left + 30, 0, line, { fontFamily: FONT, fontSize: '16px', color: '#d8d0b8', wordWrap: { width: width - 60 } }).setDepth(3101)));
     const rows = Math.ceil(model.buttons.length / 2);
-    const height = 136 + model.lines.length * 24 + rows * 52;
-    const top = this.barTop - height - 30;
+    const head = Math.max(100, 40 + title.height + 16);
+    const body = lines.reduce((n, t) => n + t.height + gap, 0);
+    const height = head + body + 16 + rows * 52 + 16;
+    // Above the globe's glass, which rises past the bar's top
+    const globeTop = this.at(LAYOUT.health.x, LAYOUT.health.y).y;
+    const bottom = Math.min(this.barTop - 30, globeTop - 12);
+    const top = Math.max(HUD_HEIGHT + 8, bottom - height);
     const panel = stonePanel(this.scene, left + width / 2, top + height / 2, width, height);
     if (panel) add(panel.setInteractive());
     if (model.icon && this.scene.textures.exists(model.icon)) {
       const icon = add(this.scene.add.image(left + 52, top + 58, model.icon).setDisplaySize(56, 56).setDepth(3101));
       icon.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
     }
-    add(this.scene.add.text(left + 92, top + 40, model.title, { fontFamily: FONT, fontSize: '20px', color: '#e8b45a', wordWrap: { width: width - 120 } }).setDepth(3101));
-    let y = top + 100;
-    for (const line of model.lines) {
-      add(this.scene.add.text(left + 30, y, line, { fontFamily: FONT, fontSize: '16px', color: '#d8d0b8', wordWrap: { width: width - 60 } }).setDepth(3101));
-      y += 24;
+    title.setY(top + 40);
+    let y = top + head;
+    for (const t of lines) {
+      t.setY(y);
+      y += t.height + gap;
     }
     y += 16;
     model.buttons.forEach((b, i) => {
