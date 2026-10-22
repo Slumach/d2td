@@ -137,6 +137,11 @@ export interface Monster {
   poisonPerTick: number;
   /** The player whose poison it is, for the kill. */
   poisonBy: number;
+  /** Open wounds: this much off every tick for bleedTicks more ticks, and whose it is. */
+  bleedTicks: number;
+  bleedPerTick: number;
+  bleedBy: number;
+  bleedTower: number;
   curses: Curse[];
   attackCooldown: number;
   /** Ticks until the next AI decision. */

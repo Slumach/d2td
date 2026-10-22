@@ -1,9 +1,10 @@
 // Projectile: a homing shot that hits its target. Holy Bolt, Fire Bolt, Ice Bolt, Bone
 // Spirit; Charged Bolt and Teeth fire several at once (a count or a count calc), one per
 // target. Shots with no target of their own fly past: a volley shreds a crowd, not a boss.
+// Pierce on the tower's items lets a bolt that hit fly on in a straight line.
 
 import { canHurt, findTarget, strike, withBonus } from '../combat.ts';
-import { homeToward, spawnMissile, targetOf } from '../missiles.ts';
+import { flyOn, homeToward, pierceOn, spawnMissile, targetOf } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
 import type { Element, Monster } from '../state.ts';
 import { calcAt, common, damageAt, elementalType, fields, filterFrom, missileLifetime, missileOf, missileSpeed, perLevel } from './common.ts';
@@ -50,12 +51,19 @@ export const projectile: ArchetypeModule<ProjectileDef> = {
   },
 
   updateMissile(sim, missile, skill) {
+    if (--missile.ticksLeft < 0) return false;
+    const hit = (m: Monster) => {
+      const range = skill.levels[missile.level]!;
+      const amount = withBonus(rollInt(sim.state.rng, range.min, range.max), missile.damagePct);
+      strike(sim, m, amount, skill.damageType as Element, skill.filter, skill, missile.level, missile);
+    };
+    // A bolt that pierced flies on in a straight line
+    if (missile.targetId === 0) return flyOn(sim, missile, skill.missileSpeed, hit);
     const target = targetOf(sim, missile);
-    if (!target || --missile.ticksLeft < 0) return false;
+    if (!target) return false;
+    const from = { x: missile.x, y: missile.y };
     if (!homeToward(missile, target, skill.missileSpeed)) return true;
-    const range = skill.levels[missile.level]!;
-    const amount = withBonus(rollInt(sim.state.rng, range.min, range.max), missile.damagePct);
-    strike(sim, target, amount, skill.damageType as Element, skill.filter, skill, missile.level, missile);
-    return false;
+    hit(target);
+    return pierceOn(sim, missile, target, from, skill.missileSpeed);
   },
 };

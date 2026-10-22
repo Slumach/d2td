@@ -59,6 +59,10 @@ export function createMonster(sim: Sim, def: string, wave: number, rank: Rank, m
     freezeTicks: 0,
     poisonTicks: 0,
     poisonPerTick: 0,
+    bleedTicks: 0,
+    bleedPerTick: 0,
+    bleedBy: 0,
+    bleedTower: 0,
     curses: [],
     attackCooldown: 0,
     abilityCooldown: d.aiDelayTicks,
@@ -127,7 +131,7 @@ export function speedOf(sim: Sim, m: Monster): number {
   return idiv(speed * (100 - slow), 100);
 }
 
-/** Counts down timed statuses and curses, and lands this tick's poison. True if it died. */
+/** Counts down timed statuses and curses, and lands this tick's poison and open wounds. True if it died. */
 function tickStatuses(sim: Sim, m: Monster): boolean {
   if (m.slowTicks > 0 && --m.slowTicks === 0) m.slowPct = 0;
   if (m.chillTicks > 0) m.chillTicks--;
@@ -141,6 +145,13 @@ function tickStatuses(sim: Sim, m: Monster): boolean {
     sim.actorTower = m.poisonTower;
     dealRaw(sim, m, m.poisonPerTick);
     if (m.poisonTicks === 0) m.poisonPerTick = 0;
+  }
+  if (m.bleedTicks > 0 && m.hp > 0) {
+    m.bleedTicks--;
+    sim.actor = m.bleedBy;
+    sim.actorTower = m.bleedTower;
+    dealRaw(sim, m, m.bleedPerTick);
+    if (m.bleedTicks === 0) m.bleedPerTick = 0;
   }
   return m.hp <= 0;
 }

@@ -9,9 +9,11 @@
 //
 // The outfitter scores a tower's gear by its line skill's standard damage per second with
 // the gear on (+skills raise the skill, melee towers swing the weapon with its enhanced
-// damage, attack and cast speed shorten the interval), so it dresses each class the way
-// the stat mapping rewards. Aura and summon skills, which have no standard damage, score
-// by their +skills and speed.
+// damage, attack and cast speed shorten the interval; -% to enemy resistance of the skill's
+// element counts as damage percent, pierce as speed on bolt skills, an item aura as +skills
+// and chance to cast as a little extra), so it dresses each class the way the stat mapping
+// rewards. Aura and summon skills, which have no standard damage, score by their +skills,
+// item auras and speed.
 
 import { activeSkill } from '../src/sim/sim.ts';
 import type { GameData } from '../src/sim/data.ts';
@@ -22,7 +24,7 @@ import type { Gear } from '../src/sim/items/gear.ts';
 import { canWear, propertyStats, type Item } from '../src/sim/items/item.ts';
 import { gearOf, plusLevels, withGear } from '../src/sim/items/tower.ts';
 import { createRng } from '../src/sim/rng.ts';
-import type { Command, Sim, Tower } from '../src/sim/state.ts';
+import type { Command, Element, Sim, Tower } from '../src/sim/state.ts';
 
 export type LootSet = 'none' | 'nm' | 'hell' | 'bis';
 export const LOOT_SETS: LootSet[] = ['none', 'nm', 'hell', 'bis'];
@@ -87,12 +89,14 @@ export function gearScore(sim: Sim, tower: Tower, gear: Gear): number {
   const g = gearOf(sim, t);
   const buff = withGear({ damagePct: 0, attackSpeedPct: 0, fireMin: 0, fireMax: 0 }, g, active.skill);
   const dps = standardDps(active.skill, active.lvl);
-  const plus = plusLevels(sim, g, active.skill);
+  const plus = plusLevels(sim, g, active.skill) + g.auras.reduce((n, a) => n + a.level, 0);
   // A tie-break so gold and magic find fill a slot nothing else wants
-  const extra = g.goldFindPct + g.magicFindPct + g.defense / 50;
+  const extra = g.goldFindPct + g.magicFindPct + g.defense / 50 + g.castOnHit.reduce((n, c) => n + c.chancePct * c.level, 0) / 10;
   if (dps <= 0) return (plus * 100 + buff.attackSpeedPct) * 1000 + extra;
   const adds = Object.values(g.adds).reduce((n, [a, b]) => n + (a + b) * 128, 0);
-  return Math.trunc(((dps + (active.skill.archetype === 'melee' ? adds : 0)) * (100 + buff.attackSpeedPct) * (100 + buff.damagePct)) / 10_000) + extra;
+  const cut = g.resistDown[active.skill.damageType as Element] ?? 0;
+  const pierce = active.skill.archetype === 'projectile' || active.skill.archetype === 'pierce' ? g.piercePct : 0;
+  return Math.trunc(((dps + (active.skill.archetype === 'melee' ? adds : 0)) * (100 + buff.attackSpeedPct + pierce) * (100 + buff.damagePct + cut)) / 10_000) + extra;
 }
 
 /**

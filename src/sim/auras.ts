@@ -1,6 +1,6 @@
-// The aura field for one tick. Every aura emitter (an aura tower's own skill, or an evolved
-// tower's built-in partner aura at half radius) contributes to towers and monsters in its
-// radius. The same aura from two towers counts once, strongest value per stat; different
+// The aura field for one tick. Every aura emitter (an aura tower's own skill, an evolved
+// tower's built-in partner aura at half radius, or an aura on an item the tower wears)
+// contributes to towers and monsters in its radius. The same aura from two towers counts once, strongest value per stat; different
 // auras add up. Curses ride on the monsters themselves and count as one more source:
 // across every curse a monster carries, the strongest value of each effect.
 
@@ -8,7 +8,7 @@ import { archetypeOf } from './archetypes/index.ts';
 import type { AuraContribution, MonsterAuraFx, SkillDef, TowerBuff } from './archetypes/types.ts';
 import { within } from './combat.ts';
 import { baseSkillId, EVOLVED_LEVEL_INDEX } from './data.ts';
-import { geared } from './items/tower.ts';
+import { gearOf, geared, itemSkill } from './items/tower.ts';
 import { idiv } from './fixed.ts';
 import { ELEMENTS, type AuraEmitter, type AuraField, type Monster, type Sim, type Tower } from './state.ts';
 
@@ -38,6 +38,13 @@ export function auraSources(sim: Sim, tower: Tower): Source[] {
   const own = activeSkill(sim, tower);
   const ownAura = own && archetypeOf(own.skill).aura?.(own.skill, own.lvl);
   if (own && ownAura && ownAura.radiusUnits > 0) out.push({ tower, skill: own.skill, aura: ownAura });
+  // Item auras (Infinity's Conviction, Beast's Fanaticism, Doom's Holy Freeze): the tower
+  // projects each at the item's level; the same aura from the tower's own skill counts once
+  for (const a of gearOf(sim, tower).auras) {
+    const it = itemSkill(sim, a.skill, a.level);
+    const aura = it && archetypeOf(it.skill).aura?.(it.skill, it.lvl);
+    if (it && aura && aura.radiusUnits > 0) out.push({ tower, skill: it.skill, aura });
+  }
   if (tower.evolved && tower.partnerSkill) {
     const partner = sim.data.skills[tower.partnerSkill]!;
     const aura = archetypeOf(partner).aura?.(partner, tower.partnerLevel);

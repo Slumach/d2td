@@ -1,9 +1,13 @@
 // Missile helpers shared by the archetypes: creation, homing, integer trig.
 
 import type { TowerBuff } from './archetypes/types.ts';
-import { distSq } from './combat.ts';
-import { idiv, isqrt } from './fixed.ts';
+import { actorGear, distSq, type Point } from './combat.ts';
+import { UNITS_PER_TILE, idiv, isqrt } from './fixed.ts';
+import { rollInt } from './rng.ts';
 import type { Missile, Monster, Sim, Tower } from './state.ts';
+
+/** A line missile hits anything within this distance of its centre. */
+export const LINE_HIT_RADIUS = (UNITS_PER_TILE * 4) / 10;
 
 /** cos(2 pi k / 64) * 1024, hardcoded so every JS engine agrees to the bit. */
 const COS64 = [
@@ -67,6 +71,38 @@ export function homeToward(missile: Missile, target: { x: number; y: number }, s
   missile.x += idiv((target.x - missile.x) * speed, d);
   missile.y += idiv((target.y - missile.y) * speed, d);
   return false;
+}
+
+/**
+ * Item pierce, after a bolt hits `hit`: when the firing tower's pierce chance rolls, the
+ * bolt flies on along the line it was travelling (`from` is where it was a tick ago) and
+ * hits what it meets, no longer homing. Returns true when it flies on.
+ */
+export function pierceOn(sim: Sim, missile: Missile, hit: Monster, from: Point, speed: number): boolean {
+  const g = actorGear(sim);
+  if (g.piercePct <= 0 || rollInt(sim.state.rng, 0, 99) >= g.piercePct) return false;
+  if (!missile.hits.includes(hit.id)) missile.hits.push(hit.id);
+  if (missile.targetId !== 0) {
+    const origin = distSq(from, missile) > 0 ? from : { x: missile.ox, y: missile.oy };
+    const v = velocityToward(origin, missile, speed);
+    missile.vx = v.vx;
+    missile.vy = v.vy;
+    missile.targetId = 0;
+  }
+  return true;
+}
+
+/** A pierced bolt flying on: moves it and strikes what it meets, each hit rolling pierce again. False when it stops. */
+export function flyOn(sim: Sim, missile: Missile, speed: number, strikeAt: (m: Monster) => void): boolean {
+  const from = { x: missile.x, y: missile.y };
+  missile.x += missile.vx;
+  missile.y += missile.vy;
+  for (const m of [...sim.state.monsters]) {
+    if (m.hp <= 0 || missile.hits.includes(m.id) || distSq(missile, m) > LINE_HIT_RADIUS * LINE_HIT_RADIUS) continue;
+    strikeAt(m);
+    if (!pierceOn(sim, missile, m, from, speed)) return false;
+  }
+  return true;
 }
 
 /** Velocity of `speed` units per tick from `from` toward `to`. */

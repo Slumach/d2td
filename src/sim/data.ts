@@ -451,6 +451,13 @@ export interface GameData {
    * id, so missiles and curses look it up like any skill.
    */
   skillVariant: (id: string, plus: number, weapon?: { min: number; max: number }) => string;
+  /**
+   * A skill an item casts or projects (chance to cast, item auras), by its skills.txt name
+   * at a skills.txt level: the key of a SkillDef kept in `skills` whose level index 0 is
+   * that level, or undefined when no tower skill here has the name (items name many skills
+   * no tower casts).
+   */
+  itemSkill: (name: string, level: number) => string | undefined;
 }
 
 export interface VendorCap {
@@ -1114,6 +1121,16 @@ export function buildGameData(
     skills[key] = { ...def, id: key };
     return key;
   };
+  const byName = new Map(design.skills.map((s) => [s.skill, s.id]));
+  const itemSkill = (name: string, level: number) => {
+    const id = byName.get(name);
+    if (!id) return undefined;
+    const lvl = Math.max(1, level);
+    // '+n' so baseSkillId and skillPlus read it like any variant; '#item' keeps it apart from the tower ladders
+    const key = `${id}+${lvl - 1}#item`;
+    if (!skills[key]) skills[key] = { ...resolveSkill(tables, jsonById.get(id)!, design, weaponFor(id), Array<number>(MAX_TOWER_LEVEL).fill(lvl)), id: key };
+    return key;
+  };
   const skillIds: Record<string, string> = {};
   for (const r of tables.skills) {
     const name = str(r, 'skill');
@@ -1138,6 +1155,7 @@ export function buildGameData(
     monsterVariant: (id: string, difficulty: number, level?: number) => defOf(id, difficulty, level).id,
     skillIds,
     skillVariant,
+    itemSkill,
     ...(extendWaves ? { extendWaves } : {}),
   };
 }

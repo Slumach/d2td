@@ -8,13 +8,21 @@
 //     +a named skill (when it is the tower's)
 //   increased attack speed / faster cast rate     attack speed: IAS for melee towers, FCR for the rest
 //   weapon rangeadder                              melee reach, half a tile a point
-//   crushing blow, deadly strike, open wounds,     on hit, D2's rules
-//     slow, freeze, pierce
-//   chance to cast on hit / on attack             casts the skill on the target when the tower has it
+//   crushing blow, deadly strike, open wounds,     on hit, D2's rules (melee towers)
+//     slow, freeze
+//   pierce                                         bolt missiles fly on through what they hit
+//   -% to enemy resistance (the pierce stats)      the tower's hits cut that resistance, under
+//                                                   D2's fifth rule against immunes (combat.ts)
+//   +% to elemental skill damage (facets)          damage percent on spells of that element
+//   +% damage to demons, to undead                 melee towers, on the physical hit
+//   chance to cast on hit / on attack             casts the skill, at its level, when the game has it
+//   an aura (item_aura: Infinity, Beast, Pride)    the tower projects it at the item's level
+//   slain monsters rest in peace                   the tower's kills leave no corpse
 //   magic find, gold find                          on the tower's kills, stacking additively as in D2
 //   defence (armorclass, enhanced defence),        durability: how often monsters miss the tower's
 //     block                                        blocking summons, by D2's chance to hit
-//   resistances, life, mana, leech, stats          nothing
+//   resistances, life, mana, leech, stats,         nothing
+//     attack rating, knockback, flee, blind
 //
 // Weapons also carry their base damage: a melee tower swings its worn weapon instead of its
 // class weapon, enhanced damage on it as in D2.
@@ -47,7 +55,18 @@ export interface TowerGear {
   crushingBlowPct: number;
   deadlyStrikePct: number;
   openWoundsPct: number;
+  /** The level open wounds bleeds at: the highest item level among the items giving it (see design.md). */
+  openWoundsLevel: number;
   piercePct: number;
+  /** -% to enemy resistance, by element (passive_*_pierce). */
+  resistDown: Partial<Record<Element, number>>;
+  /** +% to skill damage of an element (passive_*_mastery, the facets). */
+  skillDamagePct: Partial<Record<Element, number>>;
+  demonDamagePct: number;
+  undeadDamagePct: number;
+  /** Auras the items carry (item_aura), by skills.txt name, at the highest level worn. */
+  auras: { skill: string; level: number }[];
+  restInPeace: boolean;
   slowPct: number;
   freezeTicks: number;
   castOnHit: { skill: string; chancePct: number; level: number }[];
@@ -76,7 +95,14 @@ export const NO_GEAR: TowerGear = {
   crushingBlowPct: 0,
   deadlyStrikePct: 0,
   openWoundsPct: 0,
+  openWoundsLevel: 0,
   piercePct: 0,
+  resistDown: {},
+  skillDamagePct: {},
+  demonDamagePct: 0,
+  undeadDamagePct: 0,
+  auras: [],
+  restInPeace: false,
   slowPct: 0,
   freezeTicks: 0,
   castOnHit: [],
@@ -84,6 +110,25 @@ export const NO_GEAR: TowerGear = {
   goldFindPct: 0,
   defense: 0,
   blockPct: 0,
+};
+
+/** The -% to enemy resistance stats, by element. */
+const PIERCE_STATS: Record<string, Element> = {
+  passive_fire_pierce: 'fire',
+  passive_ltng_pierce: 'ltng',
+  passive_cold_pierce: 'cold',
+  passive_pois_pierce: 'pois',
+  passive_mag_pierce: 'mag',
+  passive_dmg_pierce: 'phys',
+};
+
+/** The +% to elemental skill damage stats (the facets' and the masteries'), by element. */
+const MASTERY_STATS: Record<string, Element> = {
+  passive_fire_mastery: 'fire',
+  passive_ltng_mastery: 'ltng',
+  passive_cold_mastery: 'cold',
+  passive_pois_mastery: 'pois',
+  passive_mag_mastery: 'mag',
 };
 
 /** D2 frames (25 a second) to sim ticks (20 a second). */
@@ -116,7 +161,7 @@ export function gearStats(data: ItemData, gear: Gear): StatRoll[] {
 
 /** The tower effects of the gear a tower of class `towerClass` wears (see the table above). */
 export function towerGear(data: ItemData, gear: Gear, towerClass: string): TowerGear {
-  const g: TowerGear = { ...NO_GEAR, adds: {}, plusSkill: {}, castOnHit: [] };
+  const g: TowerGear = { ...NO_GEAR, adds: {}, plusSkill: {}, castOnHit: [], resistDown: {}, skillDamagePct: {}, auras: [] };
   const stats = gearStats(data, gear);
   const sum = (stat: string) => stats.filter((s) => s.stat === stat).reduce((n, s) => n + s.value, 0);
   const myClass = CLASS_INDEX[CLASS_CODES[towerClass] ?? ''] ?? -1;
@@ -144,12 +189,29 @@ export function towerGear(data: ItemData, gear: Gear, towerClass: string): Tower
     if (s.stat === 'item_elemskill' && s.param === '1') g.fireSkills += s.value;
     if ((s.stat === 'item_singleskill' || s.stat === 'item_nonclassskill') && s.param) g.plusSkill[s.param] = (g.plusSkill[s.param] ?? 0) + s.value;
     if ((s.stat === 'item_skillonhit' || s.stat === 'item_skillonattack') && s.param) g.castOnHit.push({ skill: s.param, chancePct: s.value, level: s.level ?? 1 });
+    // Two items with the same aura: the higher level, as in D2
+    if (s.stat === 'item_aura' && s.param) {
+      const has = g.auras.find((a) => a.skill === s.param);
+      if (has) has.level = Math.max(has.level, s.value);
+      else g.auras.push({ skill: s.param, level: s.value });
+    }
   }
+  for (const [stat, e] of Object.entries(PIERCE_STATS)) if (sum(stat) !== 0) g.resistDown[e] = (g.resistDown[e] ?? 0) + sum(stat);
+  for (const [stat, e] of Object.entries(MASTERY_STATS)) if (sum(stat) !== 0) g.skillDamagePct[e] = (g.skillDamagePct[e] ?? 0) + sum(stat);
+  g.demonDamagePct = sum('item_demondamage_percent');
+  g.undeadDamagePct = sum('item_undeaddamage_percent');
+  g.restInPeace = sum('item_restinpeace') > 0;
   g.attackSpeedPct = sum('item_fasterattackrate');
   g.castSpeedPct = sum('item_fastercastrate');
   g.crushingBlowPct = Math.min(100, sum('item_crushingblow'));
   g.deadlyStrikePct = Math.min(100, sum('item_deadlystrike'));
   g.openWoundsPct = Math.min(100, sum('item_openwounds'));
+  if (g.openWoundsPct > 0) {
+    for (const s of SLOTS) {
+      const item = gear[s];
+      if (item && itemStats(data, item).some((x) => x.stat === 'item_openwounds')) g.openWoundsLevel = Math.max(g.openWoundsLevel, Math.min(99, item.ilvl));
+    }
+  }
   g.piercePct = Math.min(100, sum('item_pierce'));
   g.slowPct = Math.min(50, sum('item_slow'));
   g.freezeTicks = framesToTicks(sum('item_freeze') * 25);

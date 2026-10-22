@@ -2,8 +2,8 @@
 // jumps from target to target (Lightning, Chain Lightning) with a falloff per hop.
 
 import { canHurt, distSq, findTarget, strike, withBonus } from '../combat.ts';
-import { UNITS_PER_TILE, idiv } from '../fixed.ts';
-import { spawnMissile, velocityToward } from '../missiles.ts';
+import { idiv } from '../fixed.ts';
+import { LINE_HIT_RADIUS, pierceOn, spawnMissile, velocityToward } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
 import type { Element, Monster, Sim } from '../state.ts';
 import {
@@ -30,9 +30,6 @@ interface PierceJson {
   jumpCalc?: string;
   falloffPct?: number;
 }
-
-/** A line missile hits anything within this distance of its centre. */
-const HIT_RADIUS = (UNITS_PER_TILE * 4) / 10;
 
 function element(skill: PierceDef): Element {
   return skill.damageType as Element;
@@ -110,10 +107,12 @@ export const pierce: ArchetypeModule<PierceDef> = {
     missile.x += missile.vx;
     missile.y += missile.vy;
     for (const m of [...sim.state.monsters]) {
-      if (m.hp <= 0 || missile.hits.includes(m.id) || distSq(missile, m) > HIT_RADIUS * HIT_RADIUS) continue;
+      if (m.hp <= 0 || missile.hits.includes(m.id) || distSq(missile, m) > LINE_HIT_RADIUS * LINE_HIT_RADIUS) continue;
       missile.hits.push(m.id);
       strike(sim, m, roll(sim, skill, missile.level, missile.damagePct), element(skill), skill.filter, skill, missile.level, missile);
-      if (skill.pierceCount > 0 && --missile.remaining <= 0) return false;
+      // Item pierce lets a limited missile pass without spending one of its passes
+      const from = { x: missile.x - missile.vx, y: missile.y - missile.vy };
+      if (skill.pierceCount > 0 && !pierceOn(sim, missile, m, from, skill.missileSpeed) && --missile.remaining <= 0) return false;
     }
     return true;
   },

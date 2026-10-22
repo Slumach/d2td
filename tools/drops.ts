@@ -5,6 +5,7 @@
 //
 //   npm run drops                       5 runs, no magic find
 //   npm run drops -- --runs 20 --mf 300
+//   npm run drops -- --sample 10000000    a bigger sample for the per-rune table
 
 import { parseArgs } from 'node:util';
 
@@ -15,7 +16,9 @@ import { rollKillDrops } from '../src/sim/items/drops.ts';
 import { createRng } from '../src/sim/rng.ts';
 import { loadTables } from './lib/load-tables.ts';
 
-const { values: args } = parseArgs({ options: { runs: { type: 'string', default: '5' }, mf: { type: 'string', default: '0' }, tier: { type: 'string', default: '0' } } });
+const { values: args } = parseArgs({
+  options: { runs: { type: 'string', default: '5' }, mf: { type: 'string', default: '0' }, tier: { type: 'string', default: '0' }, sample: { type: 'string', default: '400000' } },
+});
 const runs = Number(args.runs);
 const mf = Number(args.mf);
 const tier = Number(args.tier);
@@ -77,7 +80,7 @@ for (const [d, t] of tallies.entries()) {
 
 // Each rune's chance per Hell kill, over a large sample of Hell's monsters
 const hell = data.waves.filter((w) => w.difficulty === 2).flatMap((w) => w.groups.filter((g) => g.rank === 'normal').map((g) => data.monsters[g.monster]!));
-const sample = 400_000;
+const sample = Number(args.sample);
 const counts: Record<string, number> = {};
 for (let i = 0; i < sample; i++) {
   const def = hell[i % hell.length]!;

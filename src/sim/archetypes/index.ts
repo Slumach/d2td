@@ -7,8 +7,9 @@ import { debuff } from './debuff.ts';
 import { melee } from './melee.ts';
 import { pierce } from './pierce.ts';
 import { projectile } from './projectile.ts';
+import { registerArchetypes } from './registry.ts';
 import { splash } from './splash.ts';
-import type { ArchetypeId, ArchetypeModule, SkillDef } from './types.ts';
+import type { ArchetypeId, ArchetypeModule } from './types.ts';
 import { summon } from './summon.ts';
 import { zone } from './zone.ts';
 
@@ -25,6 +26,6 @@ export const ARCHETYPES: Record<ArchetypeId, ArchetypeModule> = {
   corpse,
 } as unknown as Record<ArchetypeId, ArchetypeModule>;
 
-export function archetypeOf(skill: SkillDef): ArchetypeModule {
-  return ARCHETYPES[skill.archetype];
-}
+registerArchetypes(ARCHETYPES);
+
+export { archetypeOf } from './registry.ts';

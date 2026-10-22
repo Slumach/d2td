@@ -3,6 +3,7 @@
 import { dropLoot } from './items/loot.ts';
 import { cowGone } from './cow.ts';
 import { gearOf } from './items/tower.ts';
+import { NO_GEAR, type TowerGear } from './items/gear.ts';
 import type { HitFilter, MonsterAuraFx, SkillCommon, TowerBuff } from './archetypes/types.ts';
 import { idiv } from './fixed.ts';
 import { rollInt } from './rng.ts';
@@ -56,14 +57,22 @@ export function baseResist(sim: Sim, monster: Monster, element: Element): number
 }
 
 
+/** The gear of the tower acting now (sim.actorTower): its hits carry its items' resistance cuts and pierce. */
+export function actorGear(sim: Sim): TowerGear {
+  if (!sim.actorTower) return NO_GEAR;
+  const tower = sim.state.towers.find((t) => t.id === sim.actorTower);
+  return tower ? gearOf(sim, tower) : NO_GEAR;
+}
+
 /**
- * Resistance after Conviction-style reductions. D2's rule for immunities: a monster at
- * 100% or more only loses a fifth of the reduction, so it takes a big aura to break one.
- * Monster resistance never drops below -100.
+ * Resistance after the reductions on the monster (Conviction, the curses) and the acting
+ * tower's -% to enemy resistance from its items, added up. D2's rule for immunities: a
+ * monster at 100% or more only loses a fifth of the reduction, so the immunity breaks only
+ * when that fifth brings it under 100. Monster resistance never drops below -100.
  */
 export function effectiveResist(sim: Sim, monster: Monster, element: Element): number {
   const base = baseResist(sim, monster, element);
-  const down = monsterFx(sim, monster).resistDown[element] ?? 0;
+  const down = (monsterFx(sim, monster).resistDown[element] ?? 0) + (actorGear(sim).resistDown[element] ?? 0);
   const resist = base >= 100 ? base - idiv(down, 5) : base - down;
   return Math.max(-100, resist);
 }
@@ -159,7 +168,19 @@ export function poison(sim: Sim, monster: Monster, total: number, ticks: number)
   monster.poisonTower = sim.actorTower;
 }
 
-/** Damage that already went through resistance (poison ticks, Static Field). */
+/**
+ * Open wounds: D2's bleed, `total` over `ticks`, unreduced by resistance. A new wound
+ * refreshes the time and never stacks; a stronger bleed replaces a weaker one.
+ */
+export function bleed(sim: Sim, monster: Monster, total: number, ticks: number): void {
+  if (total <= 0 || monster.hp <= 0) return;
+  monster.bleedPerTick = Math.max(monster.bleedPerTick, idiv(total + ticks - 1, ticks));
+  monster.bleedTicks = ticks;
+  monster.bleedBy = sim.actor;
+  monster.bleedTower = sim.actorTower;
+}
+
+/** Damage that already went through resistance (poison ticks, Static Field, open wounds). */
 export function dealRaw(sim: Sim, monster: Monster, amount: number): void {
   if (monster.hp <= 0 || amount <= 0) return;
   monster.lastHit = sim.actor;
@@ -185,23 +206,26 @@ export function killMonster(sim: Sim, monster: Monster): void {
   monster.hp = 0;
   // Gold find on the killing tower's gear adds to the bounty, as in D2
   const by = monster.lastTower ? s.towers.find((t) => t.id === monster.lastTower) : undefined;
-  const goldFind = by ? gearOf(sim, by).goldFindPct : 0;
-  const gold = bounty(sim, monster) + idiv(bounty(sim, monster) * goldFind, 100);
+  const gear = by ? gearOf(sim, by) : NO_GEAR;
+  const gold = bounty(sim, monster) + idiv(bounty(sim, monster) * gear.goldFindPct, 100);
   const killer = Math.min(monster.lastHit, s.gold.length - 1);
   s.gold[killer]! += gold;
   s.kills++;
   s.killsBy[killer]!++;
   s.waveKillsBy[killer]!++;
-  s.corpses.push({
-    id: s.nextId++,
-    def: monster.def,
-    rank: monster.rank,
-    dist: monster.dist,
-    x: monster.x,
-    y: monster.y,
-    maxHp: monster.maxHp,
-    ticksLeft: sim.data.rules.corpseLifetimeTicks,
-  });
+  // Slain Monsters Rest in Peace: the killer's gear leaves no corpse to raise or explode
+  if (!gear.restInPeace) {
+    s.corpses.push({
+      id: s.nextId++,
+      def: monster.def,
+      rank: monster.rank,
+      dist: monster.dist,
+      x: monster.x,
+      y: monster.y,
+      maxHp: monster.maxHp,
+      ticksLeft: sim.data.rules.corpseLifetimeTicks,
+    });
+  }
   dropLoot(sim, monster);
   removeMonster(sim, monster);
 }
