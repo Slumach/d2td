@@ -364,4 +364,16 @@ export interface Sim {
   actor: number;
   /** The tower acting right now (0 for none), so its gold find and magic find apply. */
   actorTower: number;
+  /**
+   * The kills paid this tick, for the renderer's floating gold: where each monster died and
+   * what it paid its killer, gold find and Find Item included. Not state: cleared every step.
+   */
+  paid: PaidKill[];
+}
+
+export interface PaidKill {
+  x: number;
+  y: number;
+  gold: number;
+  player: number;
 }

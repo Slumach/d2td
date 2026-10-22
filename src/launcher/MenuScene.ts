@@ -97,8 +97,17 @@ export class MenuScene extends Phaser.Scene {
     menuMusic(this, true);
     void this.api.getState().then((state) => {
       this.state = state;
+      // The game reads it from the registry, solo or online
+      this.registry.set('goldNumbers', state.goldNumbers);
       this.draw();
     });
+  }
+
+  private async setGoldNumbers(on: boolean): Promise<void> {
+    await this.api.setGoldNumbers(on);
+    this.state = { ...this.state, goldNumbers: on };
+    this.registry.set('goldNumbers', on);
+    this.draw();
   }
 
   private async setLootFilter(mode: 'default' | 'all'): Promise<void> {
@@ -324,11 +333,17 @@ export class MenuScene extends Phaser.Scene {
     med(left + 240, y, '+', () => void this.setVolume(volume + 10), 130, volume < 100);
     y += 70;
 
-    add(this.add.text(left, y, 'Loot filter: what is collected when a wave clears (Alt shows every label)', MUTED).setDepth(3101));
+    add(this.add.text(left, y, 'Loot filter: what a cleared wave collects (Alt shows every label)', MUTED).setDepth(3101));
     y += 30;
     const filter = this.state.lootFilter;
-    med(left, y, filter === 'all' ? 'Everything' : 'Magic and better, sockets, gems, runes', () => void this.setLootFilter(filter === 'all' ? 'default' : 'all'), 460);
-    y += 70;
+    med(left, y, filter === 'all' ? 'Everything' : 'Magic and better', () => void this.setLootFilter(filter === 'all' ? 'default' : 'all'), 260);
+    y += 64;
+
+    add(this.add.text(left, y, 'Gold on kill: the gold each kill pays, floating over the corpse', MUTED).setDepth(3101));
+    y += 30;
+    const gold = this.state.goldNumbers !== false;
+    med(left, y, gold ? 'Shown' : 'Hidden', () => void this.setGoldNumbers(!gold), 260);
+    y += 64;
 
     add(this.add.text(left, y, 'Diablo II: Resurrected folder', MUTED).setDepth(3101));
     y += 30;
@@ -336,7 +351,7 @@ export class MenuScene extends Phaser.Scene {
     y += 50;
     med(left, y, 'Extract again', () => this.scene.start('Setup', { force: true }), 260);
     med(left + 300, y, 'Open log folder', () => void this.api.openLogFolder(), 260);
-    y += 90;
+    y += 80;
 
     const back = () => this.go('main');
     if (d2) this.parts.push(...stoneButton(this, CX, top + height - 60, 'Back', back, { width: 300 }));

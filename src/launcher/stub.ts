@@ -12,6 +12,7 @@ export function stubLauncher(): LauncherApi {
     bad: [],
     volume: 50,
     lootFilter: 'default',
+    goldNumbers: true,
     version: 'dev',
     smoke: false,
     logFile: '',
@@ -36,6 +37,10 @@ export function stubLauncher(): LauncherApi {
     },
     setLootFilter: (mode) => {
       state.lootFilter = mode;
+      return Promise.resolve();
+    },
+    setGoldNumbers: (on) => {
+      state.goldNumbers = on;
       return Promise.resolve();
     },
     quit: () => window.close(),

@@ -23,6 +23,8 @@ export interface LauncherState {
   name: string;
   /** The loot filter from Options (src/sim/state.ts LootFilter). */
   lootFilter: 'default' | 'all';
+  /** The floating "+N" gold at each kill, from Options. */
+  goldNumbers: boolean;
 }
 
 /** A code a friend types to join, and which network it works on. */
@@ -78,6 +80,7 @@ export interface LauncherApi {
   reportSmoke(result: SmokeResult): void;
   setName(name: string): Promise<void>;
   setLootFilter(mode: 'default' | 'all'): Promise<void>;
+  setGoldNumbers(on: boolean): Promise<void>;
   /** Closes the app (the main menu's Exit). */
   quit(): void;
   /** Opens a lobby on this PC and joins it; codes for friends on the local network come back at once. */

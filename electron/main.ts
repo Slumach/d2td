@@ -41,6 +41,8 @@ interface Settings {
   volume: number;
   name: string;
   lootFilter: 'default' | 'all';
+  /** The floating "+N" gold at each kill. */
+  goldNumbers: boolean;
   /**
    * The relay server hosting tries first, "address" or "address:port" (server/relay.mjs,
    * port 47311 by default); empty skips it. Only the host needs it: relay codes carry it.
@@ -63,7 +65,7 @@ const assetsDir = () => join(app.getPath('userData'), 'assets');
 const rendererDir = () => join(app.getAppPath(), 'dist');
 
 function loadSettings(): Settings {
-  const defaults: Settings = { d2rPath: null, volume: 80, name: defaultName(), lootFilter: 'default', relay: '' };
+  const defaults: Settings = { d2rPath: null, volume: 80, name: defaultName(), lootFilter: 'default', goldNumbers: true, relay: '' };
   try {
     return { ...defaults, ...JSON.parse(readFileSync(settingsPath(), 'utf8')) };
   } catch {
@@ -153,6 +155,7 @@ async function launcherState(): Promise<LauncherState> {
     logFile,
     name: settings.name,
     lootFilter: settings.lootFilter,
+    goldNumbers: settings.goldNumbers,
   };
 }
 
@@ -401,6 +404,10 @@ void app.whenReady().then(async () => {
   ipcMain.handle('open-log-folder', () => shell.openPath(dirname(logFile)));
   ipcMain.handle('set-name', (_e, name: string) => {
     settings = { ...settings, name: String(name).trim().slice(0, 20) || defaultName() };
+    saveSettings(settings);
+  });
+  ipcMain.handle('set-gold-numbers', (_e, on: unknown) => {
+    settings = { ...settings, goldNumbers: on !== false };
     saveSettings(settings);
   });
   ipcMain.handle('set-loot-filter', (_e, mode: string) => {

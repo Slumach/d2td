@@ -116,6 +116,10 @@ const SHOVE_PX = 14;
 const TICK_MS = 1000 / TICKS_PER_SECOND;
 /** Enchant's full flame plays once this often on a tower (staggered by tower); a faint ember on the weapon hand rides between. */
 const ENCHANT_FLARE_TICKS = 12 * TICKS_PER_SECOND;
+/** D2's gold: the colour of gold and of unique item names. */
+const GOLD_TEXT = '#c7b377';
+/** Floating kill gold on screen at once at most. */
+const MAX_GOLD_TEXTS = 60;
 /** Where a standing hero's weapon hand is, from its feet. */
 const ENCHANT_HAND = { x: 6, y: -11 };
 
@@ -800,12 +804,37 @@ export class GameScene extends Phaser.Scene {
     this.syncTowers();
     this.syncMissiles();
     this.syncSummons();
+    this.floatGold();
     this.drops?.sync(this.sim.data.items, s.drops, this.seat, this.sim.state.lootFilters[this.seat] ?? 'default', this.altKey?.isDown === true);
     if (this.spawnLabel && s.wave >= 1) {
       this.spawnLabel.destroy();
       this.spawnLabel = undefined;
     }
     this.keeper?.sync(this.ownSim, this.seat);
+  }
+
+  /** Floating kill gold on screen now, oldest first, so a crowded wave never piles up hundreds. */
+  private goldTexts: Phaser.GameObjects.Text[] = [];
+
+  /**
+   * A "+N" in D2's gold at each corpse, what that kill paid (gold find and Find Item
+   * included): your kills on your ring, every kill on a ring you watch. Options turns it off.
+   */
+  private floatGold(): void {
+    if (this.registry.get('goldNumbers') === false) return;
+    for (const p of this.sim.paid) {
+      if (this.onOwnRing && p.player !== this.seat) continue;
+      const at = project(p.x, p.y);
+      const t = this.add
+        .text(Math.round(at.x), Math.round(at.y) - 28, `+${p.gold}`, { fontFamily: FONT, fontSize: '13px', color: GOLD_TEXT, stroke: '#000000', strokeThickness: 3 })
+        .setOrigin(0.5, 1)
+        .setResolution(3)
+        .setDepth(DEPTH.effects);
+      this.goldTexts.push(t);
+      this.tweens.add({ targets: t, y: t.y - 18, alpha: 0, duration: 1100, ease: 'Cubic.easeIn', onComplete: () => t.destroy() });
+    }
+    this.goldTexts = this.goldTexts.filter((t) => t.active);
+    while (this.goldTexts.length > MAX_GOLD_TEXTS) this.goldTexts.shift()!.destroy();
   }
 
   /** This player's own ring (in FFA the one on screen may be someone else's). */

@@ -48,6 +48,7 @@ export function createSim(data: GameData, seed: number, opts: SimOptions = {}): 
     fx: EMPTY_FIELD,
     actor: 0,
     actorTower: 0,
+    paid: [],
     state: {
       tick: 0,
       rng: createRng(seed),
@@ -81,6 +82,7 @@ export function createSim(data: GameData, seed: number, opts: SimOptions = {}): 
 /** Advances one tick. `commands` are the ones stamped with the current tick, in log order. */
 export function step(sim: Sim, commands: readonly Command[]): void {
   const s = sim.state;
+  sim.paid = [];
   if (s.status === 'playing') {
     for (const command of commands) applyCommand(sim, command);
     // Waves run on a fixed timer, whether the last one is dead or not; an open cow portal

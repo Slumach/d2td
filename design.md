@@ -214,6 +214,7 @@ The ring report (tools/report.ts, `npm run report`) has every bot play all 75 wa
 First run on real content (Oct 22, all five acts, before the Stage A economy rebuild, seeds 1 to 3): TWOLINE, PALADIN, NECRO and MIXED3 clear all 75 waves; BOLT and HOLY stall on Hell Baal (alive 37 and 53 below the limit, unable to kill him); SORC dies on Hell Andariel (wave 55 or 56). The tower-spam bots end with about 500 towers each and the class bots at their old 64-tower cap; alive weight peaks at 58 to 76 in Normal Act 1, sits at 10 to 30 through the middle of the campaign, and climbs to 35 to 55 on Hell's last bosses. Bosses are not yet the point of failure. Stage A answers this.
 
 - Bounty per kill = monster level x 2 (balance.json bountyPerLevel), with no per-wave curve: the levels climb with the campaign. Champions x3, uniques x5, act bosses x20, Andariel x50.
+- Gold on kill (Oct 23): each kill floats a "+N" in D2's gold over the corpse, exactly what it paid its killer, gold find and Find Item included (the sim lists the tick's payouts for the renderer, sim.paid, outside the hashed state). Your own kills on your ring, every kill on a ring you watch; at most 60 on screen. Options turns it off (settings.json goldNumbers).
 - Send Next Wave pays for the time it skips (see Enemies, waves and difficulty); there is no wave-clear bonus.
 - Starting gold 1000 (Oct 23; 800 before), a tower and most of its levels. No lives: the alive count is the loss condition.
 

@@ -18,6 +18,7 @@ const api: LauncherApi = {
   reportSmoke: (result: SmokeResult) => ipcRenderer.send('smoke-result', result),
   setName: (name: string) => ipcRenderer.invoke('set-name', name),
   setLootFilter: (mode: 'default' | 'all') => ipcRenderer.invoke('set-loot-filter', mode),
+  setGoldNumbers: (on: boolean) => ipcRenderer.invoke('set-gold-numbers', on),
   quit: () => ipcRenderer.send('quit'),
   mpHost: () => ipcRenderer.invoke('mp-host'),
   mpJoin: (code: string) => ipcRenderer.invoke('mp-join', code),
