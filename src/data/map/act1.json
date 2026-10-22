@@ -48,6 +48,28 @@
         "bushes": { "prefabs": ["crates1", "crates2", "barrels1", "barrels2"] },
         "cottage": { "centre": "throne", "corners": "brazier1" }
       }
+    },
+    "cow": {
+      "comment": "Moo Moo Farm, the Secret Cow Level: in D2 an Act 1 Wilderness level, so the same grass and road, with the farm's fences where the field has boulders and the farmhouse in the middle.",
+      "floor": { "file": "Act1/Town/Floor.dt1", "ground": ["0-0", "5-0"] },
+      "road": {
+        "file": "Act1/Town/Floor.dt1",
+        "tiles": ["5-9", "5-10", "5-11", "5-12", "5-13", "5-8", "5-2", "5-1", "0-1", "0-2", "0-12", "0-25", "0-26", "0-27", "0-28", "0-29", "0-30", "0-31", "0-32", "0-47", "0-48", "0-49"],
+        "halfWidth": 0.62,
+        "wobble": 0.22,
+        "edge": 0.18
+      },
+      "scenery": {
+        "treeline": {
+          "prefabs": ["grove0", "grove1", "grove2", "grove4", "grove5", "grove6", "grove8", "grove9", "grove10", "grove12", "grove13", "grove14", "tree1", "tree2", "tree5", "tree6"],
+          "every": 2,
+          "outside": 1.5,
+          "front": { "file": "Act1/Outdoors/Objects.dt1", "tiles": ["6-0", "6-1", "6-2", "6-3", "6-4", "6-5", "7-0", "7-1", "7-2", "7-3", "7-4", "7-5"] }
+        },
+        "rocks": { "prefabs": ["fence1", "fence2", "fence3", "fence4"] },
+        "bushes": { "prefabs": ["fence1", "fence2", "bush1", "bush3", "fence5", "fence6"] },
+        "cottage": { "ds1": "Act1/Outdoors/Cott4.ds1", "files": ["Act1/Town/Floor.dt1", "Act1/Outdoors/Cottages.dt1"], "centreCell": [4, 4.5] }
+      }
     }
   },
   "prefabs": {
@@ -83,6 +105,12 @@
     "spikes2": { "pieces": [{ "file": "Act1/Catacomb/andariel.dt1", "o": 12, "key": "1-1", "at": [0, 0] }] },
     "spikes3": { "pieces": [{ "file": "Act1/Catacomb/andariel.dt1", "o": 12, "key": "1-3", "at": [0, 0] }] },
     "throne": { "pieces": [{ "file": "Act1/Catacomb/andariel.dt1", "o": 2, "key": "3-2", "at": [0, 0] }] },
-    "brazier1": { "pieces": [{ "file": "Act1/Catacomb/andariel.dt1", "o": 12, "key": "3-0", "at": [0, 0] }] }
+    "brazier1": { "pieces": [{ "file": "Act1/Catacomb/andariel.dt1", "o": 12, "key": "3-0", "at": [0, 0] }] },
+    "fence1": { "pieces": [{ "file": "Act1/Outdoors/Fence.dt1", "o": 1, "key": "2-10", "at": [0, 0] }] },
+    "fence2": { "pieces": [{ "file": "Act1/Outdoors/Fence.dt1", "o": 2, "key": "2-10", "at": [0, 0] }] },
+    "fence3": { "pieces": [{ "file": "Act1/Outdoors/Fence.dt1", "o": 1, "key": "2-11", "at": [0, 0] }] },
+    "fence4": { "pieces": [{ "file": "Act1/Outdoors/Fence.dt1", "o": 2, "key": "2-11", "at": [0, 0] }] },
+    "fence5": { "pieces": [{ "file": "Act1/Outdoors/Fence.dt1", "o": 1, "key": "2-12", "at": [0, 0] }] },
+    "fence6": { "pieces": [{ "file": "Act1/Outdoors/Fence.dt1", "o": 2, "key": "2-12", "at": [0, 0] }] }
   }
 }

@@ -616,6 +616,24 @@ function overlayJobs(shared: Shared): SpriteJob[] {
   });
 }
 
+/** Objects the game draws (sprites.json objects): the cow level's red portal. One direction, Act 1's palette. */
+function objectJobs(shared: Shared): SpriteJob[] {
+  const objects = (sprites as { objects?: Record<string, { token: string; modes: string[]; variant: string }> }).objects ?? {};
+  return Object.entries(objects).map(([id, o]) => {
+    const token = o.token.toLowerCase();
+    const specs: CompositeSpec[] = o.modes.map((mode) => ({ folder: `objects/${token}`, token, mode, weaponClass: 'hth', variant: () => o.variant }));
+    const inputs = specs.flatMap((spec) => {
+      const found = compositeInputs(shared.source, spec);
+      return found ? [found.cofPath, ...Object.values(found.layers)] : [`global/objects/${token}/cof/${token}${spec.mode}hth.cof`.toLowerCase()];
+    });
+    return {
+      label: `object ${id}`,
+      inputs,
+      run: () => atlasFrom(`objects/${id}`, specs.map((spec) => compositeMode(shared, spec, shared.palette)), ['s'], { object: id }),
+    };
+  });
+}
+
 const ACTS = [1, 2, 3, 4, 5];
 
 /** Every sprite job, with its inputs known up front (COFs are read to list their layers). */
@@ -645,7 +663,7 @@ export function spriteJobs(source: DataSource): { jobs: SpriteJob[]; sharedInput
       monstats2: readTable(source, 'monstats2.txt'),
     });
   const s = shared();
-  const jobs = [...monsterJobs(s), ...heroJobs(s), ...missileJobs(s), ...overlayJobs(s)];
+  const jobs = [...monsterJobs(s), ...heroJobs(s), ...missileJobs(s), ...overlayJobs(s), ...objectJobs(s)];
   const missing = [...new Set(jobs.flatMap((j) => j.inputs))].filter((p) => !source.exists(p));
   return { jobs, sharedInputs, missing };
 }

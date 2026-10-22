@@ -57,6 +57,7 @@ import {
   metaOf,
   missileKey,
   monsterKey,
+  objectKey,
   originOf,
   preloadAssets,
   type IconIndex,
@@ -65,6 +66,7 @@ import { D2Hud, hudManifest, preloadHud, type HudNumbers, type PanelButton, type
 import { ItemPanels, type ItemPanelHost } from './itempanels.ts';
 import { preloadItemArt } from './itemart.ts';
 import { Keeper } from './keeper.ts';
+import { arcOfSeat } from '../sim/cow.ts';
 import { tradeOf } from '../sim/items/trade.ts';
 import { angle64, spriteDirection } from './directions.ts';
 import { LocalDriver, NetDriver, type Driver } from './driver.ts';
@@ -222,6 +224,9 @@ export class GameScene extends Phaser.Scene {
   private monsters = new Map<number, MonsterView>();
   private corpses = new Map<number, Phaser.GameObjects.Sprite>();
   private drops?: GroundDrops;
+  /** The cow portal on screen, and whether the cow level is showing. */
+  private portal: Phaser.GameObjects.Sprite | undefined;
+  private cowShown = false;
   private towers = new Map<number, TowerView>();
   private missiles = new Map<number, MissileView>();
   private summons = new Map<number, SummonView>();
@@ -462,6 +467,31 @@ export class GameScene extends Phaser.Scene {
    * On the tick a new act's first wave starts: save the run (single player, or the host of
    * a multiplayer game), and show the act's map.
    */
+  /**
+   * The cow portal on the ring on screen: the red portal at the opener's spawn (opening, then
+   * steady), its sound, Moo Moo Farm's map and music; all gone when the last cow dies.
+   */
+  private syncCowLevel(): void {
+    const cow = this.sim.state.cow;
+    if (!!cow === this.cowShown) return;
+    this.cowShown = !!cow;
+    this.sounds.cowLevel(!!cow);
+    this.redrawGround();
+    this.portal?.destroy();
+    this.portal = undefined;
+    if (!cow) return this.toast('The cow portal closes');
+    this.toast('A red portal opens: the Secret Cow Level');
+    const key = objectKey('redportal');
+    if (!this.textures.exists(key)) return;
+    const map = this.sim.map;
+    const at = positionAt(map, map.arcs[arcOfSeat(this.sim, cow.opener)]!.spawn);
+    const p = project(at.x, at.y);
+    const meta = metaOf(this, key);
+    this.portal = this.camera.asWorld(() => this.add.sprite(Math.round(p.x), Math.round(p.y), key).setOrigin(...originOf(meta)).setDepth(DEPTH.units + p.y / 1000));
+    this.portal.play(animKey(key, 'OP', 's'));
+    this.portal.once('animationcomplete', () => this.portal?.play(animKey(key, 'ON', 's')));
+  }
+
   private atActBoundary(): void {
     const match = this.driver!.match;
     const ring = ringOf(match, this.driver!.me);
@@ -530,6 +560,9 @@ export class GameScene extends Phaser.Scene {
     for (const s of this.corpses.values()) s.destroy();
     this.corpses.clear();
     this.drops?.clear();
+    this.portal?.destroy();
+    this.portal = undefined;
+    this.cowShown = false;
     this.corpseSeen.clear();
     this.cursesSeen.clear();
     this.fx?.clear();
@@ -609,6 +642,7 @@ export class GameScene extends Phaser.Scene {
     this.drawPanel();
     // The item panels are screen furniture: drawn by the UI camera, outside asWorld
     this.inventory?.sync();
+    this.syncCowLevel();
     this.camera.asWorld(() => this.fx?.update());
     this.minimap.draw(this.sim, (arc) => this.arcColour(arc));
   }
@@ -1123,9 +1157,11 @@ export class GameScene extends Phaser.Scene {
    * The map the ring on screen shows: the act of its last wave started (Act 1 before the
    * first), in its boss lair while that act's final wave is out.
    */
-  private stage(): { act: number; lair: boolean; label: string } {
+  private stage(): { act: number; lair: boolean; cow?: boolean; label: string } {
     const s = this.sim.state;
     const wave = this.sim.data.waves[Math.max(0, s.wave - 1)];
+    // The Secret Cow Level is Moo Moo Farm, an Act 1 field, while its portal is open
+    if (s.cow) return { act: 1, lair: false, cow: true, label: 'Moo Moo Farm' };
     const act = wave?.act ?? 1;
     const lair = s.wave > 0 && wave?.final === true;
     const info = this.sim.data.acts[act - 1];
@@ -1138,9 +1174,9 @@ export class GameScene extends Phaser.Scene {
    * scenery depth-sorted with the units. False when the act has no art (or none was
    * extracted), and the grey box shows instead.
    */
-  private drawBakedMap(stage: { act: number; lair: boolean }): boolean {
+  private drawBakedMap(stage: { act: number; lair: boolean; cow?: boolean }): boolean {
     const manifest = this.cache.json.get(MAP_KEY) as MapManifest | undefined;
-    const name = stage.lair ? 'lair' : 'field';
+    const name = stage.cow ? 'cow' : stage.lair ? 'lair' : 'field';
     const baked = manifest?.acts[String(stage.act)]?.[name];
     const key = groundKey(stage.act, name);
     const want = baked && this.textures.exists(key) ? key : '';

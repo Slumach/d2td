@@ -8,6 +8,7 @@
   "endless": { "tierWaves": 10, "startLevel": 85, "levelPerWave": 1, "hpPctPerWave": 3, "damagePctPerWave": 3 },
   "drops": { "runeMultiplierPct": 125, "tierDropPct": 25, "smithsHammerPpm": 10 },
   "vendorCap": { "byDifficulty": [[100, 1500], [2500, 10000], [15000, 35000]], "tierPct": 10 },
+  "cow": { "legPpm": 20, "griswoldLegPpm": 20000, "pack": "griswold", "runeBoost": 5, "kingLegPct": 5, "kingRuneMin": "r24", "portalTicks": 100, "packGapTicks": 70, "packSpacingTicks": 3 },
   "levelCostBase": [60, 240, 300],
   "levelCostPctPerLevel": 220,
   "tierCosts": [400, 8000],

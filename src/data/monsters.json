@@ -229,8 +229,17 @@
     { "id": "nihlathak", "superunique": "Nihlathak Boss", "class": "nihlathakboss" },
     { "id": "talic", "superunique": "Ancient Barbarian 1", "class": "ancientbarb1" },
     { "id": "madawc", "superunique": "Ancient Barbarian 2", "class": "ancientbarb2" },
-    { "id": "korlic", "superunique": "Ancient Barbarian 3", "class": "ancientbarb3" }
+    { "id": "korlic", "superunique": "Ancient Barbarian 3", "class": "ancientbarb3" },
+    { "id": "thecowking", "superunique": "The Cow King", "class": "cowking", "minion": "cowking" }
   ],
+  "cow": {
+    "comment": "The Secret Cow Level (src/sim/cow.ts): Moo Moo Farm's Hell Bovines in packs, three waves, the Cow King leading the third with his pack.",
+    "monster": "hellbovine",
+    "king": "thecowking",
+    "waves": 3,
+    "packs": 8,
+    "packSize": 10
+  },
   "bosses": [
     { "id": "bloodraven", "class": "bloodraven", "minion": "zombie2" },
     { "id": "andariel", "class": "andariel" },

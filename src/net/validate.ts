@@ -101,6 +101,8 @@ export function validCommand(v: unknown): Command | null {
       return { type: 'callWave' };
     case 'pickup':
       return int(c['dropId']) ? { type: 'pickup', dropId: c['dropId'] as number } : null;
+    case 'cowPortal':
+      return str(c['uid']) ? { type: 'cowPortal', uid: c['uid'] as string } : null;
     case 'loadInventory': {
       if (!Array.isArray(c['items']) || c['items'].length > 40) return null;
       const items = c['items'].map(validInvItem);

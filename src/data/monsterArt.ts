@@ -25,7 +25,9 @@ export const WAVE_MONSTER_ART: readonly string[] = [
   ]),
 ];
 
-export const NAMED_ART: readonly string[] = [...new Set([...named.flatMap((b) => [b.class, ...(b.minion ? [b.minion] : [])]), ...partyOf.values()])].filter((id) => !WAVE_MONSTER_ART.includes(id));
+export const NAMED_ART: readonly string[] = [...new Set([...named.flatMap((b) => [b.class, ...(b.minion ? [b.minion] : [])]), ...partyOf.values(), monsters.cow.monster])].filter(
+  (id) => !WAVE_MONSTER_ART.includes(id),
+);
 
 /** The act whose palette each monster's art uses: the first act it walks in, Act 1 otherwise. */
 export const ART_ACT: Readonly<Record<string, number>> = (() => {

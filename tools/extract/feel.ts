@@ -53,6 +53,8 @@ export interface SoundManifest {
   death: Record<string, string[]>;
   /** Item sounds by name (weapons, armor and misc dropsound and usesound): landing, and going into the inventory. */
   items: Record<string, string[]>;
+  /** The Secret Cow Level: the portal opening, and Moo Moo Farm's song (levels.txt SoundEnv). */
+  cow: { portal: string[]; music: string | null };
   /** The menus: button click and hover, and the title music. */
   ui: { click: string[]; hover: string[]; music: string | null };
   volumePct: { music: number; ambience: number; sfx: number };
@@ -90,6 +92,8 @@ export function soundJob(source: DataSource): SpriteJob {
   const level = readTable(source, 'levels.txt').find((r) => r['LevelName'] === soundsJson.level);
   const env = level ? readTable(source, 'soundenviron.txt').find((r) => String(r['Index']) === column(level, 'SoundEnv')) : undefined;
 
+  const cowLevel = readTable(source, 'levels.txt').find((r) => r['LevelName'] === soundsJson.cow.level);
+  const cowEnv = cowLevel ? readTable(source, 'soundenviron.txt').find((r) => String(r['Index']) === column(cowLevel, 'SoundEnv')) : undefined;
   const skillName = (id: string) => DESIGN.skills.find((s) => s.id === id)?.skill;
   const manifest: SoundManifest = {
     music: env ? (resolve(column(env, 'Song'), 'global/music/')[0] ?? null) : null,
@@ -106,6 +110,7 @@ export function soundJob(source: DataSource): SpriteJob {
     hit: Object.fromEntries(artMissiles().map((m) => [m, resolve(column(missiles.find((r) => r['Missile'] === m) ?? {}, 'HitSound'))])),
     death: {},
     items: {},
+    cow: { portal: resolve(soundsJson.cow.portal), music: cowEnv ? (resolve(column(cowEnv, 'Song'), 'global/music/')[0] ?? null) : null },
     ui: { click: resolve(soundsJson.ui.click), hover: resolve(soundsJson.ui.hover), music: resolve(soundsJson.ui.music, 'global/music/')[0] ?? null },
     volumePct: soundsJson.volumePct,
   };

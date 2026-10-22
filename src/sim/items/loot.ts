@@ -6,9 +6,11 @@
 
 import { compoundPct } from '../fixed.ts';
 import type { Monster, Sim } from '../state.ts';
-import { rollKillDrops } from './drops.ts';
-import type { ItemData } from './data.ts';
-import type { Item } from './item.ts';
+import { baseMonsterId } from '../difficulty.ts';
+import { rollInt } from '../rng.ts';
+import { rollKillDrops, rollTreasure } from './drops.ts';
+import { WIRTS_LEG, type ItemData } from './data.ts';
+import { rollItem, type Item } from './item.ts';
 import { gearOf } from './tower.ts';
 
 /** D2's inventory: ten columns, four rows. */
@@ -29,6 +31,8 @@ export interface Drop {
   y: number;
   /** The wave of the monster that dropped it: cleared, it is collected. */
   wave: number;
+  /** Dropped by a cow: collected when the cow portal closes. */
+  cow?: boolean;
 }
 
 /** Inventory cells an item covers. */
@@ -85,12 +89,12 @@ export function dropLoot(sim: Sim, monster: Monster): void {
   const def = sim.data.monsters[monster.def];
   if (!def) return;
   const tc = monster.rank === 'champion' ? def.treasure[1] : monster.rank === 'unique' ? def.treasure[2] : def.treasure[0];
-  if (!tc) return;
   const tower = monster.lastTower ? s.towers.find((t) => t.id === monster.lastTower) : undefined;
   const owner = Math.min(monster.lastHit, s.gold.length - 1);
   const scale = tierPct(sim, monster);
   const d = sim.data.drops;
-  const items = rollKillDrops(sim.data.items, s.dropRng, {
+  // A monster without a treasure class drops nothing of its own, but may still drop a leg
+  const items = !tc ? [] : rollKillDrops(sim.data.items, s.dropRng, {
     tc,
     ctx: {
       mlvl: monster.level,
@@ -101,7 +105,46 @@ export function dropLoot(sim: Sim, monster: Monster): void {
     hammerPpm: Math.trunc((d.smithsHammerPpm * scale) / 100),
     uid: `${s.tick}.${monster.id}`,
   });
-  for (const item of items) s.drops.push({ id: s.nextId++, item, owner, x: monster.x, y: monster.y, wave: monster.wave });
+  items.push(...cowLevelDrops(sim, monster, items.length));
+  for (const item of items) s.drops.push({ id: s.nextId++, item, owner, x: monster.x, y: monster.y, wave: monster.wave, ...(monster.cow ? { cow: true } : {}) });
+}
+
+/**
+ * Wirt's Leg, only in Hell and the endless Tiers: a tiny chance from any monster, a much
+ * bigger one from Griswold's pack (balance.json cow). The Cow King always drops a rune of
+ * Ist or higher, at D2's odds among those runes, and sometimes another leg.
+ */
+function cowLevelDrops(sim: Sim, monster: Monster, already: number): Item[] {
+  const s = sim.state;
+  const c = sim.data.cow;
+  const data = sim.data.items;
+  const def = sim.data.monsters[monster.def];
+  const out: Item[] = [];
+  const uid = () => `${s.tick}.${monster.id}.c${already + out.length}`;
+  const leg = () => rollItem(data, s.dropRng, { uid: uid(), code: WIRTS_LEG, ilvl: monster.level, quality: 'normal' });
+  const hell = (def?.difficulty ?? 0) >= 2 || (sim.data.waves[monster.wave]?.tier ?? 0) > 0;
+  if (hell && !monster.cow) {
+    const ppm = monster.pack === c.pack ? c.griswoldLegPpm : c.legPpm;
+    if (rollInt(s.dropRng, 0, 999_999) < ppm) out.push(leg());
+  }
+  if (monster.cow && def && baseMonsterId(def.id) === c.king) {
+    const rune = highRune(sim);
+    if (data.bases[rune]) out.push(rollItem(data, s.dropRng, { uid: uid(), code: rune, ilvl: monster.level, quality: 'normal' }));
+    if (rollInt(s.dropRng, 0, 99) < c.kingLegPct) out.push(leg());
+  }
+  return out;
+}
+
+/** A rune of balance.json cow.kingRuneMin or higher, drawn from D2's Runes classes, so higher runes keep D2's rarity. */
+function highRune(sim: Sim): string {
+  const data = sim.data.items;
+  const min = sim.data.cow.kingRuneMin;
+  const top = [...Object.keys(data.treasureClasses)].filter((n) => /^Runes \d+$/.test(n)).sort((a, b) => Number(b.slice(6)) - Number(a.slice(6)))[0];
+  for (let i = 0; top && i < 64; i++) {
+    const got = rollTreasure(data, sim.state.dropRng, top, { mlvl: 99, magicFind: 0, runePct: 100, noDropPct: 0 })[0];
+    if (got && got.base.isRune && got.base.code >= min) return got.base.code;
+  }
+  return min;
 }
 
 /** A player picks up one of their drops. Refused when it is not theirs or the inventory is full. */
@@ -116,7 +159,7 @@ export function pickup(sim: Sim, player: number, dropId: number): void {
 export function collectCleared(sim: Sim): void {
   const s = sim.state;
   if (s.drops.length === 0) return;
-  const cleared = s.drops.filter((d) => (s.waves[d.wave]?.remaining ?? 0) <= 0);
+  const cleared = s.drops.filter((d) => (d.cow ? !s.cow : (s.waves[d.wave]?.remaining ?? 0) <= 0));
   if (cleared.length === 0) return;
   for (const d of cleared) stow(sim, d.owner, d.item);
   s.drops = s.drops.filter((d) => !cleared.includes(d));

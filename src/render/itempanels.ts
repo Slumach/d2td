@@ -203,7 +203,7 @@ export class ItemPanels {
     const grid = add(this.scene.add.zone(g.x, g.y, INV_W * CELL * S, INV_H * CELL * S).setOrigin(0).setDepth(DEPTH + 3).setInteractive());
     grid.on('pointerdown', (ptr: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
       e.stopPropagation();
-      if (ptr.rightButtonDown()) return this.dropHeld();
+      if (ptr.rightButtonDown()) return this.held ? this.dropHeld() : this.rightClick(ptr.x - g.x, ptr.y - g.y);
       this.clickGrid('inv', ptr.x - g.x, ptr.y - g.y);
     });
     grid.on('pointermove', (ptr: Phaser.Input.Pointer) => this.hoverGrid('inv', ptr.x - g.x, ptr.y - g.y, ptr.x, ptr.y));
@@ -621,6 +621,15 @@ export class ItemPanels {
       this.host.issue({ type: 'unequip', towerId: source.towerId, slot: source.slot, toStash: true });
     }
     this.placed();
+  }
+
+  /** Right-click on an inventory item uses it, as in D2: Wirt's Leg opens the cow portal. */
+  private rightClick(px: number, py: number): void {
+    const under = this.itemUnder('inv', px, py);
+    if (!under || this.host.data.bases[under.item.code]?.consumable !== 'cowPortal') return;
+    if (this.host.sim()?.state.cow) return this.host.toast('A cow portal is already open');
+    this.host.issue({ type: 'cowPortal', uid: under.item.uid });
+    this.hide();
   }
 
   private clickDoll(slot: Slot): void {

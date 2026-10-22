@@ -93,6 +93,35 @@ export interface MonstersJson {
   superuniques: NamedJson[];
   /** Act bosses: each closes its act behind its pack. */
   bosses: NamedJson[];
+  /** The Secret Cow Level's waves (src/sim/cow.ts). */
+  cow: CowJson;
+}
+
+export interface CowJson {
+  /** The cow, by monstats id, and the Cow King, by superunique id. */
+  monster: string;
+  king: string;
+  waves: number;
+  packs: number;
+  packSize: number;
+}
+
+/** balance.json cow: Wirt's Leg's drop rates and the cow waves' pacing and loot. */
+export interface CowRules {
+  /** Parts per million: any Hell (and endless) kill, and a kill from `pack` (Griswold's). */
+  legPpm: number;
+  griswoldLegPpm: number;
+  pack: string;
+  /** Rune entries weigh this many times more on cows' drops. */
+  runeBoost: number;
+  /** The Cow King: a second leg's chance, and the lowest rune he always drops. */
+  kingLegPct: number;
+  kingRuneMin: string;
+  /** Ticks from opening the portal to the first cow wave. */
+  portalTicks: number;
+  /** Ticks between packs, and between cows in a pack. */
+  packGapTicks: number;
+  packSpacingTicks: number;
 }
 
 interface WaveKindJson {
@@ -138,6 +167,7 @@ export interface BalanceJson {
   /** Drops (src/sim/items/drops.ts): the rune multiplier, endless Tier scaling and Smith's Hammer's rarity. */
   drops: DropRules;
   vendorCap: VendorCap;
+  cow: CowRules;
   /** Cost of the first level-up at T1, T2, T3. */
   levelCostBase: number[];
   /** Each further level-up within a tier costs this percent of the previous one. */
@@ -313,6 +343,8 @@ export interface WaveGroup {
   rank: Rank;
   /** Mods every monster of the group carries, from the schedule. */
   mods: MonsterMod[];
+  /** A named monster's pack (its id): the leader and its minions. */
+  pack?: string;
 }
 
 export interface WaveDef {
@@ -402,6 +434,13 @@ export interface GameData {
   items: ItemData;
   /** Drop tuning (balance.json drops). */
   drops: DropRules;
+  /** The Secret Cow Level: its waves (monsters.json cow) and its rules (balance.json cow). */
+  cow: CowJson & CowRules;
+  /**
+   * A monster's entry at a difficulty and level, built the first time it is asked for and
+   * kept in `monsters` under the returned id (the cow level's cows at the run's level).
+   */
+  monsterVariant: (id: string, difficulty: number, level?: number) => string;
   /** The most a vendor pays for one item, by stage (balance.json vendorCap; src/sim/items/price.ts). */
   vendorCap: VendorCap;
   /** skills.txt skill name to its Id, for items that name a skill by number. */
@@ -663,8 +702,8 @@ function buildWave(b: WaveBuild): { kind: WaveDef['kind']; groups: WaveGroup[]; 
   const pack = (id: string, rank: Rank, spacing: number): WaveGroup[] => {
     const def = defOf(id, d, levelOf(id));
     const out: WaveGroup[] = [];
-    if (def.minion) out.push({ monster: defOf(def.minion.monster, d, levelOf(def.minion.monster)).id, count: def.minion.count, spacingTicks: spacing, rank: 'normal', mods: [] });
-    out.push({ monster: def.id, count: 1, spacingTicks: spacing, rank, mods: namedMods(id, def.mods) });
+    if (def.minion) out.push({ monster: defOf(def.minion.monster, d, levelOf(def.minion.monster)).id, count: def.minion.count, spacingTicks: spacing, rank: 'normal', mods: [], pack: id });
+    out.push({ monster: def.id, count: 1, spacingTicks: spacing, rank, mods: namedMods(id, def.mods), pack: id });
     return out;
   };
   if ('boss' in entry) {
@@ -1095,6 +1134,8 @@ export function buildGameData(
     items: buildItemData(tables),
     drops: design.balance.drops,
     vendorCap: design.balance.vendorCap,
+    cow: { ...m.cow, ...design.balance.cow },
+    monsterVariant: (id: string, difficulty: number, level?: number) => defOf(id, difficulty, level).id,
     skillIds,
     skillVariant,
     ...(extendWaves ? { extendWaves } : {}),

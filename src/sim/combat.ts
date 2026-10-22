@@ -1,6 +1,7 @@
 // Targeting, resistance and damage. Every hit in the sim goes through dealDamage.
 
 import { dropLoot } from './items/loot.ts';
+import { cowGone } from './cow.ts';
 import { gearOf } from './items/tower.ts';
 import type { HitFilter, MonsterAuraFx, SkillCommon, TowerBuff } from './archetypes/types.ts';
 import { idiv } from './fixed.ts';
@@ -209,7 +210,9 @@ export function killMonster(sim: Sim, monster: Monster): void {
 export function removeMonster(sim: Sim, monster: Monster): void {
   const s = sim.state;
   s.monsters = s.monsters.filter((m) => m.id !== monster.id);
-  s.waves[monster.wave]!.remaining--;
+  // A cow counts on the cow level, not on the campaign wave whose scaling it carries
+  if (monster.cow) cowGone(sim);
+  else s.waves[monster.wave]!.remaining--;
 }
 
 export function aliveWithin(sim: Sim, center: Point, radius: number): Monster[] {

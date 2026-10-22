@@ -82,6 +82,7 @@ export function heroKey(tower: { cls: string; line: string; tier: number; evolve
 }
 export const missileKey = (id: string) => `mis:${id}`;
 export const overlayKey = (id: string) => `ovl:${id}`;
+export const objectKey = (id: string) => `obj:${id}`;
 export const iconKey = (skillName: string) => `icon:${skillName}`;
 
 /**
@@ -107,6 +108,7 @@ export function preloadAssets(scene: Phaser.Scene): void {
     }
   }
   for (const id of artOverlays()) atlas(overlayKey(id), `overlays/${id}.json`, 'overlays/');
+  for (const id of Object.keys((sprites as { objects?: Record<string, unknown> }).objects ?? {})) atlas(objectKey(id), `objects/${id}.json`, 'objects/');
   if (!scene.cache.json.exists(MISSILE_INDEX)) {
     scene.load.json(MISSILE_INDEX, MISSILE_INDEX);
     scene.load.once(`filecomplete-json-${MISSILE_INDEX}`, (_k: string, _t: string, index: { missiles: string[] }) => {
@@ -144,7 +146,7 @@ export function metaOf(scene: Phaser.Scene, key: string): AtlasMeta {
 export const animKey = (texture: string, mode: string, dir: string) => `${texture}|${mode}|${dir}`;
 
 /** Modes that play once: death, attacks and casts, and a summon rising (S1). */
-const ONCE = new Set(['DT', 'A1', 'SC', 'S1']);
+const ONCE = new Set(['DT', 'A1', 'SC', 'S1', 'OP']);
 
 /**
  * Animations for every mode and direction of every loaded atlas. Death, attacks, casts and
@@ -153,7 +155,7 @@ const ONCE = new Set(['DT', 'A1', 'SC', 'S1']);
  */
 export function createAnimations(scene: Phaser.Scene): void {
   for (const key of scene.textures.getTextureKeys()) {
-    if (!/^(mon|hero|mis|ovl):/.test(key)) continue;
+    if (!/^(mon|hero|mis|ovl|obj):/.test(key)) continue;
     const meta = metaOf(scene, key);
     for (const [mode, info] of Object.entries(meta.modes)) {
       for (let d = 0; d < info.directions; d++) {

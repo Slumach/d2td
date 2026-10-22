@@ -345,6 +345,15 @@ npm run drops (all 75 campaign waves killed once a run, 20 runs, no magic find):
 - Profile: inventory, stash (10 x 10 pages, a page added whenever one is needed) and best wave, in the app data folder per Windows user (userData/profile.json, written to a temporary file and renamed so a crash never loses it), in localStorage in a browser. Saved on every change. While a game runs the sim owns the inventory (every peer must agree what fits); the profile mirrors it and records what the towers wear as in play. Leaving a game any way (quit, restart, defeat, disconnect, or closing the app, which the next start catches) brings everything home into the inventory, overflow into the stash. Items from any mode work in every mode. Checkpoints keep no items: a continued game starts with bare towers.
 - Trading (multiplayer): each player has a Trade button per other player on the inventory panel. D2R's trade window replaces the stash for both: their offer above, yours below; drop inventory items on your grid to offer them (they fade in the inventory), click one to take it back, click your gold to add 100 (shift 1000, right-click less), and click the check to accept. Any change clears both accepts; when both have accepted, items and gold move at once, or nothing moves if it no longer fits. Trades are match commands, so they work between FFA rings too, and every peer applies them on the same tick.
 
+### The Secret Cow Level (Oct 22)
+
+- Wirt's Leg is the real item (weapons.txt leg, its own HD sprite), stackable here. It drops only in Hell and the endless Tiers: 20 in a million from any kill, 2% from each of Griswold's pack (balance.json cow legPpm and griswoldLegPpm; a named monster's pack carries its id, so the Griswold wave knows its own).
+- Right-click a leg in the inventory: one is used up (a cowPortal command), D2's red portal (objects/pp, opening then steady) opens at the opener's spawn with D2's portal sound, Moo Moo Farm's song (levels.txt SoundEnv) replaces the act's, and the map swaps to Moo Moo Farm (an Act 1 Wilderness level in D2: the field's grass and road with its farm fences and the farmhouse; src/data/map/act1.json cow).
+- The portal takes the wave timer for three cow waves (monsters.json cow): eight packs of ten Hell Bovines each (D2's hordes: the pack count is harness-tuned, below), at their Hell level 81 or the run's current level if higher, with the endless HP and damage scaling of the wave the run was on. The Cow King (The Cow King's superuniques.txt row: unique rank, Magic Resistant and Lightning Enchanted) leads the third wave with his pack of six. Every cow comes out of the portal: the opener's arc in multiplayer, the first arc alone.
+- Cows weigh 1 each on the alive count, the Cow King too. Rune entries weigh five times as much on cows' drops (cow runeBoost). The Cow King always drops a rune of Ist or higher, drawn from D2's Runes classes so higher runes keep their rarity, and has a 5% chance of another leg.
+- The campaign resumes on the timer after the third cow wave, at the scaling it had; the portal closes, and the farm and the music give way to the act again, when the last cow dies. Cow drops go to their owners' inventories when the portal closes.
+- Harness (npm run cow): PALADIN, the only itemless bot that reaches Hell Act 5, opening the portal as Hell Act 5 begins, seeds 1 to 5: 4 of 5 runs lose to the cows (the ring overruns during the cow waves); seed 3 clears them at a peak of 96 alive and, with the cows' gold, lives to wave 85 against 77 without the portal. Six packs of eight let every run clear the cows; ten packs of ten killed every run.
+
 ## Overnight decisions
 
 Calls made without asking, each the option closest to Diablo II's own rules.
@@ -364,6 +373,9 @@ Calls made without asking, each the option closest to Diablo II's own rules.
 - Oct 22: D2 has no sell box in the inventory; sales happen at a vendor's trade window. With no vendor on the ring, the inventory panel has a Sell box beside the gold.
 - Oct 22: D2 moves items by click-to-hold rather than drag and drop; the panels do it D2's way.
 - Oct 22: the stash is outside the game (the profile), so items in it cannot be socketed or hammered: they are moved to the inventory first.
+- Oct 22: the cow waves hold the campaign's wave timer: the campaign pauses for them rather than running underneath (D2's cow level is a place the player goes, not a second front), and resumes after the third.
+- Oct 22: all cows come out of the portal, the opener's spawn, alone as well as in multiplayer, so the portal is where the cows are.
+- Oct 22: Moo Moo Farm in D2 is an Act 1 Wilderness level with no tile set of its own; its map here is the Act 1 field with the farm's fences (Act1/Outdoors/Fence.dt1) in place of the boulders.
 
 ## Open questions
 

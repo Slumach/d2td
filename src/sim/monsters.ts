@@ -74,7 +74,13 @@ export function spawnMonsters(sim: Sim): void {
   const s = sim.state;
   while (s.spawns.length > 0 && s.spawns[0]!.tick <= s.tick) {
     const spawn = s.spawns.shift()!;
-    s.monsters.push(createMonster(sim, spawn.def, spawn.wave, spawn.rank, spawn.mods, spawn.dist));
+    const m = createMonster(sim, spawn.def, spawn.wave, spawn.rank, spawn.mods, spawn.dist);
+    if (spawn.cow) {
+      m.cow = true;
+      m.runeBoost = sim.data.cow.runeBoost;
+    }
+    if (spawn.pack) m.pack = spawn.pack;
+    s.monsters.push(m);
   }
 }
 

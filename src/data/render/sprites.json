@@ -1,6 +1,7 @@
 {
   "monsterModes": ["WL", "A1", "DT", "DD"],
   "summons": { "ids": ["necroskeleton", "necromage"], "modes": ["NU", "WL", "A1", "DT", "S1"] },
+  "objects": { "redportal": { "token": "PP", "modes": ["OP", "ON"], "variant": "lit" } },
   "heroes": {
     "paladin": {
       "token": "PA",

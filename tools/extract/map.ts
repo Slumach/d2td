@@ -64,13 +64,13 @@ interface MapLayout {
   };
 }
 
-type MapName = 'field' | 'lair';
+type MapName = 'field' | 'lair' | 'cow';
 
 interface ActLayout {
   act: number;
   palette: string;
   seed: number;
-  maps: Record<MapName, MapLayout>;
+  maps: Partial<Record<MapName, MapLayout>>;
   prefabs: Record<string, { pieces: Piece[] }>;
 }
 

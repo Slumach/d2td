@@ -9,6 +9,7 @@ import type { ItemRef } from './items/inventory.ts';
 import type { Item } from './items/item.ts';
 import type { Drop, InvItem } from './items/loot.ts';
 import type { TradeCommand } from './items/trade.ts';
+import type { CowState } from './cow.ts';
 import type { GameMap } from './map.ts';
 import type { Rng } from './rng.ts';
 
@@ -74,6 +75,8 @@ export type CommandBody =
   | { type: 'callWave' }
   /** Picks up one of the player's drops into their inventory. */
   | { type: 'pickup'; dropId: number }
+  /** Right-clicks Wirt's Leg: opens the Secret Cow Level (src/sim/cow.ts). */
+  | { type: 'cowPortal'; uid: string }
   /** Inventory, stash and gear (src/sim/items/inventory.ts); items from outside the sim travel whole. */
   | { type: 'loadInventory'; items: InvItem[] }
   | { type: 'moveItem'; uid: string; x: number; y: number }
@@ -115,6 +118,10 @@ export interface Monster {
   lastTower: number;
   /** Rune drops multiplied (the cow level's five times); absent for one. */
   runeBoost?: number;
+  /** A cow of the Secret Cow Level: weighs 1, counts on the cow level, not its wave. */
+  cow?: boolean;
+  /** The named monster's pack it walks in (its id), if any. */
+  pack?: string;
   poisonTower: number;
   /** Timed statuses from on-hit control skills. */
   slowPct: number;
@@ -254,6 +261,8 @@ export interface Spawn {
   mods: MonsterMod[];
   /** Ring distance it appears at: a spawn point. */
   dist: number;
+  cow?: boolean;
+  pack?: string;
 }
 
 export interface WaveProgress {
@@ -295,6 +304,8 @@ export interface SimState {
   drops: Drop[];
   /** Each player's inventory this game (D2's 10 x 4 grid). */
   inventories: InvItem[][];
+  /** The Secret Cow Level, while its portal is open (src/sim/cow.ts). */
+  cow?: CowState;
   /** Items leaving the game for each player's stash (a sold tower's gear with no room in the inventory). */
   homeward: Item[][];
 }

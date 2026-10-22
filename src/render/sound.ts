@@ -16,6 +16,8 @@ export interface SoundManifest {
   death: Record<string, string[]>;
   /** Item drop and use sounds by name; absent in extractions from before items. */
   items?: Record<string, string[]>;
+  /** The cow level's portal sound and music; absent before the cow level. */
+  cow?: { portal: string[]; music: string | null };
   /** Menu sounds; absent in extractions from before the D2 menu. */
   ui?: { click: string[]; hover: string[]; music: string | null };
   volumePct: { music: number; ambience: number; sfx: number };
@@ -29,6 +31,8 @@ export function preloadSounds(scene: Phaser.Scene): void {
   const queue = (m: SoundManifest) => {
     const all = new Set<string>([...m.gold, ...[m.cast, m.travel, m.hit, m.death, m.items ?? {}].flatMap((g) => Object.values(g).flat())]);
     if (m.music) all.add(m.music);
+    for (const p of m.cow?.portal ?? []) all.add(p);
+    if (m.cow?.music) all.add(m.cow.music);
     if (m.ambience) all.add(m.ambience);
     for (const path of all) if (!scene.cache.audio.exists(path)) scene.load.audio(path, path);
   };
@@ -47,15 +51,39 @@ export class SoundBank {
     this.manifest = scene.cache.json.get(SOUND_MANIFEST) as SoundManifest | undefined;
   }
 
+  private music: Phaser.Sound.BaseSound | undefined;
+  private cowSong: Phaser.Sound.BaseSound | undefined;
+
   /** Starts the level's music and ambience; they stop with the scene. */
   startLoops(): void {
     const m = this.manifest;
     if (!m) return;
-    for (const [path, pct] of [[m.music, m.volumePct.music], [m.ambience, m.volumePct.ambience]] as const) {
+    for (const [path, pct, isMusic] of [[m.music, m.volumePct.music, true], [m.ambience, m.volumePct.ambience, false]] as const) {
       if (!path || !this.scene.cache.audio.exists(path)) continue;
       const loop = this.scene.sound.add(path, { loop: true, volume: pct / 100 });
       loop.play();
+      if (isMusic) this.music = loop;
       this.scene.events.once('shutdown', () => loop.destroy());
+    }
+  }
+
+  /** The cow portal opens (its sound, and Moo Moo Farm's song over the act's), or closes. */
+  cowLevel(open: boolean): void {
+    const m = this.manifest;
+    if (!m) return;
+    if (open) {
+      this.play(m.cow?.portal, 100);
+      const song = m.cow?.music;
+      if (song && this.scene.cache.audio.exists(song) && !this.cowSong) {
+        this.music?.pause();
+        this.cowSong = this.scene.sound.add(song, { loop: true, volume: m.volumePct.music / 100 });
+        this.cowSong.play();
+        this.scene.events.once('shutdown', () => this.cowSong?.destroy());
+      }
+    } else if (this.cowSong) {
+      this.cowSong.destroy();
+      this.cowSong = undefined;
+      this.music?.resume();
     }
   }
 

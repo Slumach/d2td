@@ -301,6 +301,7 @@ function fillSchedule(tables: Tables): Tables {
     ...Object.values(m.campaign).flatMap((byDifficulty) => Object.values(byDifficulty).flatMap((ws) => ws.flatMap((w) => ('monster' in w ? [w.monster] : [])))),
     ...m.superuniques.flatMap((b) => (b.minion ? [b.minion] : [])),
     ...Object.keys(m.roster),
+    m.cow.monster,
     ...Object.values(m.roster).flatMap((r) => (r.party ? [r.party] : [])),
   ]) {
     add(id);

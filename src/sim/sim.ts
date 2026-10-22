@@ -20,6 +20,7 @@ import type { Command, Sim, TimedCommand, Tower } from './state.ts';
 import { updateSummons } from './archetypes/summon.ts';
 import { geared, gearOf, withGear } from './items/tower.ts';
 import { collectCleared, pickup } from './items/loot.ts';
+import { cowWavesDue, openCowPortal, startCowWave } from './cow.ts';
 import { equip, hammer, loadInventory, moveItem, sellItem, socket, stashIn, stashOut, unequip } from './items/inventory.ts';
 import { build, evolve, pickBranch, pickSkill, sell, setTargeting, towerById, upgrade, upgradeTier } from './towers.ts';
 
@@ -80,8 +81,12 @@ export function step(sim: Sim, commands: readonly Command[]): void {
   const s = sim.state;
   if (s.status === 'playing') {
     for (const command of commands) applyCommand(sim, command);
-    // Waves run on a fixed timer, whether the last one is dead or not
-    if (s.tick >= s.nextWaveTick) startWave(sim);
+    // Waves run on a fixed timer, whether the last one is dead or not; an open cow portal
+    // takes the timer for its three waves
+    if (s.tick >= s.nextWaveTick) {
+      if (cowWavesDue(sim)) startCowWave(sim);
+      else startWave(sim);
+    }
     spawnMonsters(sim);
     sim.fx = computeAuras(sim);
     updateMonsters(sim);
@@ -99,7 +104,8 @@ export function step(sim: Sim, commands: readonly Command[]): void {
 /** The weight of every monster on the ring (rules.aliveWeight by rank). */
 export function aliveWeight(sim: Sim): number {
   const w = sim.data.rules.aliveWeight;
-  return sim.state.monsters.reduce((n, m) => n + (m.hp > 0 ? w[m.rank] : 0), 0);
+  // A cow weighs 1, the Cow King included
+  return sim.state.monsters.reduce((n, m) => n + (m.hp > 0 ? (m.cow ? 1 : w[m.rank]) : 0), 0);
 }
 
 /** Runs a command log up to (not including) `untilTick`. The log must be sorted by tick. */
@@ -120,6 +126,7 @@ function applyCommand(sim: Sim, command: Command): void {
   if (command.type === 'build') return build(sim, player, command.x, command.y, command.cls, command.skill);
   if (command.type === 'callWave') return sendEarly(sim);
   if (command.type === 'pickup') return pickup(sim, player, command.dropId);
+  if (command.type === 'cowPortal') return openCowPortal(sim, player, command.uid);
   switch (command.type) {
     case 'loadInventory':
       return loadInventory(sim, player, command.items);
@@ -219,7 +226,7 @@ function startWave(sim: Sim): void {
       const dist = sim.map.arcs[arc]!.spawn;
       offset += group.delayTicks ?? 0;
       for (let i = 0; i < group.count; i++) {
-        s.spawns.push({ tick: s.tick + offset, def: group.monster, wave, rank: group.rank, mods: [...group.mods], dist });
+        s.spawns.push({ tick: s.tick + offset, def: group.monster, wave, rank: group.rank, mods: [...group.mods], dist, ...(group.pack ? { pack: group.pack } : {}) });
         offset += group.spacingTicks;
         count++;
       }

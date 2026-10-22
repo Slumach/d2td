@@ -23,6 +23,7 @@ import { EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, type GameData } from '.
 import { tileCenter, isPathTile } from '../src/sim/map.ts';
 import { activeSkill, buildCostFor, canBuild, createSim, waveAt, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
 import { withMods } from '../src/sim/combat.ts';
+import { freeSpot } from '../src/sim/items/loot.ts';
 import { ELEMENTS, type Command, type Element, type Sim, type TimedCommand, type Tower } from '../src/sim/state.ts';
 
 export type Strategy = 'BOLT' | 'HOLY' | 'TWOLINE' | 'PALADIN' | 'SORC' | 'NECRO' | 'MIXED3';
@@ -803,6 +804,8 @@ export function runBot(
   seed: number,
   onTick?: (sim: Sim) => void,
   maxTicks = MAX_TICKS,
+  /** Opens the Secret Cow Level (with a Wirt's Leg it is handed) as this wave, by number, starts. */
+  cowAtWave?: number,
 ): RunResult {
   const sim = createSim(data, seed);
   const bot = createBot(strategy, sim);
@@ -812,8 +815,19 @@ export function runBot(
   let peakAlive = 0;
   const tiersOn: Record<number, number> = {};
   const evolvedOn: Record<string, number> = {};
+  let cowOpened = false;
   while (sim.state.status === 'playing' && sim.state.tick < maxTicks) {
     const commands = bot.decide(sim);
+    if (cowAtWave !== undefined && !cowOpened && sim.state.wave >= cowAtWave) {
+      cowOpened = true;
+      const leg = { uid: 'bot-leg', code: 'leg', quality: 'normal' as const, ilvl: 85, sockets: 0, socketed: [], stats: [] };
+      // The leg comes out of the stash into a free spot, selling loot to make room
+      const inv = () => sim.state.inventories[0]!;
+      while (!freeSpot(sim.data.items, inv(), leg) && inv().length > 0) step(sim, [{ type: 'sellItem', uid: inv()[0]!.item.uid }]);
+      const spot = freeSpot(sim.data.items, inv(), leg);
+      if (spot) step(sim, [{ type: 'stashOut', item: leg, ...spot }]);
+      commands.push({ type: 'cowPortal', uid: 'bot-leg' });
+    }
     for (const command of commands) log.push({ tick: sim.state.tick, command });
     step(sim, commands);
     margins.observe(sim);
