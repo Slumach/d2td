@@ -1,7 +1,7 @@
 {
   "id": "barbarian",
   "name": "Barbarian",
-  "weapon": "Hand Axe",
+  "weapon": "Double Axe",
   "lines": {
     "combat": {
       "name": "Combat",

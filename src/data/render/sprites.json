@@ -35,7 +35,7 @@
       "token": "BA",
       "attackMode": "A1",
       "lines": {
-        "combat": { "weapon": "Hand Axe", "shield": "Buckler" },
+        "combat": { "weapon": "Double Axe", "shield": "Buckler" },
         "whirlwind": { "weapon": "Double Axe" },
         "cries": { "weapon": "War Hammer" }
       }
