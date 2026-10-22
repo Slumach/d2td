@@ -18,13 +18,13 @@ if (!existsSync(latest)) {
   console.error(`${latest} is missing: run npm run dist first`);
   process.exit(1);
 }
-const installer = /^path:\s*(.+)$/m.exec(readFileSync(latest, 'utf8'))?.[1]?.trim();
-for (const f of [installer ?? '', `${installer}.blockmap`]) {
-  if (!f || !existsSync(join(dir, f))) {
-    console.error(`${join(dir, f)} is missing: run npm run dist first`);
-    process.exit(1);
-  }
+// latest.yml names the installer with dashes for GitHub (D2-Tower-Defense-Setup-0.2.4.exe); electron-builder
+// repacks the installer from win-unpacked and uploads it under that name itself
+const version = /^version:\s*(.+)$/m.exec(readFileSync(latest, 'utf8'))?.[1]?.trim();
+if (!existsSync(join(dir, 'win-unpacked'))) {
+  console.error(`${join(dir, 'win-unpacked')} is missing: run npm run dist first`);
+  process.exit(1);
 }
-console.log(`publishing ${installer} as a GitHub Release`);
+console.log(`publishing ${version} as a GitHub Release`);
 const r = spawnSync('npx', ['electron-builder', '--win', 'nsis', '--prepackaged', join(dir, 'win-unpacked'), '--publish', 'always'], { stdio: 'inherit', shell: true });
 process.exit(r.status ?? 1);
