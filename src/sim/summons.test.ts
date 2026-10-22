@@ -115,7 +115,7 @@ describe('corpses', () => {
 describe('Sorceress and Necromancer evolutions', () => {
   it('an evolved tower casts its partner skill too: the Summoner curses while it raises', () => {
     const sim = testSim();
-    sim.state.gold[0] = 10_000;
+    sim.state.gold[0] = sim.data.economy.evolveCost;
     const revive = placeTower(sim, 6, 5, 'revive', { tier: 3, level: 5 });
     const amp = placeTower(sim, 7, 5, 'amplify-damage', { level: 5 });
     step(sim, [{ type: 'evolve', towerA: revive.id, towerB: amp.id }]);

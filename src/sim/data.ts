@@ -113,6 +113,18 @@ export interface BalanceJson {
   aliveLimit: number;
   aliveWeight: Record<Rank, number>;
   buildCost: number;
+  /**
+   * Each tower a player owns multiplies the price of their next build by this percent: the
+   * first costs buildCost, the second buildCost x pct / 100, and so on. It is the only brake
+   * on the number of towers.
+   */
+  buildCostGrowthPct: number;
+  /**
+   * An act boss's HP is this percent of its monstats HP, climbing in a straight line by wave
+   * number from `first` on the run's first boss wave to `last` on its last campaign boss
+   * wave: early bosses are easier than the tables, late ones harder.
+   */
+  bossHpPct: { first: number; last: number };
   /** Cost of the first level-up at T1, T2, T3. */
   levelCostBase: number[];
   /** Each further level-up within a tier costs this percent of the previous one. */
@@ -307,6 +319,7 @@ export interface WaveDef {
 export interface Economy {
   startingGold: number;
   buildCost: number;
+  buildCostGrowthPct: number;
   /** levelCosts[tier - 1][n] is the gold to go from level n + 1 to n + 2 in that tier. */
   levelCosts: number[][];
   /** tierCosts[0] reaches T2, tierCosts[1] reaches T3. */
@@ -342,6 +355,8 @@ export interface Rules {
   championHpPct: number;
   uniqueHpPct: number;
   championDamagePct: number;
+  /** A boss's HP percent at each boss wave, by the wave's index in the run (see BalanceJson bossHpPct). */
+  bossHpPct: Record<number, number>;
   /** Per mod: its speed and damage, and its resistances by difficulty. */
   mods: Record<MonsterMod, { speedPct: number; damagePct: number; resist: ModResist[] }>;
 }
@@ -610,6 +625,15 @@ export function campaignWaves(
   return waves;
 }
 
+/** Each boss wave's boss HP percent: a straight line by wave index from the first boss wave to the last. */
+export function bossHpPctFrom(balance: BalanceJson, waves: WaveDef[]): Record<number, number> {
+  const bosses = waves.map((w, i) => (w.final ? i : -1)).filter((i) => i >= 0);
+  const first = bosses[0] ?? 0;
+  const span = Math.max(1, (bosses.at(-1) ?? 0) - first);
+  const { first: lo, last: hi } = balance.bossHpPct;
+  return Object.fromEntries(bosses.map((i) => [i, lo + idiv((hi - lo) * (i - first), span)]));
+}
+
 /** "Normal Act 2": a stage's name. */
 export function stageName(difficulty: number, act: number): string {
   return `${DIFFICULTY_NAMES[difficulty]} Act ${act}`;
@@ -620,6 +644,7 @@ export function economyFrom(balance: BalanceJson): Economy {
   return {
     startingGold: balance.startingGold,
     buildCost: balance.buildCost,
+    buildCostGrowthPct: balance.buildCostGrowthPct,
     levelCosts: balance.levelCostBase.map((base) => steps.map((permille) => idiv(base * permille, 1000))),
     tierCosts: balance.tierCosts,
     evolveCost: balance.evolveCost,
@@ -655,6 +680,7 @@ export function rulesFrom(tables: Tables, balance: BalanceJson): Rules {
     championHpPct: monumodConstant(tables, 'Champion HP % Bonus'),
     uniqueHpPct: monumodConstant(tables, 'Unique HP % Bonus'),
     championDamagePct: monumodConstant(tables, 'Champion Damage % Bonus'),
+    bossHpPct: {},
     mods,
   };
 }
@@ -868,6 +894,6 @@ export function buildGameData(
     waves,
     ladders,
     economy: economyFrom(design.balance),
-    rules: rulesFrom(tables, design.balance),
+    rules: { ...rulesFrom(tables, design.balance), bossHpPct: bossHpPctFrom(design.balance, waves) },
   };
 }

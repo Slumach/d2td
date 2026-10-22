@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { activeSkill } from './auras.ts';
 import { EVOLVED_LEVEL_INDEX, MAX_TOWER_LEVEL } from './data.ts';
-import { step } from './sim.ts';
+import { buildCostFor, step } from './sim.ts';
 import type { Command, Sim, Tower } from './state.ts';
 import { canBuild, evolutionFor, pendingChoices, sellValue, towerAt } from './towers.ts';
 import { placeTower, testSim } from './testkit.ts';
@@ -197,5 +197,18 @@ describe('evolution', () => {
     expect(evolved.level).toBe(before.level);
     expect(evolved.tier).toBe(before.tier);
     expect(sellValue(sim, evolved)).toBe(Math.trunc((evolved.spent * 60) / 100));
+  });
+
+  it('raises the price of each build by buildCostGrowthPct for every tower the player owns', () => {
+    const sim = testSim();
+    const e = sim.data.economy;
+    sim.state.gold[0] = 1_000_000;
+    const prices: number[] = [];
+    for (const [x, y] of [[2, 4], [4, 4], [6, 4]] as const) {
+      prices.push(buildCostFor(sim, 0));
+      step(sim, [{ type: 'build', x, y, cls: 'paladin', skill: 'holy-bolt' }]);
+    }
+    expect(prices).toEqual([e.buildCost, Math.trunc((e.buildCost * e.buildCostGrowthPct) / 100), Math.trunc((Math.trunc((e.buildCost * e.buildCostGrowthPct) / 100) * e.buildCostGrowthPct) / 100)]);
+    expect(sim.state.towers.map((t) => t.spent)).toEqual(prices);
   });
 });

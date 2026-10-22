@@ -21,7 +21,7 @@ import type { HitFilter, SkillDef } from '../src/sim/archetypes/types.ts';
 import { auraSources } from '../src/sim/auras.ts';
 import { EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, type GameData } from '../src/sim/data.ts';
 import { tileCenter, isPathTile } from '../src/sim/map.ts';
-import { activeSkill, canBuild, createSim, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
+import { activeSkill, buildCostFor, canBuild, createSim, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
 import { withMods } from '../src/sim/combat.ts';
 import { ELEMENTS, type Command, type Element, type Sim, type TimedCommand, type Tower } from '../src/sim/state.ts';
 
@@ -484,7 +484,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
         picks: [skill], spent: 0, cooldown: 0, targeting: 'first', evolved: '', partnerSkill: '', partnerLevel: 0, summonCooldown: 0, partnerCooldown: 0,
       };
       out.push({
-        cost: e.buildCost,
+        cost: buildCostFor(sim, 0),
         gain: gainOf(sim, towers, judge, fresh),
         commands: [{ type: 'build', x: spot.x, y: spot.y, cls, skill }],
       });
@@ -611,7 +611,7 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
           goals.shift();
           continue;
         }
-        if (!canBuild(s, spot.x, spot.y) || (s.state.gold[0] ?? 0) < s.data.economy.buildCost) return [];
+        if (!canBuild(s, spot.x, spot.y) || (s.state.gold[0] ?? 0) < buildCostFor(s, 0)) return [];
         tags[goal.tag] = s.state.nextId;
         return [{ type: 'build', x: spot.x, y: spot.y, cls: lineOf(s, goal.skill).cls, skill: goal.skill }];
       }
@@ -704,17 +704,14 @@ const CONFIGS: Partial<Record<Strategy, BotConfig>> = {
 
 const SORC_BUILDS = ['fire-bolt', 'ice-bolt', 'charged-bolt', 'static-field'];
 const NECRO_BUILDS = ['raise-skeleton', 'teeth', 'amplify-damage'];
-/** About as many towers as the PALADIN bot ends a Hell run with; past it the class bots only upgrade. */
-const CLASS_BOT_TOWERS = 64;
-CONFIGS.SORC = { strategy: 'SORC', builds: SORC_BUILDS, tiers: true, evolve: true, elements: true, maxTowers: CLASS_BOT_TOWERS };
-CONFIGS.NECRO = { strategy: 'NECRO', builds: NECRO_BUILDS, tiers: true, evolve: true, elements: true, maxTowers: CLASS_BOT_TOWERS };
+CONFIGS.SORC = { strategy: 'SORC', builds: SORC_BUILDS, tiers: true, evolve: true, elements: true };
+CONFIGS.NECRO = { strategy: 'NECRO', builds: NECRO_BUILDS, tiers: true, evolve: true, elements: true };
 CONFIGS.MIXED3 = {
   strategy: 'MIXED3',
   builds: ['sacrifice', 'holy-bolt', 'might', ...SORC_BUILDS, ...NECRO_BUILDS],
   tiers: true,
   evolve: true,
   elements: true,
-  maxTowers: CLASS_BOT_TOWERS,
 };
 
 export function createBot(strategy: Strategy, sim: Sim): Bot {

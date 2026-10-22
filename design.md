@@ -198,6 +198,8 @@ Target rhythm (Green TD, not a treadmill): tier-ups and evolutions are big jumps
 
 The ring report (tools/report.ts, `npm run report`) has every bot play all 75 waves on the ring in single player and prints, without targets or tuning: the wave each run dies on, alive weight at each wave's start and its peak while it was the newest wave, and where the bots' towers stood at the end, by nearest path leg (U-bend pocket, round the outside of the U, the run into a handoff corner, a long straight, or inland, more than two tiles from any leg). It is the input to the rebalance pass.
 
+First run on real content (Oct 22, all five acts, before the Stage A economy rebuild, seeds 1 to 3): TWOLINE, PALADIN, NECRO and MIXED3 clear all 75 waves; BOLT and HOLY stall on Hell Baal (alive 37 and 53 below the limit, unable to kill him); SORC dies on Hell Andariel (wave 55 or 56). The tower-spam bots end with about 500 towers each and the class bots at their old 64-tower cap; alive weight peaks at 58 to 76 in Normal Act 1, sits at 10 to 30 through the middle of the campaign, and climbs to 35 to 55 on Hell's last bosses. Bosses are not yet the point of failure. Stage A answers this.
+
 - Bounty per kill = monster level x 2 (balance.json bountyPerLevel), with no per-wave curve: the levels climb with the campaign. Champions x3, uniques x5, act bosses x20, Andariel x50.
 - Send Next Wave pays for the time it skips (see Enemies, waves and difficulty); there is no wave-clear bonus.
 - Starting gold 300, enough for two towers. No lives: the alive count is the loss condition.
@@ -206,12 +208,12 @@ The ring report (tools/report.ts, `npm run report`) has every bot play all 75 wa
 
 | Action | Gold |
 | --- | --- |
-| Build a class tower | 150 |
+| Build a class tower | 150 for the first, then each tower owned multiplies the next by 220% (balance.json buildCostGrowthPct): 150, 330, 726, 1597, 3513, 7729, 17004, 37409, 82299, ... |
 | T1 skill pick | free |
-| Skill level +1 | Geometric from a base of 40 at T1, 160 at T2, 200 at T3; the per-level multiplier is harness-tuned (see src/data/balance.json) |
-| Upgrade to T2 | 250 |
-| Upgrade to T3 | 5000 |
-| Evolve to T4 | 6000 |
+| Skill level +1 | Geometric from a base of 60 at T1, 240 at T2, 300 at T3; the per-level multiplier is harness-tuned (see src/data/balance.json) |
+| Upgrade to T2 | 400 |
+| Upgrade to T3 | 8000 |
+| Evolve to T4 | 30000 |
 | Sell | 60% of everything spent on the tower |
 
 A Hammerdin therefore costs both parents built, levelled and tiered, plus the evolution fee (totals follow from the multipliers; see src/data/balance.json), and two tiles before it costs one.
@@ -274,6 +276,17 @@ Each milestone has one gate. Nothing moves to the next until the gate is met, be
 7. M6 Sorceress and Necromancer. Summons that block, corpses, curses, elements, immunities. Gate: Hell waves cannot be cleared with one line. The harness (npm run balance -- --hell) checks it as: no single-class bot (PALADIN, SORC, NECRO) clears Hell, and MIXED3, built from all three, does.
 8. M7 Endgame. Post-Hell tiers, loot, runes, runewords, stash, Barbarian gold-find line. Gate: a Hell+5 run needs gear to clear.
 
+### Stage A: economy rebuild (Oct 22)
+
+The player wins with a handful of towers, not dozens. Each tower owned raises the next build's price by 220%, the only brake on the tower count (there is no cap anywhere, the bots' old 64-tower cap included). Tiers, levels and the evolution cost more (table above); income is unchanged, and the escalating build cost is what holds the counts down. Act bosses ramp: a boss's HP is its monstats HP times balance.json bossHpPct, from 60% on Normal Blood Raven in a straight line by wave to 900% on Hell Baal, so early bosses are easier than the tables and late ones much harder. Zeal reaches only the path tile beside its tower (rangeTenths 11, down from 15: about 0.9 tiles of path instead of 2.2) and swings every 9 ticks instead of 20.
+
+Harness (npm run report, seeds 1 and 2, the ordinary bots TWOLINE, PALADIN, NECRO, MIXED3), against the targets:
+- Towers at the end of Normal: 5 (target about 4); Nightmare: 7 to 8 (7); Hell: 8 to 9 (10). Close.
+- Death: NECRO and MIXED3 die in Hell Act 2 (target Hell Act 1 or 2: met). TWOLINE stalls on Hell Baal, unable to kill him; with Stage B's endless waves a stall is a death in the first endless Tier. PALADIN clears Hell: its scripted Hammerdin carries it, at 50 to 90 alive weight through Hell. Missed for that bot.
+- Bosses as the point of failure: missed. Deaths come in the waves around the bosses, because a boss wave puts only the boss and its pack on the ring and the alive count eases while it walks. Making boss waves carry an escort stream is the next lever.
+- Tier timing: first T2 on waves 9 to 12 (Normal Act 2 to 3, met), first T3 on waves 21 to 33 (median about 24, late Normal; target Nightmare Act 1, close), first evolution on waves 45 to 52 (late Nightmare to Hell Act 1; target Hell Act 3, early). T5 does not exist yet: the design's three-tower evolutions are still to be built, so its timing is not measured.
+- Unspent gold: the bots hold 10k to 60k at Hell's boss waves, saving for the next tower or the evolution, both now very dear. With T3 the top tier and T5 not built there is little else to buy; the item stages add the sinks.
+
 ## Overnight decisions
 
 Calls made without asking, each the option closest to Diablo II's own rules.
@@ -281,6 +294,7 @@ Calls made without asking, each the option closest to Diablo II's own rules.
 - Oct 22: the overnight job lists Acts 2 to 5 content as Stage H, after the economy (A) and item stages. It was finished first: the economy and item targets are measured on real content, and Acts 2 to 4 were already in progress.
 - Oct 22: D2R has no monster named Wendigo. The Snow Yeti family (Snow Drifter and kin) stands in for it, as the Act 5 monster nearest to a wendigo and the class D2 gives Frozenstein.
 - Oct 22: Act 5 has fifteen regular waves for its thirteen listed monsters. The two spare Hell waves are Imps (Demon Gremlin) and Death Maulers again, at stronger variants of their own families, rather than monsters from outside the list.
+- Oct 22: Zeal's "adjacent tiles" reach is the orthogonally adjacent path tile (1.1 tiles); diagonal neighbours would be 1.5 tiles, the old reach.
 - Oct 22: the Zakarum Priest heals and the Overseer cries for help in D2; the job asks for the Fallen Shaman treatment, so both raise their own kind (Zealots; Enslaved) and walk with their monstats party.
 
 ## Open questions

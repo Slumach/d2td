@@ -87,6 +87,8 @@ export interface RingRun {
   evolvedOn: Record<string, number>;
   /** Gold earned (bounties and send bonuses) before each wave started, index 0 is wave 1. */
   incomeAtStart: number[];
+  /** Towers standing and gold unspent as each boss wave started, by wave number. */
+  atBoss: Record<number, { towers: number; gold: number }>;
   /** Towers standing at the end, by spot, and how many of them touch the path. */
   towers: Record<Spot, number>;
   touching: number;
@@ -97,6 +99,7 @@ export function playRing(data: GameData, strategy: Strategy, seed: number): Ring
   const peak: number[] = [];
   const perSecond: number[] = [];
   const incomeAtStart: number[] = [];
+  const atBoss: RingRun['atBoss'] = {};
   let income = 0;
   let prevGold = data.economy.startingGold;
   let last: Sim | undefined;
@@ -112,6 +115,7 @@ export function playRing(data: GameData, strategy: Strategy, seed: number): Ring
       atStart.push(s.alive);
       peak.push(s.alive);
       incomeAtStart.push(income);
+      if (data.waves[atStart.length - 1]?.final) atBoss[atStart.length] = { towers: s.towers.length, gold };
     }
     if (s.wave > 0) peak[s.wave - 1] = Math.max(peak[s.wave - 1]!, s.alive);
     if (s.tick % 20 === 0) perSecond.push(s.alive);
@@ -123,7 +127,7 @@ export function playRing(data: GameData, strategy: Strategy, seed: number): Ring
     towers[spot]++;
     if (distance <= 1) touching++;
   }
-  return { strategy, seed, won: r.won, stalled: last?.state.status === 'playing', wave: r.wave, atStart, peak, perSecond, tiersOn: r.tiersOn, evolvedOn: r.evolvedOn, incomeAtStart, towers, touching };
+  return { strategy, seed, won: r.won, stalled: last?.state.status === 'playing', wave: r.wave, atStart, peak, perSecond, tiersOn: r.tiersOn, evolvedOn: r.evolvedOn, incomeAtStart, atBoss, towers, touching };
 }
 
 /** One run in a child process (a big tower-spam run takes minutes), its result as JSON on stdout. */
@@ -152,9 +156,17 @@ async function main(): Promise<void> {
   // --set key=value overrides a balance.json number or number list for this run
   const balance = { ...DESIGN.balance } as Record<string, unknown>;
   for (const s of args.set) {
-    const [key, value] = s.split('=') as [string, string];
-    if (!(key in balance)) throw new Error(`--set ${key}: no such balance.json field`);
-    balance[key] = value.includes(',') ? value.split(',').map(Number) : Number(value);
+    // key=value, or key.field=value for a field of an object (bossHpPct.last=500)
+    const [path, value] = s.split('=') as [string, string];
+    const keys = path.split('.');
+    let at = balance;
+    for (const k of keys.slice(0, -1)) {
+      if (typeof at[k] !== 'object' || at[k] === null) throw new Error(`--set ${path}: no such balance.json field`);
+      at = at[k] = { ...(at[k] as Record<string, unknown>) };
+    }
+    const last = keys.at(-1)!;
+    if (!(last in at)) throw new Error(`--set ${path}: no such balance.json field`);
+    at[last] = value.includes(',') ? value.split(',').map(Number) : Number(value);
   }
   const data = buildGameData(loadTables(), { ...DESIGN, balance: balance as unknown as typeof DESIGN.balance });
   if (args.one) {
@@ -208,6 +220,19 @@ async function main(): Promise<void> {
     });
     const recipes = [...new Set(mine.flatMap((r) => Object.keys(r.evolvedOn)))].map((id) => `${id} w${mine.map((r) => r.evolvedOn[id] ?? '-').join('/')}`);
     console.log(`  ${strategy.padEnd(8)} ${cells.join('')}${recipes.join('  ')}`);
+  }
+
+  console.log('');
+  console.log('Towers / unspent gold as each boss wave starts, median over seeds that got there');
+  const bossWaves = data.waves.map((w, i) => (w.final ? i + 1 : 0)).filter((n) => n > 0);
+  console.log(`  ${'bot'.padEnd(8)} ${bossWaves.map((n) => stage(n).replace(/ \d+\/\d+ boss$/, '').replace('Normal ', 'N').replace('Nightmare ', 'NM').replace('Hell ', 'H').replace('Act ', '').padStart(11)).join('')}`);
+  for (const strategy of bots) {
+    const mine = runs.filter((r) => r.strategy === strategy);
+    const cells = bossWaves.map((n) => {
+      const have = mine.filter((r) => r.atBoss[n]);
+      return (have.length ? `${median(have.map((r) => r.atBoss[n]!.towers))}/${median(have.map((r) => r.atBoss[n]!.gold))}` : '').padStart(11);
+    });
+    console.log(`  ${strategy.padEnd(8)} ${cells.join('')}`);
   }
 
   console.log('');

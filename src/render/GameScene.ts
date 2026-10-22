@@ -26,6 +26,7 @@ import {
   evolutionFor,
   pendingChoices,
   sellValue,
+  buildCostFor,
   tierCost,
   towerAt,
   towerById,
@@ -1318,7 +1319,7 @@ export class GameScene extends Phaser.Scene {
     const specs: ButtonSpec[] = [];
 
     if (sel?.kind === 'tile') {
-      this.info.setText(`Build a tower (${e.buildCost}g): its class and T1 skill fix its line`);
+      this.info.setText(`Build a tower (${buildCostFor(sim, this.seat)}g): its class and T1 skill fix its line`);
       for (const cls of BUILD_CLASSES) {
         for (const line of Object.values(sim.data.classes[cls]?.lines ?? {})) {
           const skill = line.tiers[0]![0]!;
@@ -1326,7 +1327,7 @@ export class GameScene extends Phaser.Scene {
             this.skillButton(skill, `${line.name}: ${this.skillName(skill)}`, () => {
               this.issue({ type: 'build', x: sel.x, y: sel.y, cls, skill });
               this.selection = undefined;
-            }, this.gold >= e.buildCost),
+            }, this.gold >= buildCostFor(sim, this.seat)),
           );
         }
       }
@@ -1347,7 +1348,7 @@ export class GameScene extends Phaser.Scene {
       // A tab per class over the belt; the belt holds the chosen class's first skills
       const cls = this.buildClass;
       const c = sim.data.classes[cls]!;
-      this.info.setText(`Build a ${c.name} tower (${e.buildCost} gold): its first skill fixes its line`);
+      this.info.setText(`Build a ${c.name} tower (${buildCostFor(sim, this.seat)} gold): its first skill fixes its line`);
       d2.setTabs(
         BUILD_CLASSES.filter((id) => sim.data.classes[id]).map((id) => ({
           label: sim.data.classes[id]!.name,
@@ -1364,8 +1365,8 @@ export class GameScene extends Phaser.Scene {
         return {
           icon: spec.icon,
           title: `${line.name}: ${this.skillName(skill)}`,
-          body: `${spec.tooltip?.body ?? ''}\n\nBuild for ${e.buildCost} gold`.trim(),
-          enabled: this.gold >= e.buildCost,
+          body: `${spec.tooltip?.body ?? ''}\n\nBuild for ${buildCostFor(sim, this.seat)} gold`.trim(),
+          enabled: this.gold >= buildCostFor(sim, this.seat),
           onClick: () => {
             this.issue({ type: 'build', x: sel.x, y: sel.y, cls, skill });
             this.selection = undefined;

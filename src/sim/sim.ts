@@ -21,7 +21,7 @@ import { updateSummons } from './archetypes/summon.ts';
 import { build, evolve, pickBranch, pickSkill, sell, setTargeting, towerById, upgrade, upgradeTier } from './towers.ts';
 
 export type * from './state.ts';
-export { canBuild, evolutionFor, pendingChoices, sellValue, tierCost, towerAt, towerById, upgradeCost } from './towers.ts';
+export { buildCostFor, canBuild, evolutionFor, pendingChoices, sellValue, tierCost, towerAt, towerById, upgradeCost } from './towers.ts';
 export { activeSkill } from './auras.ts';
 export { damageAgainst, effectiveResist } from './combat.ts';
 

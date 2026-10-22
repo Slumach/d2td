@@ -98,9 +98,21 @@ function removeTower(sim: Sim, id: number): void {
   s.summons = s.summons.filter((u) => u.towerId !== id);
 }
 
+/**
+ * What `player`'s next tower costs: buildCost, multiplied by buildCostGrowthPct for each
+ * tower they already own.
+ */
+export function buildCostFor(sim: Sim, player: number): number {
+  const e = sim.data.economy;
+  const owned = sim.state.towers.filter((t) => t.owner === player).length;
+  let cost = e.buildCost;
+  for (let i = 0; i < owned; i++) cost = idiv(cost * e.buildCostGrowthPct, 100);
+  return cost;
+}
+
 export function build(sim: Sim, player: number, x: number, y: number, cls: string, skill?: string): void {
   const s = sim.state;
-  const cost = sim.data.economy.buildCost;
+  const cost = buildCostFor(sim, player);
   if (!sim.data.classes[cls] || !canBuild(sim, x, y, player) || !pay(sim, player, cost)) return;
   const center = tileCenter({ x, y });
   const tower: Tower = {

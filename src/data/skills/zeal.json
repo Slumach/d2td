@@ -3,7 +3,7 @@
   "skill": "Zeal",
   "archetype": "melee",
   "damageType": "phys",
-  "rangeTenths": 15,
-  "rateTicks": 20,
+  "rangeTenths": 11,
+  "rateTicks": 9,
   "melee": { "swingsCalc": "calc1", "damagePctCalc": "calc2" }
 }

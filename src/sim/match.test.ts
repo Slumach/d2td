@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import { createBot } from '../../tools/bots.ts';
 import { actJustStarted, restoreMatch, takeCheckpoint, type Checkpoint, type TimedPlayerCommand } from './checkpoint.ts';
-import { fixtureGameData } from './fixture.ts';
+import { DESIGN } from '../data/design.ts';
+import { buildGameData } from './data.ts';
+import { FIXTURE_BUILD, FIXTURE_TABLES, fixtureDesign, fixtureGameData } from './fixture.ts';
 import { arcAt } from './map.ts';
 import { aliveOf, createMatch, matchHash, playersIn, stepMatch, type Match, type PlayerCommand } from './match.ts';
 import { createSim, runLog } from './sim.ts';
@@ -126,7 +128,8 @@ describe('ffa match', () => {
 
 describe('checkpoints', () => {
   it('carries a run on exactly: a checkpoint restored and stepped on matches the run that never stopped', () => {
-    const full = fixtureGameData();
+    // A rich economy, so the bot reaches Act 2 whatever balance.json's prices are: this is about determinism
+    const full = buildGameData(FIXTURE_TABLES, fixtureDesign({ ...DESIGN, balance: { ...DESIGN.balance, startingGold: 20_000 } }), undefined, FIXTURE_BUILD);
     const bot = (match: Match) => createBot('PALADIN', match.zones[0]!);
     const a = createMatch(full, 9, 'solo', 1);
     const botA = bot(a);

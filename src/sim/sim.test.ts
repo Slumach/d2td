@@ -156,6 +156,16 @@ describe('data', () => {
     expect(m.level).toBe(def.level);
   });
 
+  it("ramps act bosses' HP by wave: balance.json bossHpPct first on the first boss wave to last on the last", () => {
+    const data = fixtureGameData();
+    const bosses = data.waves.map((w, i) => (w.final ? i : -1)).filter((i) => i >= 0);
+    const { first, last } = DESIGN.balance.bossHpPct;
+    expect(data.rules.bossHpPct[bosses[0]!]).toBe(first);
+    expect(data.rules.bossHpPct[bosses.at(-1)!]).toBe(last);
+    const pcts = bosses.map((i) => data.rules.bossHpPct[i]!);
+    for (let k = 1; k < pcts.length; k++) expect(pcts[k]!).toBeGreaterThan(pcts[k - 1]!);
+  });
+
   it('walks a raiser with its party, its monstats minion1, in the middle of its wave, ahead of its pack', () => {
     const data = fixtureGameData();
     // Nightmare Act 3, wave 4: Fetish Shamans with their Fetishes (the fixture's PartyMin-PartyMax 2-4, so 3), then Endugu's pack

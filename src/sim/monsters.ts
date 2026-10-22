@@ -10,8 +10,12 @@ import type { Monster, MonsterMod, Rank, Sim } from './state.ts';
 /** How long a shoved summon shows it, for the renderer. */
 const SHOVE_TICKS = 10;
 
-/** HP bonus percent by rank, from monumod.txt. Bosses carry their HP in monstats. */
-function rankHpPct(sim: Sim, rank: Rank): number {
+/**
+ * HP bonus percent by rank, from monumod.txt. A boss carries its HP in monstats, scaled by
+ * the campaign's boss ramp at its wave (balance.json bossHpPct).
+ */
+function rankHpPct(sim: Sim, rank: Rank, wave: number): number {
+  if (rank === 'boss') return (sim.data.rules.bossHpPct[wave] ?? 100) - 100;
   return rank === 'champion' ? sim.data.rules.championHpPct : rank === 'unique' ? sim.data.rules.uniqueHpPct : 0;
 }
 
@@ -20,7 +24,7 @@ export function createMonster(sim: Sim, def: string, wave: number, rank: Rank, m
   const d = sim.data.monsters[def]!;
   const rules = sim.data.rules;
   // HP is the monster's own at its level (monlvl), with its rank's bonus: no per-wave curve
-  const maxHp = hp ?? Math.max(256, idiv(rollInt(s.rng, d.minHp, d.maxHp) * (100 + rankHpPct(sim, rank)), 100));
+  const maxHp = hp ?? Math.max(256, idiv(rollInt(s.rng, d.minHp, d.maxHp) * (100 + rankHpPct(sim, rank, wave)), 100));
   let damagePct = rank === 'champion' || rank === 'unique' ? rules.championDamagePct : 0;
   for (const mod of mods) damagePct += rules.mods[mod].damagePct;
   const at = positionAt(sim.map, dist);
