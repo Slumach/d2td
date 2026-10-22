@@ -18,6 +18,7 @@
 
 import { animFps, decodeAnimData, type AnimData } from '../lib/animdata.ts';
 import { compositeCode, decodeCof } from '../lib/cof.ts';
+import { dc6AsDcc, decodeDc6 } from '../lib/dc6.ts';
 import { decodeDcc, type Dcc } from '../lib/dcc.ts';
 import { decodePalDat } from '../lib/palette.ts';
 import { encodePng } from '../lib/png.ts';
@@ -272,6 +273,12 @@ interface CompositeSpec {
   lenient?: boolean;
 }
 
+/** A COF layer's animation, from its DCC or its DC6. */
+function decodeLayer(source: DataSource, path: string): Dcc {
+  const bytes = source.read(path);
+  return path.endsWith('.dc6') ? dc6AsDcc(decodeDc6(bytes)) : decodeDcc(bytes);
+}
+
 /** The COF and layer files a composite mode needs, read from the source. */
 function compositeInputs(source: DataSource, spec: CompositeSpec): { cofPath: string; layers: Record<string, string> } | undefined {
   const cofPath = `global/${spec.folder}/cof/${spec.token}${spec.mode}${spec.weaponClass}.cof`.toLowerCase();
@@ -283,7 +290,11 @@ function compositeInputs(source: DataSource, spec: CompositeSpec): { cofPath: st
     const variant = spec.variant(code);
     // "nil" is an empty slot (no shield, no pads): D2 draws nothing for that layer
     if (variant === 'nil') continue;
-    const at = (v: string) => `global/${spec.folder}/${code}/${spec.token}${code}${v}${spec.mode}${layer.weaponClass}.dcc`.toLowerCase();
+    // D2 reads a layer's DCC, or its DC6 when there is no DCC (Mephisto's layers are all DC6)
+    const at = (v: string) => {
+      const base = `global/${spec.folder}/${code}/${spec.token}${code}${v}${spec.mode}${layer.weaponClass}`.toLowerCase();
+      return source.exists(`${base}.dcc`) || !source.exists(`${base}.dc6`) ? `${base}.dcc` : `${base}.dc6`;
+    };
     const path = at(variant);
     if (spec.lenient && !source.exists(path)) continue;
     if (spec.alternatives && !source.exists(path)) {
@@ -305,7 +316,7 @@ function compositeMode(shared: Shared, spec: CompositeSpec, palette: Uint8Array)
     .filter((l) => paths.layers[compositeCode(l.type)] !== undefined)
     .map((l) => ({
       type: l.type,
-      dcc: decodeDcc(shared.source.read(paths.layers[compositeCode(l.type)]!)),
+      dcc: decodeLayer(shared.source, paths.layers[compositeCode(l.type)]!),
       alpha: layerAlpha(l.transparent, l.drawEffect),
       additive: isGlowEffect(l.transparent, l.drawEffect),
     }));
@@ -354,8 +365,9 @@ function monsterJobs(shared: Shared): SpriteJob[] {
     // Maggot Queen's death is a DC6, which a composite cannot use)
     const has = (mode: string) => Object.keys(compositeInputs(source, specFor(mode, mode))?.layers ?? {}).length > 0;
     const specs = modes.map((want) => specFor(has(want) ? want : ((MODE_FALLBACK[want] ?? []).find(has) ?? want), want));
-    const transLvl = Number(row['TransLvl'] || 0);
     const palshift = `global/${folder}/cof/palshift.dat`;
+    // A TransLvl with no palshift.dat beside the COFs (the Council) draws in the plain palette
+    const transLvl = source.exists(palshift) ? Number(row['TransLvl'] || 0) : 0;
     const inputs = [...(transLvl > 0 ? [palshift] : [])];
     for (const spec of specs) {
       const found = compositeInputs(source, spec);

@@ -15,6 +15,19 @@
         "rangeColumn": "aip5",
         "sequence": "seq_mummyres"
       }
+    },
+    "fetishshaman2": {
+      "resurrect": {
+        "monType": "fetish",
+        "chanceColumn": "aip3",
+        "rangeColumn": "aip5",
+        "sequence": "seq_fetishres"
+      },
+      "party": "fetish2"
+    },
+    "cantor1": {
+      "resurrect": { "monType": "zakarum", "chanceColumn": "aip1", "rangeColumn": "aip4" },
+      "party": "zealot1"
     }
   },
   "acts": [
@@ -73,6 +86,34 @@
         { "monster": "skmage_ltng4", "kind": "tank", "area": "Far Oasis" },
         { "boss": "duriel", "area": "Duriel's Lair" }
       ]
+    },
+    "3": {
+      "normal": [
+        { "monster": "mosquito1", "kind": "swarm", "area": "Spider Forest", "superunique": "sszark" },
+        { "monster": "sandleaper4", "kind": "swarm", "area": "Spider Forest" },
+        { "monster": "thornhulk1", "kind": "tank", "area": "Flayer Jungle", "superunique": "stormtree" },
+        { "monster": "fetish3", "kind": "swarm", "area": "Flayer Jungle" },
+        { "boss": "mephisto", "area": "Durance of Hate" }
+      ],
+      "nightmare": [
+        { "monster": "frogdemon1", "kind": "tank", "area": "Great Marsh" },
+        { "monster": "zombie4", "kind": "tank", "area": "Great Marsh", "superunique": "sarina" },
+        { "monster": "foulcrow2", "kind": "swarm", "area": "Kurast", "superunique": "icehawk" },
+        { "monster": "fetishshaman2", "kind": "swarm", "area": "Flayer Jungle", "superunique": "endugu" },
+        { "boss": "mephisto", "area": "Durance of Hate" }
+      ],
+      "hell": [
+        { "monster": "zealot1", "kind": "tank", "area": "Travincal", "superunique": "geleb" },
+        {
+          "monster": "cantor1",
+          "kind": "tank",
+          "area": "Travincal",
+          "superunique": ["toorc", "ismail", "bremm", "wyand", "maffer"]
+        },
+        { "monster": "bonefetish5", "kind": "swarm", "area": "Durance of Hate" },
+        { "monster": "vampire4", "kind": "tank", "area": "Durance of Hate" },
+        { "boss": "mephisto", "area": "Durance of Hate" }
+      ]
     }
   },
   "placeholder": [
@@ -115,11 +156,28 @@
       "class": "pantherwoman1",
       "minion": "pantherwoman1"
     },
-    { "id": "fangskin", "superunique": "Fangskin", "class": "clawviper3", "minion": "clawviper3" }
+    { "id": "fangskin", "superunique": "Fangskin", "class": "clawviper3", "minion": "clawviper3" },
+    { "id": "sszark", "superunique": "Web Mage the Burning", "class": "arach4", "minion": "arach4" },
+    { "id": "endugu", "superunique": "Witch Doctor Endugu", "class": "fetishshaman4", "minion": "fetish4" },
+    { "id": "stormtree", "superunique": "Stormtree", "class": "thornhulk3", "minion": "thornhulk3" },
+    {
+      "id": "sarina",
+      "superunique": "Sarina the Battlemaid",
+      "class": "corruptrogue5",
+      "minion": "corruptrogue5"
+    },
+    { "id": "icehawk", "superunique": "Icehawk Riftwing", "class": "batdemon3", "minion": "batdemon3" },
+    { "id": "geleb", "superunique": "Geleb Flamefinger", "class": "councilmember2", "minion": "councilmember2" },
+    { "id": "ismail", "superunique": "Ismail Vilehand", "class": "councilmember1", "minion": "councilmember1" },
+    { "id": "bremm", "superunique": "Bremm Sparkfist", "class": "councilmember3", "minion": "councilmember3" },
+    { "id": "toorc", "superunique": "Toorc Icefist", "class": "councilmember1" },
+    { "id": "wyand", "superunique": "Wyand Voidfinger", "class": "councilmember2" },
+    { "id": "maffer", "superunique": "Maffer Dragonhand", "class": "councilmember3" }
   ],
   "bosses": [
     { "id": "bloodraven", "class": "bloodraven", "minion": "zombie2" },
     { "id": "andariel", "class": "andariel" },
-    { "id": "duriel", "class": "duriel" }
+    { "id": "duriel", "class": "duriel" },
+    { "id": "mephisto", "class": "mephisto" }
   ]
 }

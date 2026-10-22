@@ -79,7 +79,7 @@ describe('data', () => {
     // Each act closes on its own boss; Act 1 on Blood Raven on Normal and Andariel after, and
     // an act without content repeats that difficulty's Act 1 boss
     const boss = (w: (typeof waves)[number]) => baseMonsterId(w.groups.find((g) => g.rank === 'boss')!.monster);
-    const own = ['', 'duriel'];
+    const own = ['', 'duriel', 'mephisto'];
     const expected = [0, 1, 2].flatMap((d) => [1, 2, 3, 4, 5].map((a) => (a === 1 ? (d === 0 ? 'bloodraven' : 'andariel') : own[a - 1] || (d === 0 ? 'bloodraven' : 'andariel'))));
     expect(waves.filter((w) => w.final).map(boss)).toEqual(expected);
     // Act 1 shows different monsters on each difficulty
@@ -164,6 +164,21 @@ describe('data', () => {
     expect(m.maxHp).toBeGreaterThanOrEqual(def.minHp);
     expect(m.maxHp).toBeLessThanOrEqual(def.maxHp);
     expect(m.level).toBe(5 * act);
+  });
+
+  it('walks a raiser with its party, its monstats minion1, in the middle of its wave, ahead of its pack', () => {
+    const data = fixtureGameData();
+    // Nightmare Act 3, wave 4: Fetish Shamans with their Fetishes (the fixture's PartyMin-PartyMax 2-4, so 3), then Endugu's pack
+    const wave = data.waves.find((w) => w.difficulty === 1 && w.act === 3 && w.actWave === 4)!;
+    expect(wave.groups.map((g) => [baseMonsterId(g.monster), g.count, g.rank])).toEqual([
+      ['fetishshaman2', 22, 'normal'],
+      ['fetish2', 3, 'normal'],
+      ['fetish4', 2, 'normal'],
+      ['endugu', 1, 'unique'],
+      // The act's champion pack: this is its last wave before Mephisto
+      ['fetishshaman2', 3, 'champion'],
+      ['fetishshaman2', 23, 'normal'],
+    ]);
   });
 
   it("lifts an act's own monster to the act's floor when its table level is lower, and leaves a stronger one alone", () => {

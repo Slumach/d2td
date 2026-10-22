@@ -33,8 +33,9 @@ export const CHECKSUM_FILE = 'checksums.json';
  * 10: D2R's menu and HUD: the burning logo, the pause menu, the mini-menu buttons, the
  *     inventory panel.
  * 11: Act 2: its monsters (in Act 2's palette), its maps, and D2R's monster names.
+ * 12: Act 3: its monsters and maps.
  */
-export const EXTRACT_VERSION = 11;
+export const EXTRACT_VERSION = 12;
 /** What verifyGame reports when the extraction is from an older version of the game. */
 export const OUTDATED = 'version';
 

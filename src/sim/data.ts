@@ -78,8 +78,12 @@ export interface ActJson {
 }
 
 export interface MonstersJson {
-  /** Monsters with an ability, by monstats id. */
-  roster: Record<string, { resurrect?: ResurrectJson }>;
+  /**
+   * Monsters with an ability, by monstats id. A raiser's `party` is its monstats minion1,
+   * which walks with it (PartyMin-PartyMax, midway, in the middle of its wave), as D2
+   * spawns it with its group: it gives the raiser corpses of its own kind to raise.
+   */
+  roster: Record<string, { resurrect?: ResurrectJson; party?: string }>;
   /** The five acts; the run plays all of them on Normal, then Nightmare, then Hell. */
   acts: ActJson[];
   /** Each act with content, by act number, on each difficulty: its waves in order, the last its act boss. */
@@ -250,6 +254,8 @@ export interface MonsterDef {
   /** Ticks between AI decisions (monstats aidel). */
   aiDelayTicks: number;
   resurrect?: { monTypes: string[]; chancePct: number; radiusUnits: number; castTicks: number };
+  /** The group a raiser walks with (monsters.json roster party): its monstats minion1. */
+  party?: { monster: string; count: number };
 }
 
 export interface ClassDef {
@@ -449,6 +455,9 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
       throw new Error(`${id}: the tables give its pack as ${minion?.monster ?? 'none'}, monsters.json says ${boss.minion ?? 'none'}`);
     }
   }
+  const partyOf = design.roster[id]?.party;
+  if (partyOf !== undefined && partyOf !== str(row, 'minion1')) throw new Error(`${id}: monstats gives its party as ${str(row, 'minion1') || 'none'}, monsters.json says ${partyOf}`);
+  const party = partyOf ? { monster: partyOf, count: midway(row, 'PartyMin', 'PartyMax') } : undefined;
   return {
     id: atLevel === undefined ? variantId(id, difficulty) : levelVariantId(id, difficulty, atLevel),
     base,
@@ -458,6 +467,7 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
     flying: int(row, 'flying') === 1,
     mods,
     ...(minion ? { minion } : {}),
+    ...(party && party.count > 0 ? { party } : {}),
     monType: str(row, 'MonType'),
     level,
     minHp: hpOf(minCol!, 'minHP'),
@@ -579,6 +589,8 @@ export function campaignWaves(
           const size = Math.max(1, idiv(w.streamTicks, spacing));
           const half = idiv(size, 2);
           const specials: WaveGroup[] = [];
+          // A raiser's party walks first, then the packs
+          if (lead.party) specials.push({ monster: defOf(lead.party.monster, d, levelOf(lead.party.monster)).id, count: lead.party.count, spacingTicks: spacing, rank: 'normal', mods: [] });
           for (const su of [entry.superunique ?? []].flat()) specials.push(...pack(su, 'unique', spacing, levelOf));
           if (i === n - 2) {
             const mods = resolveMods(balance, [...(schedule.champions[String(a + 1)] ?? []), ...(added.champions ?? [])]);
@@ -850,6 +862,7 @@ export function buildGameData(
   // Every monster of the roster at its own level on every difficulty (tests and tools look them up)
   const everyone = [
     ...Object.keys(m.roster),
+    ...Object.values(m.roster).flatMap((r) => (r.party ? [r.party] : [])),
     ...Object.values(m.campaign).flatMap((byDifficulty) => Object.values(byDifficulty).flatMap((ws) => ws.flatMap((w) => ('monster' in w ? [w.monster] : [])))),
     ...m.placeholder.map((p) => p.monster),
     ...[...m.superuniques, ...m.bosses].flatMap((b) => [b.id, ...(b.minion ? [b.minion] : [])]),

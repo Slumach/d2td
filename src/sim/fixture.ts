@@ -293,10 +293,12 @@ function fillSchedule(tables: Tables): Tables {
     rows.push(monster(id, id, { Level: 20, ...extra }));
   };
   for (const b of [...m.superuniques, ...m.bosses]) add(b.class, b.minion && b.minion !== b.class ? { minion1: b.minion } : {});
+  for (const [id, r] of Object.entries(m.roster)) if (r.party) add(id, { minion1: r.party, PartyMin: 2, PartyMax: 4 });
   for (const id of [
     ...Object.values(m.campaign).flatMap((byDifficulty) => Object.values(byDifficulty).flatMap((ws) => ws.flatMap((w) => ('monster' in w ? [w.monster] : [])))),
     ...m.superuniques.flatMap((b) => (b.minion ? [b.minion] : [])),
     ...Object.keys(m.roster),
+    ...Object.values(m.roster).flatMap((r) => (r.party ? [r.party] : [])),
   ]) {
     add(id);
   }

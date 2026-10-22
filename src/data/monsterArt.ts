@@ -14,6 +14,8 @@ interface WaveRef {
 }
 
 const campaign = monsters.campaign as Record<string, Record<string, WaveRef[]>>;
+/** A raiser's party walks with it (monsters.json roster party). */
+const partyOf = new Map(Object.entries(monsters.roster as Record<string, { party?: string }>).flatMap(([id, r]) => (r.party ? [[id, r.party] as const] : [])));
 const named = [...monsters.superuniques, ...monsters.bosses] as { id: string; class: string; minion?: string; superunique?: string }[];
 const namedById = new Map(named.map((b) => [b.id, b]));
 
@@ -24,7 +26,7 @@ export const WAVE_MONSTER_ART: readonly string[] = [
   ]),
 ];
 
-export const NAMED_ART: readonly string[] = [...new Set(named.flatMap((b) => [b.class, ...(b.minion ? [b.minion] : [])]))].filter((id) => !WAVE_MONSTER_ART.includes(id));
+export const NAMED_ART: readonly string[] = [...new Set([...named.flatMap((b) => [b.class, ...(b.minion ? [b.minion] : [])]), ...partyOf.values()])].filter((id) => !WAVE_MONSTER_ART.includes(id));
 
 /** The act whose palette each monster's art uses: the first act it walks in, Act 1 otherwise. */
 export const ART_ACT: Readonly<Record<string, number>> = (() => {
@@ -36,6 +38,7 @@ export const ART_ACT: Readonly<Record<string, number>> = (() => {
     for (const ws of Object.values(campaign[String(act)]!)) {
       for (const w of ws) {
         mark(w.monster, act);
+        mark(w.monster ? partyOf.get(w.monster) : undefined, act);
         for (const id of [w.boss, ...[w.superunique ?? []].flat()]) {
           const b = id ? namedById.get(id) : undefined;
           mark(b?.class, act);

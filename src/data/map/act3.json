@@ -1,0 +1,95 @@
+{
+  "comment": "Act 3's two maps for the ring, authored by us: the jungle from the Spider Forest to the Flayer Jungle (the field) and the Durance of Hate (the boss lair). Tiles are referenced by DT1 file, orientation and main-sub index (and v, which of a key's random variants); the art is read from the player's install and baked at extraction (tools/extract/map.ts). Scenery goes on the tiles src/data/map/ring.json gives each kind, so the picture matches the buildable mask.",
+  "palette": "global/palette/act3/pal.dat",
+  "seed": 3003,
+  "maps": {
+    "field": {
+      "floor": {
+        "file": "Act3/Ground/DarkGrass.dt1",
+        "ground": ["1-0"],
+        "sprinkle": { "file": "Act3/Jungle/Ruin.dt1", "tiles": ["14-34", "14-36", "14-38", "14-40", "14-42", "14-44", "14-46", "14-48", "14-50", "14-52"], "chancePct": 4 }
+      },
+      "road": {
+        "file": "Act3/Ground/DryMud.dt1",
+        "tiles": ["2-0", "2-1", "2-2"],
+        "halfWidth": 0.66,
+        "wobble": 0.22,
+        "edge": 0.18
+      },
+      "scenery": {
+        "treeline": {
+          "prefabs": ["tree1", "tree2", "tree3", "tree4", "tree5", "tree6", "tree7", "tree8", "tree9", "tree10", "tree11", "tree12", "grove1", "grove2", "grove3"],
+          "every": 2,
+          "outside": 1.5,
+          "front": { "file": "Act3/Jungle/Ruin.dt1", "tiles": ["14-34", "14-35", "14-36", "14-37", "14-38", "14-39", "14-40", "14-41", "14-42", "14-44", "14-45", "14-46", "14-47", "14-48", "14-49", "14-50", "14-51", "14-52"] }
+        },
+        "rocks": { "prefabs": ["totem1", "totem2", "totem3", "totem4"] },
+        "bushes": { "prefabs": ["fern1", "fern2", "fern3", "fern4", "fern5", "fern6", "cauldron"] },
+        "cottage": { "centre": "idol", "corners": "pygmytotem" }
+      }
+    },
+    "lair": {
+      "floor": {
+        "file": "Act3/Travincal/Floors.dt1",
+        "ground": ["46-16"],
+        "sprinkle": { "file": "Act3/Travincal/Floors.dt1", "tiles": ["46-18", "46-19", "46-20"], "chancePct": 12 }
+      },
+      "road": {
+        "file": "Act3/Travincal/Floors.dt1",
+        "tiles": ["46-0", "46-1", "46-30", "46-31"],
+        "halfWidth": 0.72,
+        "wobble": 0.08,
+        "edge": 0.1
+      },
+      "scenery": {
+        "treeline": {
+          "prefabs": ["wall1", "wall2", "wall3", "wall4", "pillar", "pillar"],
+          "every": 2.5,
+          "outside": 1,
+          "front": { "file": "Act3/Travincal/Floors.dt1", "tiles": ["46-19", "46-20", "46-18"] }
+        },
+        "rocks": { "prefabs": ["pillar"] },
+        "bushes": { "prefabs": ["corpses1", "corpses2"] },
+        "cottage": { "centre": "gate", "corners": "pillar" }
+      }
+    }
+  },
+  "prefabs": {
+    "tree1": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "0-23", "at": [0, 0] }] },
+    "tree2": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "0-22", "at": [0, 0] }] },
+    "tree3": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "0-20", "at": [0, 0] }] },
+    "tree4": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "0-19", "at": [0, 0] }] },
+    "tree5": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "0-18", "at": [0, 0] }] },
+    "tree6": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "0-10", "at": [0, 0] }] },
+    "tree7": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "0-8", "at": [0, 0] }] },
+    "tree8": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "0-6", "at": [0, 0] }] },
+    "tree9": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "1-6", "at": [0, 0] }] },
+    "tree10": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "1-4", "at": [0, 0] }] },
+    "tree11": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "1-2", "at": [0, 0] }] },
+    "tree12": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "0-2", "at": [0, 0] }] },
+    "grove1": { "pieces": [{ "file": "Act3/Jungle/TreeGrp.dt1", "o": 2, "key": "10-0", "at": [0, 0] }, { "file": "Act3/Jungle/TreeGrp.dt1", "o": 1, "key": "10-0", "at": [0, 0] }] },
+    "grove2": { "pieces": [{ "file": "Act3/Jungle/TreeGrp.dt1", "o": 2, "key": "10-2", "at": [0, 0] }, { "file": "Act3/Jungle/TreeGrp.dt1", "o": 1, "key": "10-2", "at": [0, 0] }] },
+    "grove3": { "pieces": [{ "file": "Act3/Jungle/TreeGrp.dt1", "o": 2, "key": "10-4", "at": [0, 0] }, { "file": "Act3/Jungle/TreeGrp.dt1", "o": 1, "key": "10-4", "at": [0, 0] }] },
+    "totem1": { "pieces": [{ "file": "Act3/Jungle/TreeGrp.dt1", "o": 12, "key": "20-0", "at": [0, 0] }] },
+    "totem2": { "pieces": [{ "file": "Act3/Jungle/TreeGrp.dt1", "o": 12, "key": "20-1", "at": [0, 0] }] },
+    "totem3": { "pieces": [{ "file": "Act3/Jungle/TreeGrp.dt1", "o": 12, "key": "20-2", "at": [0, 0] }] },
+    "totem4": { "pieces": [{ "file": "Act3/Jungle/TreeGrp.dt1", "o": 12, "key": "20-3", "at": [0, 0] }] },
+    "fern1": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "0-15", "at": [0, 0] }] },
+    "fern2": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "0-16", "at": [0, 0] }] },
+    "fern3": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "0-17", "at": [0, 0] }] },
+    "fern4": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "0-12", "at": [0, 0] }] },
+    "fern5": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "1-8", "at": [0, 0] }] },
+    "fern6": { "pieces": [{ "file": "Act3/Jungle/Trees.dt1", "o": 14, "key": "1-10", "at": [0, 0] }] },
+    "cauldron": { "pieces": [{ "file": "Act3/Jungle/Pygmy.dt1", "o": 12, "key": "16-1", "at": [0, 0] }] },
+    "pygmytotem": { "pieces": [{ "file": "Act3/Jungle/Pygmy.dt1", "o": 12, "key": "16-2", "at": [0, 0] }] },
+    "idol": { "pieces": [{ "file": "Act3/Jungle/Ruin.dt1", "o": 12, "key": "16-3", "at": [0, 0] }] },
+    "wall1": { "pieces": [{ "file": "Act3/Travincal/Walls.dt1", "o": 2, "key": "48-10", "at": [0, 0] }, { "file": "Act3/Travincal/Walls.dt1", "o": 1, "key": "48-10", "at": [0, 0] }] },
+    "wall2": { "pieces": [{ "file": "Act3/Travincal/Walls.dt1", "o": 2, "key": "48-9", "at": [0, 0] }, { "file": "Act3/Travincal/Walls.dt1", "o": 1, "key": "48-9", "at": [0, 0] }] },
+    "wall3": { "pieces": [{ "file": "Act3/Travincal/Walls.dt1", "o": 2, "key": "48-3", "at": [0, 0] }, { "file": "Act3/Travincal/Walls.dt1", "o": 1, "key": "48-3", "at": [0, 0] }] },
+    "wall4": { "pieces": [{ "file": "Act3/Travincal/Walls.dt1", "o": 2, "key": "48-2", "at": [0, 0] }, { "file": "Act3/Travincal/Walls.dt1", "o": 1, "key": "48-2", "at": [0, 0] }] },
+    "pillar": { "pieces": [{ "file": "Act3/Travincal/Walls.dt1", "o": 7, "key": "48-0", "at": [0, 0] }] },
+    "corpses1": { "pieces": [{ "file": "Act3/Travincal/Floors.dt1", "o": 12, "key": "46-0", "at": [0, 0], "v": 0 }] },
+    "corpses2": { "pieces": [{ "file": "Act3/Travincal/Floors.dt1", "o": 12, "key": "46-0", "at": [0, 0], "v": 1 }] },
+    "gate": { "pieces": [{ "file": "Act3/Travincal/Walls.dt1", "o": 2, "key": "48-4", "at": [0, 0] }, { "file": "Act3/Travincal/Walls.dt1", "o": 1, "key": "48-4", "at": [0, 0] }] }
+  }
+}

@@ -54,8 +54,12 @@ export function layerAlpha(transparent: boolean, drawEffect: number): number {
 
 export function composite(cof: Cof, layers: CompositeLayer[], palette: Palette): CompositeResult {
   const byType = new Map<number, CompositeLayer>();
+  // D2 orders directions so the first 8 of 16 (or 32) are the 8 facings an 8-direction file
+  // has; a COF with more directions than its layers (Mephisto: 16 over 8-direction DC6
+  // layers) is drawn in the facings every layer has
+  const directions = Math.min(cof.numberOfDirections, ...layers.map((l) => l.dcc.numberOfDirections));
   for (const layer of layers) {
-    if (layer.dcc.numberOfDirections !== cof.numberOfDirections) {
+    if (layer.dcc.numberOfDirections % directions !== 0 || cof.numberOfDirections % directions !== 0) {
       throw new Error(
         `Layer ${compositeCode(layer.type)} has ${layer.dcc.numberOfDirections} directions, COF has ${cof.numberOfDirections}`,
       );
@@ -72,7 +76,7 @@ export function composite(cof: Cof, layers: CompositeLayer[], palette: Palette):
   let right = -Infinity;
   let bottom = -Infinity;
   for (const layer of layers) {
-    for (const dir of layer.dcc.directions) {
+    for (const dir of layer.dcc.directions.slice(0, directions)) {
       left = Math.min(left, dir.box.left);
       top = Math.min(top, dir.box.top);
       right = Math.max(right, dir.box.left + dir.box.width);
@@ -83,7 +87,7 @@ export function composite(cof: Cof, layers: CompositeLayer[], palette: Palette):
   const frameHeight = bottom - top;
 
   const frames: Uint8Array[][] = [];
-  for (let d = 0; d < cof.numberOfDirections; d++) {
+  for (let d = 0; d < directions; d++) {
     const dirFrames: Uint8Array[] = [];
     for (let f = 0; f < cof.framesPerDirection; f++) {
       const out = new Uint8Array(frameWidth * frameHeight * 4);

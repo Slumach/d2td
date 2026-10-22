@@ -2,6 +2,8 @@
 // DecodeFrame) and dc6_frame_header.go. Structure follows the Go code. Changes: frames decode
 // to palette indices on request instead of being held decoded.
 
+import type { Dcc, DccDirection, Rect } from './dcc.ts';
+
 export interface Dc6Frame {
   flipped: boolean;
   width: number;
@@ -68,4 +70,34 @@ export function decodeDc6Frame(frame: Dc6Frame): Uint8Array {
     }
   }
   return out;
+}
+
+/**
+ * A DC6 in the shape a DCC decodes to, for COF layers stored as DC6 (Mephisto's, the Sand
+ * Maggot Queen's death): each direction's box is the union of its frames, and each frame's
+ * pixels are laid into that box. A DC6 frame's offset is its bottom-left corner relative to
+ * the sprite origin.
+ */
+export function dc6AsDcc(dc6: Dc6): Dcc {
+  const directions: DccDirection[] = [];
+  for (let d = 0; d < dc6.directions; d++) {
+    const frames = dc6.frames.slice(d * dc6.framesPerDirection, (d + 1) * dc6.framesPerDirection);
+    const left = Math.min(...frames.map((f) => f.offsetX));
+    const top = Math.min(...frames.map((f) => f.offsetY - f.height));
+    const right = Math.max(...frames.map((f) => f.offsetX + f.width));
+    const bottom = Math.max(...frames.map((f) => f.offsetY));
+    const box: Rect = { left, top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) };
+    directions.push({
+      box,
+      frames: frames.map((f) => {
+        const pixels = decodeDc6Frame(f);
+        const pixelData = new Uint8Array(box.width * box.height);
+        const dx = f.offsetX - box.left;
+        const dy = f.offsetY - f.height - box.top;
+        for (let y = 0; y < f.height; y++) pixelData.set(pixels.subarray(y * f.width, (y + 1) * f.width), (y + dy) * box.width + dx);
+        return { width: f.width, height: f.height, xOffset: f.offsetX, yOffset: f.offsetY, box: { left: f.offsetX, top: f.offsetY - f.height, width: f.width, height: f.height }, pixelData };
+      }),
+    });
+  }
+  return { version: 6, numberOfDirections: dc6.directions, framesPerDirection: dc6.framesPerDirection, directions };
 }
