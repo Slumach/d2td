@@ -9,7 +9,7 @@ import { arcAt } from './map.ts';
 import { aliveOf, createMatch, matchHash, playersIn, stepMatch, type Match, type PlayerCommand } from './match.ts';
 import { createSim, runLog } from './sim.ts';
 import type { TimedCommand } from './state.ts';
-import { stateHash } from './hash.ts';
+import { hashValue, stateHash } from './hash.ts';
 import { addMonster, placeTower } from './testkit.ts';
 
 const data = fixtureGameData(3);
@@ -152,7 +152,10 @@ describe('checkpoints', () => {
       const t = b.state.tick;
       stepMatch(b, log.filter((c) => c.tick === t).map(({ player, command }) => ({ player, command })));
     }
-    expect(matchHash(b)).toBe(matchHash(a));
+    // Items aside: a checkpoint keeps none (they went home to the profile), so compare without them
+    const bare = (m: Match) =>
+      hashValue({ match: { ...m.state, trades: [] }, zones: m.zones.map((z) => ({ ...z.state, drops: [], inventories: z.state.inventories.map(() => []) })) }, 'bare');
+    expect(bare(b)).toBe(bare(a));
   });
 });
 

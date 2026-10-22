@@ -43,8 +43,22 @@ export function takeCheckpoint(match: Match, seed: number, log: readonly TimedPl
     act: wave?.act ?? 1,
     tick: match.state.tick,
     log: copy([...log]),
-    match: copy(match.state),
-    zones: copy(match.zones.map((z) => z.state)),
+    match: { ...copy(match.state), trades: [] },
+    zones: copy(match.zones.map((z) => z.state)).map(withoutItems),
+  };
+}
+
+/**
+ * A ring's state with its items taken out: towers unequipped, inventories and the ground
+ * empty. Items live in the players' profiles (they went home when the game was left), so a
+ * Continue starts with bare towers and each player's inventory loads from their profile.
+ */
+function withoutItems(state: SimState): SimState {
+  return {
+    ...state,
+    towers: state.towers.map(({ gear: _gear, ...t }) => t),
+    drops: [],
+    inventories: state.inventories.map(() => []),
   };
 }
 

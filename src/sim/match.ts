@@ -15,6 +15,7 @@ import { hashValue } from './hash.ts';
 import { ARC_COUNT } from './map.ts';
 import { createSim, step } from './sim.ts';
 import type { Command, Sim } from './state.ts';
+import { applyTrade, isTradeCommand, type Trade } from './items/trade.ts';
 
 export type MatchMode = 'solo' | 'ffa' | 'team';
 export const MATCH_MODES: readonly MatchMode[] = ['solo', 'ffa', 'team'];
@@ -34,6 +35,8 @@ export interface MatchState {
   status: 'playing' | 'over';
   /** Players who won, once the match is over. Empty means everyone lost. */
   winners: number[];
+  /** Open trade windows between players. */
+  trades: Trade[];
 }
 
 export interface Match {
@@ -54,7 +57,7 @@ export function createMatch(data: GameData, seed: number, mode: MatchMode, playe
     data,
     zones,
     players,
-    state: { tick: 0, mode, status: 'playing', winners: [] },
+    state: { tick: 0, mode, status: 'playing', winners: [], trades: [] },
   };
 }
 
@@ -93,7 +96,8 @@ export function stepMatch(match: Match, commands: readonly PlayerCommand[]): voi
   const perZone: Command[][] = match.zones.map(() => []);
   for (const { player, command } of commands) {
     if (player < 0 || player >= match.players) continue;
-    perZone[ringOf(match, player)]!.push({ ...command, player: seatOf(match, player) });
+    if (isTradeCommand(command)) applyTrade(match, player, command);
+    else perZone[ringOf(match, player)]!.push({ ...command, player: seatOf(match, player) });
   }
 
   match.zones.forEach((zone, i) => step(zone, perZone[i]!));

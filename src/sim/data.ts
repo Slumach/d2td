@@ -137,6 +137,7 @@ export interface BalanceJson {
   endless: { tierWaves: number; startLevel: number; levelPerWave: number; hpPctPerWave: number; damagePctPerWave: number };
   /** Drops (src/sim/items/drops.ts): the rune multiplier, endless Tier scaling and Smith's Hammer's rarity. */
   drops: DropRules;
+  vendorCap: VendorCap;
   /** Cost of the first level-up at T1, T2, T3. */
   levelCostBase: number[];
   /** Each further level-up within a tier costs this percent of the previous one. */
@@ -401,6 +402,8 @@ export interface GameData {
   items: ItemData;
   /** Drop tuning (balance.json drops). */
   drops: DropRules;
+  /** The most a vendor pays for one item, by stage (balance.json vendorCap; src/sim/items/price.ts). */
+  vendorCap: VendorCap;
   /** skills.txt skill name to its Id, for items that name a skill by number. */
   skillIds: Record<string, string>;
   /**
@@ -409,6 +412,13 @@ export interface GameData {
    * id, so missiles and curses look it up like any skill.
    */
   skillVariant: (id: string, plus: number, weapon?: { min: number; max: number }) => string;
+}
+
+export interface VendorCap {
+  /** Normal, Nightmare, Hell: the cap in Act 1 and in Act 5, in a straight line between by act. */
+  byDifficulty: [number, number][];
+  /** Each endless Tier raises Hell's cap by this percent, compounding. */
+  tierPct: number;
 }
 
 export interface DropRules {
@@ -1084,6 +1094,7 @@ export function buildGameData(
     rules,
     items: buildItemData(tables),
     drops: design.balance.drops,
+    vendorCap: design.balance.vendorCap,
     skillIds,
     skillVariant,
     ...(extendWaves ? { extendWaves } : {}),

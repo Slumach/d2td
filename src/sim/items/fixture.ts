@@ -117,7 +117,7 @@ export const FIXTURE_ITEM_TABLES: ItemTables = {
     prop('hp', [1, 'maxhp']),
   ],
   uniqueitems: [
-    { index: 'Test Blade', code: 'tsw', lvl: 5, 'lvl req': 5, rarity: 1, prop1: 'dmg%', min1: 100, max1: 150, prop2: 'allskills', min2: 1, max2: 1, prop3: 'sock', min3: 2, max3: 2 },
+    { index: 'Test Blade', code: 'tsw', lvl: 5, 'lvl req': 5, rarity: 1, 'cost mult': 5, 'cost add': 5000, prop1: 'dmg%', min1: 100, max1: 150, prop2: 'allskills', min2: 1, max2: 1, prop3: 'sock', min3: 2, max3: 2 },
     { index: 'Test Ring', code: 'rin', lvl: 10, 'lvl req': 10, rarity: 1, prop1: 'mag%', min1: 20, max1: 30, prop2: 'cast2', min2: 10, max2: 10 },
     { index: 'Disabled Unique', code: 'tsw', lvl: 1, rarity: 1, disabled: 1, prop1: 'dmg%', min1: 1, max1: 1 },
   ],

@@ -148,6 +148,9 @@ export interface AffixDef {
   itypes: string[];
   etypes: string[];
   props: PropRoll[];
+  /** Price columns: cost x multiply / 1024 + add. */
+  multiply: number;
+  add: number;
 }
 
 export interface RunewordDef {
@@ -409,6 +412,8 @@ export function buildItemData(tables: Tables): ItemData {
         itypes: [1, 2, 3, 4, 5, 6, 7].map((k) => str(r, `itype${k}`)).filter((t) => t),
         etypes: [1, 2, 3, 4, 5].map((k) => str(r, `etype${k}`)).filter((t) => t),
         props: props(r, (k) => `mod${k}code`, (k) => `mod${k}param`, (k) => `mod${k}min`, (k) => `mod${k}max`, 3),
+        multiply: num(r, 'multiply'),
+        add: num(r, 'add'),
       }));
 
   const runewords: RunewordDef[] = (tables.runes ?? [])

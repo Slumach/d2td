@@ -20,6 +20,7 @@ import type { Command, Sim, TimedCommand, Tower } from './state.ts';
 import { updateSummons } from './archetypes/summon.ts';
 import { geared, gearOf, withGear } from './items/tower.ts';
 import { collectCleared, pickup } from './items/loot.ts';
+import { equip, hammer, loadInventory, moveItem, sellItem, socket, stashIn, stashOut, unequip } from './items/inventory.ts';
 import { build, evolve, pickBranch, pickSkill, sell, setTargeting, towerById, upgrade, upgradeTier } from './towers.ts';
 
 export type * from './state.ts';
@@ -118,6 +119,34 @@ function applyCommand(sim: Sim, command: Command): void {
   if (command.type === 'build') return build(sim, player, command.x, command.y, command.cls, command.skill);
   if (command.type === 'callWave') return sendEarly(sim);
   if (command.type === 'pickup') return pickup(sim, player, command.dropId);
+  switch (command.type) {
+    case 'loadInventory':
+      return loadInventory(sim, player, command.items);
+    case 'moveItem':
+      return moveItem(sim, player, command.uid, command.x, command.y);
+    case 'stashIn':
+      return stashIn(sim, player, command.uid);
+    case 'stashOut':
+      return stashOut(sim, player, command.item, command.x, command.y);
+    case 'equip':
+      return equip(sim, player, command.towerId, command.slot, command.item);
+    case 'unequip': {
+      const to = command.toStash ? 'stash' : command.x !== undefined && command.y !== undefined ? { x: command.x, y: command.y } : undefined;
+      return unequip(sim, player, command.towerId, command.slot, to);
+    }
+    case 'socket':
+      return socket(sim, player, command.target, command.uid);
+    case 'hammer':
+      return hammer(sim, player, command.target, command.uid);
+    case 'sellItem':
+      return sellItem(sim, player, command.uid);
+    case 'tradeOpen':
+    case 'tradeOffer':
+    case 'tradeAccept':
+    case 'tradeCancel':
+      // The match handles trades: they span rings
+      return;
+  }
   if (command.type === 'evolve') {
     const a = towerById(sim, command.towerA);
     const b = towerById(sim, command.towerB);

@@ -4,7 +4,11 @@
 import type { MonsterAuraFx, TowerBuff } from './archetypes/types.ts';
 import type { GameData } from './data.ts';
 import type { Gear } from './items/gear.ts';
+import type { Slot } from './items/data.ts';
+import type { ItemRef } from './items/inventory.ts';
+import type { Item } from './items/item.ts';
 import type { Drop, InvItem } from './items/loot.ts';
+import type { TradeCommand } from './items/trade.ts';
 import type { GameMap } from './map.ts';
 import type { Rng } from './rng.ts';
 
@@ -69,7 +73,19 @@ export type CommandBody =
   | { type: 'sell'; towerId: number }
   | { type: 'callWave' }
   /** Picks up one of the player's drops into their inventory. */
-  | { type: 'pickup'; dropId: number };
+  | { type: 'pickup'; dropId: number }
+  /** Inventory, stash and gear (src/sim/items/inventory.ts); items from outside the sim travel whole. */
+  | { type: 'loadInventory'; items: InvItem[] }
+  | { type: 'moveItem'; uid: string; x: number; y: number }
+  | { type: 'stashIn'; uid: string }
+  | { type: 'stashOut'; item: Item; x: number; y: number }
+  | { type: 'equip'; towerId: number; slot: Slot; item: Item }
+  | { type: 'unequip'; towerId: number; slot: Slot; x?: number; y?: number; toStash?: boolean }
+  | { type: 'socket'; target: ItemRef; uid: string }
+  | { type: 'hammer'; target: ItemRef; uid: string }
+  | { type: 'sellItem'; uid: string }
+  /** The trade window: handled by the match, which spans rings (src/sim/items/trade.ts). */
+  | TradeCommand;
 
 export interface TimedCommand {
   tick: number;
