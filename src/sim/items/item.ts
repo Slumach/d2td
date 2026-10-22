@@ -6,7 +6,7 @@
 // stored with the item, so it never needs re-rolling.
 
 import { rollInt, type Rng } from '../rng.ts';
-import { CLASS_CODES, isType, maxSocketsAt, type AffixDef, type ItemBase, type ItemData, type PropRoll, type RunewordDef, type Slot } from './data.ts';
+import { CLASS_CODES, isType, maxSocketsAt, type AffixDef, type RareName, type ItemBase, type ItemData, type PropRoll, type RunewordDef, type Slot } from './data.ts';
 
 export type Quality = 'low' | 'normal' | 'superior' | 'magic' | 'rare' | 'set' | 'unique' | 'runeword';
 
@@ -235,7 +235,7 @@ export function rollItem(data: ItemData, rng: Rng, opts: RollOptions): Item {
       (prefix ? item.prefixes : item.suffixes).push(pick.id);
       addProps(pick.props);
     }
-    item.rareName = rareName(data, rng);
+    item.rareName = rareName(data, rng, base);
     return finishSockets(data, item, base);
   }
   // Normal or superior: white items may come socketed, as D2 rolls them
@@ -254,10 +254,10 @@ function finishSockets(_data: ItemData, item: Item, base: ItemBase): Item {
 }
 
 /** A rare's two-word name, from rareprefix.txt and raresuffix.txt. */
-function rareName(data: ItemData, rng: Rng): [string, string] {
-  const a = data.rarePrefixes[rollInt(rng, 0, Math.max(0, data.rarePrefixes.length - 1))] ?? 'Rare';
-  const b = data.rareSuffixes[rollInt(rng, 0, Math.max(0, data.rareSuffixes.length - 1))] ?? 'Item';
-  return [a, b];
+function rareName(data: ItemData, rng: Rng, base: ItemBase): [string, string] {
+  const fits = (list: RareName[]) => list.filter((n) => n.itypes.length === 0 || n.itypes.some((t) => isType(data, base, t)));
+  const pick = (list: RareName[], fallback: string) => list[rollInt(rng, 0, Math.max(0, list.length - 1))]?.name ?? fallback;
+  return [pick(fits(data.rarePrefixes), 'Rare'), pick(fits(data.rareSuffixes), 'Item')];
 }
 
 /** Which gem column applies to an item: weapons take weaponMod, helms and body armour helmMod, shields shieldMod. */

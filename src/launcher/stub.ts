@@ -48,5 +48,10 @@ export function stubLauncher(): LauncherApi {
       saves.delete(slot);
       return Promise.resolve();
     },
+    loadProfile: () => Promise.resolve(localStorage.getItem('d2td:profile')),
+    saveProfile: (json) => {
+      localStorage.setItem('d2td:profile', json);
+      return Promise.resolve();
+    },
   };
 }

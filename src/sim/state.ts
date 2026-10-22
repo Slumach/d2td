@@ -295,6 +295,8 @@ export interface SimState {
   drops: Drop[];
   /** Each player's inventory this game (D2's 10 x 4 grid). */
   inventories: InvItem[][];
+  /** Items leaving the game for each player's stash (a sold tower's gear with no room in the inventory). */
+  homeward: Item[][];
 }
 
 /** An aura source this tick, kept for the renderer's radius rings. */

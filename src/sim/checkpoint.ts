@@ -59,6 +59,7 @@ function withoutItems(state: SimState): SimState {
     towers: state.towers.map(({ gear: _gear, ...t }) => t),
     drops: [],
     inventories: state.inventories.map(() => []),
+    homeward: state.homeward.map(() => []),
   };
 }
 

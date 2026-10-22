@@ -185,14 +185,15 @@ export interface ItemData {
   runewords: RunewordDef[];
   gems: Record<string, GemDef>;
   properties: Record<string, PropertyDef>;
-  /** itemtypes.txt: a type's Equiv chain (itself first). */
+  /** itemtypes.txt: a type's Equiv chain (itself first), and its name. */
   typeChain: Record<string, string[]>;
+  typeNames: Record<string, string>;
   /** D2R's English strings by key. */
   strings: Record<string, string>;
   /** Rune codes in order of rarity: r01 (El) to r33 (Zod). */
   runeOrder: string[];
   /** Rare names' two words (rareprefix.txt, raresuffix.txt). */
-  rarePrefixes: string[];
+  rarePrefixes: RareName[];
   /** treasureclassex.txt by name, and each group's classes by level (for D2's level upgrade). */
   treasureClasses: Record<string, TreasureClass>;
   tcGroups: Record<number, TreasureClass[]>;
@@ -200,7 +201,9 @@ export interface ItemData {
   autoTc: Record<string, ItemBase[]>;
   /** itemratio.txt, the expansion rows. */
   itemRatios: ItemRatio[];
-  rareSuffixes: string[];
+  /** itemstatcost.txt: how each stat reads in a tooltip. */
+  statDescs: Record<string, StatDesc>;
+  rareSuffixes: RareName[];
 }
 
 /** treasureclassex.txt: a class's picks, its NoDrop weight, its quality bonuses and its entries. */
@@ -213,6 +216,18 @@ export interface TreasureClass {
   /** Unique, Set, Rare, Magic columns: x/1024 off each quality's roll (higher is better). */
   quality: { unique: number; set: number; rare: number; magic: number };
   items: { name: string; prob: number }[];
+}
+
+/** itemstatcost.txt's tooltip columns: priority (higher first), function and string keys, and the group a stat shares a line with. */
+export interface StatDesc {
+  priority: number;
+  func: number;
+  pos: string;
+  neg: string;
+  str2: string;
+  group: number;
+  groupFunc: number;
+  groupPos: string;
 }
 
 /** itemratio.txt: the quality odds for normal, exceptional and elite, and class items. */
@@ -246,6 +261,12 @@ function props(row: TableRow, code: (i: number) => string, param: (i: number) =>
 function num(row: TableRow, key: string): number {
   const v = row[key];
   return typeof v === 'number' ? v : 0;
+}
+
+/** A rare name word and the item types it may name (rareprefix.txt, raresuffix.txt itype columns). */
+export interface RareName {
+  name: string;
+  itypes: string[];
 }
 
 export function buildItemData(tables: Tables): ItemData {
@@ -491,6 +512,11 @@ export function buildItemData(tables: Tables): ItemData {
   }
   for (const g of Object.values(tcGroups)) g.sort((a, b) => a.level - b.level);
 
+  const rareNames = (rows: TableRow[]): RareName[] =>
+    rows
+      .filter((r) => str(r, 'name'))
+      .map((r) => ({ name: nameOf(str(r, 'name')), itypes: [1, 2, 3, 4, 5, 6, 7].map((k) => str(r, `itype${k}`)).filter((t) => t) }));
+
   const runeOrder = Object.values(bases)
     .filter((b) => b.isRune)
     .map((b) => b.code)
@@ -507,12 +533,30 @@ export function buildItemData(tables: Tables): ItemData {
     gems,
     properties,
     typeChain,
+    typeNames: Object.fromEntries([...typeRows].map(([code, r]) => [code, str(r, 'ItemType') || code])),
     strings,
     runeOrder,
-    rarePrefixes: (tables.rareprefix ?? []).map((r) => nameOf(str(r, 'name'))).filter((n) => n),
-    rareSuffixes: (tables.raresuffix ?? []).map((r) => nameOf(str(r, 'name'))).filter((n) => n),
+    rarePrefixes: rareNames(tables.rareprefix ?? []),
+    rareSuffixes: rareNames(tables.raresuffix ?? []),
     treasureClasses,
     tcGroups,
+    statDescs: Object.fromEntries(
+      (tables.itemstatcost ?? [])
+        .filter((r) => str(r, 'Stat'))
+        .map((r) => [
+          str(r, 'Stat'),
+          {
+            priority: num(r, 'descpriority'),
+            func: num(r, 'descfunc'),
+            pos: str(r, 'descstrpos'),
+            neg: str(r, 'descstrneg'),
+            str2: str(r, 'descstr2'),
+            group: num(r, 'dgrp'),
+            groupFunc: num(r, 'dgrpfunc'),
+            groupPos: str(r, 'dgrpstrpos'),
+          },
+        ]),
+    ),
     autoTc: {},
     itemRatios: (tables.itemratio ?? [])
       .filter((r) => num(r, 'Version') === 1)

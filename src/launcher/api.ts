@@ -84,6 +84,9 @@ export interface LauncherApi {
   loadCheckpoint(slot: SaveSlot): Promise<string | null>;
   saveCheckpoint(slot: SaveSlot, json: string): Promise<void>;
   clearCheckpoint(slot: SaveSlot): Promise<void>;
+  /** The player's profile (inventory, stash) as JSON, or null before the first save. */
+  loadProfile(): Promise<string | null>;
+  saveProfile(json: string): Promise<void>;
 }
 
 /** Single player's save, and the host's multiplayer save. */

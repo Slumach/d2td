@@ -62,7 +62,10 @@ import {
   type IconIndex,
 } from './assets.ts';
 import { D2Hud, hudManifest, preloadHud, type HudNumbers, type PanelButton, type SkillSlot, type SlotItem, type TowerPanelModel } from './d2hud.ts';
-import { InventoryPanel } from './inventory.ts';
+import { ItemPanels, type ItemPanelHost } from './itempanels.ts';
+import { preloadItemArt } from './itemart.ts';
+import { Keeper } from './keeper.ts';
+import { tradeOf } from '../sim/items/trade.ts';
 import { angle64, spriteDirection } from './directions.ts';
 import { LocalDriver, NetDriver, type Driver } from './driver.ts';
 import { facingFromVector, type Facing8 } from './facing.ts';
@@ -185,7 +188,9 @@ export class GameScene extends Phaser.Scene {
   private stageText!: Phaser.GameObjects.Text;
   private minimap!: Minimap;
   /** D2R's inventory panel, with the HUD art. */
-  private inventory: InventoryPanel | undefined;
+  private inventory: ItemPanels | undefined;
+  /** The player's profile, kept in step with the game (inventory, stash, items in play). */
+  private keeper: Keeper | undefined;
   private aliveGfx!: Phaser.GameObjects.Graphics;
   private aliveText!: Phaser.GameObjects.Text;
   private groundGfx: Phaser.GameObjects.Graphics | undefined;
@@ -238,6 +243,7 @@ export class GameScene extends Phaser.Scene {
     preloadSounds(this);
     preloadHud(this);
     preloadFrontend(this);
+    preloadItemArt(this);
     this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
       this.add.text(16, 16, `Missing ${file.src}. Run npm run extract first.`, { color: '#e0c080' }).setDepth(9000);
     });
@@ -317,6 +323,8 @@ export class GameScene extends Phaser.Scene {
       this.saves = 'solo';
     }
     this.waveSeen = this.sim.state.wave;
+    this.keeper = new Keeper(this.registry.get('launcher') as LauncherApi | undefined, this.gameData.items);
+    this.keeper.begin((c) => this.issue(c));
     this.icons = iconIndex(this);
     createAnimations(this);
     this.fx = this.camera.asWorld(() => new SkillFx(this, DEPTH.effects));
@@ -334,7 +342,7 @@ export class GameScene extends Phaser.Scene {
           onMenu: () => this.openMenu(),
         })
       : undefined;
-    this.inventory = hudArt && InventoryPanel.available(this, hudArt) ? new InventoryPanel(this, hudArt) : undefined;
+    this.inventory = hudArt && ItemPanels.available(this, hudArt) ? new ItemPanels(this, hudArt, this.itemHost()) : undefined;
     // The plain HUD and panel backgrounds sit over the map, so tall scenery never paints across them
     if (!this.d2) this.add.graphics().setDepth(DEPTH.chrome).fillStyle(0x1a1a14).fillRect(0, 0, GAME_WIDTH, HUD_HEIGHT).fillRect(0, PANEL_TOP, GAME_WIDTH, GAME_HEIGHT - PANEL_TOP);
     this.camera.asWorld(() => {
@@ -386,6 +394,7 @@ export class GameScene extends Phaser.Scene {
     // Keys 1 to n: on a team ring, look at that player's arc; in FFA, watch their ring
     this.input.keyboard?.on('keydown-ESC', () => {
       // As in D2, Escape closes an open panel before it opens the menu
+      if (this.inventory?.holding) return this.inventory.dropHeld();
       if (this.inventory?.open) return this.inventory.hide();
       this.openMenu();
     });
@@ -421,6 +430,7 @@ export class GameScene extends Phaser.Scene {
 
   private onMapClick(p: Phaser.Input.Pointer): void {
     if (!this.driver || this.sim.state.status !== 'playing' || this.halted) return;
+    if (this.inventory?.holding) return;
     const tile = this.tileAt(p);
     if (!tile) return;
     // Anyone's tower can be looked at; only your own arc's free tiles can be built on
@@ -476,7 +486,7 @@ export class GameScene extends Phaser.Scene {
 
   private toggleInventory(): void {
     if (!this.inventory || !this.scene.isActive() || this.scene.isActive('Pause')) return;
-    this.inventory.toggle(this.gold);
+    this.inventory.toggle();
   }
 
   /** Whether this player may save: single player, or the host of a multiplayer game. */
@@ -496,8 +506,12 @@ export class GameScene extends Phaser.Scene {
 
   /** A fresh single-player run on the next seed: the end-of-run click and the pause menu's Restart. */
   restartRun(): void {
+    // Everything the last run's towers wore comes home first
+    if (this.driver) this.keeper?.leave(this.ownSim, this.seat);
+    this.inventory?.hide();
     this.seed++;
     this.driver = new LocalDriver(this.gameData, this.seed);
+    this.keeper?.begin((c) => this.issue(c));
     this.waveSeen = 0;
     this.redrawGround();
     this.clearViews();
@@ -548,6 +562,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private leaveOnline(): void {
+    if (this.driver) this.keeper?.leave(this.ownSim, this.seat);
     void MpSession.of(this.registry.get('launcher') as LauncherApi).leave();
     this.clearViews();
     this.driver = undefined;
@@ -592,6 +607,8 @@ export class GameScene extends Phaser.Scene {
     this.drawOverlay();
     this.drawHud();
     this.drawPanel();
+    // The item panels are screen furniture: drawn by the UI camera, outside asWorld
+    this.inventory?.sync();
     this.camera.asWorld(() => this.fx?.update());
     this.minimap.draw(this.sim, (arc) => this.arcColour(arc));
   }
@@ -635,6 +652,57 @@ export class GameScene extends Phaser.Scene {
     this.syncMissiles();
     this.syncSummons();
     this.drops?.sync(this.sim.data.items, s.drops, this.seat);
+    this.keeper?.sync(this.ownSim, this.seat);
+  }
+
+  /** This player's own ring (in FFA the one on screen may be someone else's). */
+  private get ownSim(): Sim {
+    const match = this.driver!.match;
+    return match.zones[ringOf(match, this.driver!.me)]!;
+  }
+
+  /** What the inventory and stash panels need from the game. */
+  private itemHost(): ItemPanelHost {
+    const scene = this;
+    const names = Object.fromEntries(Object.entries(this.gameData.skillIds).map(([name, id]) => [id, name]));
+    return {
+      data: this.gameData.items,
+      sim: () => (scene.driver ? scene.ownSim : undefined),
+      seat: () => scene.seat,
+      tower: () => {
+        const sel = scene.selection;
+        if (!scene.driver || sel?.kind !== 'tower' || !scene.onOwnRing) return undefined;
+        const t = towerById(scene.sim, sel.id);
+        return t && t.owner === scene.seat ? t : undefined;
+      },
+      issue: (c) => scene.issue(c),
+      get keeper() {
+        return scene.keeper!;
+      },
+      skillName: (p) => names[p] ?? p,
+      sound: (n) => scene.sounds.item(n),
+      toast: (t) => scene.toast(t),
+      others: () => (scene.driver?.online ? scene.driver.players.filter((p) => p.slot !== scene.driver!.me) : []),
+      trade: () => {
+        const d = scene.driver;
+        const t = d && tradeOf(d.match, d.me);
+        if (!d || !t) return undefined;
+        const mine = t.a === d.me ? 0 : 1;
+        const other = mine === 0 ? t.b : t.a;
+        const side = (player: number, k: 0 | 1) => {
+          const zone = d.match.zones[ringOf(d.match, player)]!;
+          const inv = zone.state.inventories[seatOf(d.match, player)] ?? [];
+          const s = t.sides[k];
+          return {
+            name: d.players.find((p) => p.slot === player)?.name ?? `Player ${player + 1}`,
+            items: s.items.flatMap((u) => inv.find((i) => i.item.uid === u)?.item ?? []),
+            gold: s.gold,
+            accepted: s.accepted,
+          };
+        };
+        return { mine: side(d.me, mine as 0 | 1), theirs: side(other, (1 - mine) as 0 | 1) };
+      },
+    };
   }
 
   private syncMonsters(): void {
@@ -1223,7 +1291,6 @@ export class GameScene extends Phaser.Scene {
     const seat = this.onOwnRing ? this.seat : 0;
     const last = sim.data.waves[s.wave - 1];
     const left = s.status === 'playing' && waveAt(sim, s.wave) ? (s.nextWaveTick - s.tick) / sim.data.economy.waveTicks : 0;
-    this.inventory?.setGold(this.gold);
     return {
       gold: this.onOwnRing ? this.gold : 0,
       kills: s.killsBy[seat] ?? 0,

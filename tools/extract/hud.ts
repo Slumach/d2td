@@ -57,6 +57,24 @@ const PIECES: Record<string, Piece> = {
   invBg: { file: 'hd/global/ui/panel/inventory/background.sprite', every: 1 },
   invTab: { file: 'hd/global/ui/panel/inventory/tab.sprite', every: 1 },
   invClose: { file: 'hd/global/ui/panel/inventory/button.sprite', every: 1 },
+  // Items: the stash, the paper doll's empty-slot outlines, sockets, the trade window
+  stashBg: { file: 'hd/global/ui/panel/stash/stashpanel_bg_personal.sprite', every: 1 },
+  stashTabs: { file: 'hd/global/ui/panel/stash/mkb_tabs_195_tga.sprite', every: 1 },
+  stashLeft: { file: 'hd/global/ui/panel/stash/stash_leftarrow.sprite', every: 1 },
+  stashRight: { file: 'hd/global/ui/panel/stash/stash_rightarrow.sprite', every: 1 },
+  closeBtn: { file: 'hd/global/ui/panel/closebtn_4x.sprite', every: 1 },
+  gemSocket: { file: 'hd/global/ui/panel/gemsocket.sprite', every: 1 },
+  dollWeapon: { file: 'hd/global/ui/panel/inventory/inventory_paperdoll_weapon.sprite', every: 1 },
+  dollShield: { file: 'hd/global/ui/panel/inventory/inventory_paperdoll_shield.sprite', every: 1 },
+  dollHelm: { file: 'hd/global/ui/panel/inventory/inventory_paperdoll_headarmor.sprite', every: 1 },
+  dollArmor: { file: 'hd/global/ui/panel/inventory/inventory_paperdoll_chestarmor.sprite', every: 1 },
+  dollGloves: { file: 'hd/global/ui/panel/inventory/inventory_paperdoll_glove.sprite', every: 1 },
+  dollBoots: { file: 'hd/global/ui/panel/inventory/inventory_paperdoll_boots.sprite', every: 1 },
+  dollBelt: { file: 'hd/global/ui/panel/inventory/inventory_paperdoll_belt.sprite', every: 1 },
+  dollRing: { file: 'hd/global/ui/panel/inventory/inventory_paperdoll_ring.sprite', every: 1 },
+  dollAmulet: { file: 'hd/global/ui/panel/inventory/inventory_paperdoll_amulet.sprite', every: 1 },
+  tradeBg: { file: 'hd/global/ui/panel/trade/multiplayertrade_bg.sprite', every: 1 },
+  tradeAccept: { file: 'hd/global/ui/panel/trade/acceptbutton.sprite', every: 1 },
 };
 
 export interface HudSheet {

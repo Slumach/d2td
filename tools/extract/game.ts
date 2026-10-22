@@ -13,6 +13,7 @@ import { iconJob } from './icons.ts';
 import { cursorJob, fontJob, soundJob } from './feel.ts';
 import { frontendJob } from './frontend.ts';
 import { hudJob } from './hud.ts';
+import { itemArtJob } from './items.ts';
 
 import type { DataSource } from './source.ts';
 import { spriteJobs, type SpriteJob } from './sprites.ts';
@@ -37,7 +38,7 @@ export const CHECKSUM_FILE = 'checksums.json';
  * 13: Act 4: its monsters and maps.
  * 14: Act 5: its monsters and maps.
  */
-export const EXTRACT_VERSION = 16;
+export const EXTRACT_VERSION = 17;
 /** What verifyGame reports when the extraction is from an older version of the game. */
 export const OUTDATED = 'version';
 
@@ -87,7 +88,7 @@ function sha256(bytes: Uint8Array): string {
 /** Every job the game needs, and exactly which game files they read. */
 export function planGame(source: DataSource): GamePlan {
   const sprite = spriteJobs(source);
-  const jobs = [...tableJobs(source), ...sprite.jobs, ...sprites.iconClasses.map((c) => iconJob(source, c)), mapJob(source), cursorJob(source), fontJob(source), soundJob(source), frontendJob(source), hudJob(source)];
+  const jobs = [...tableJobs(source), ...sprite.jobs, ...sprites.iconClasses.map((c) => iconJob(source, c)), mapJob(source), cursorJob(source), fontJob(source), soundJob(source), frontendJob(source), hudJob(source), itemArtJob(source)];
   const inputs = [...new Set([...sprite.sharedInputs, ...jobs.flatMap((j) => j.inputs)])].sort();
   const missing = [...new Set([...sprite.missing, ...inputs.filter((p) => !source.exists(p))])].sort();
   return { jobs, inputs, missing };

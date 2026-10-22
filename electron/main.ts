@@ -2,7 +2,7 @@
 // extracted data, settings, and the setup step that runs the pipeline against D2R's CASC.
 
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { createRequire } from 'node:module';
 import { dirname, join, normalize, relative, sep } from 'node:path';
@@ -311,6 +311,14 @@ void app.whenReady().then(async () => {
   ipcMain.handle('load-checkpoint', (_e, slot: unknown) => (existsSync(savePath(slot)) ? readFileSync(savePath(slot), 'utf8') : null));
   ipcMain.handle('save-checkpoint', (_e, slot: unknown, json: unknown) => writeFileSync(savePath(slot), String(json)));
   ipcMain.handle('clear-checkpoint', (_e, slot: unknown) => rmSync(savePath(slot), { force: true }));
+  // The profile (inventory and stash): userData is per Windows user. Written to a temporary
+  // file and renamed over the old one, so a crash mid-write never loses the stash
+  const profilePath = join(app.getPath('userData'), 'profile.json');
+  ipcMain.handle('load-profile', () => (existsSync(profilePath) ? readFileSync(profilePath, 'utf8') : null));
+  ipcMain.handle('save-profile', (_e, json: unknown) => {
+    writeFileSync(`${profilePath}.tmp`, String(json));
+    renameSync(`${profilePath}.tmp`, profilePath);
+  });
   ipcMain.handle('mp-host', () => hostMultiplayer(win));
   ipcMain.handle('mp-join', async (_e, code: string) => {
     const address = decodeJoinCode(String(code));

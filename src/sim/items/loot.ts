@@ -68,6 +68,11 @@ export function stow(sim: Sim, player: number, item: Item): boolean {
   return true;
 }
 
+/** Items going back to a player: into the inventory where they fit, the rest homeward to the stash. */
+export function sendHome(sim: Sim, player: number, items: readonly Item[]): void {
+  for (const item of items) if (!stow(sim, player, item)) sim.state.homeward[player]?.push(item);
+}
+
 /** The drop rate scaling of the wave a monster walks in: each endless Tier multiplies it (balance.json drops.tierDropPct). */
 function tierPct(sim: Sim, monster: Monster): number {
   const tier = sim.data.waves[monster.wave]?.tier ?? 0;

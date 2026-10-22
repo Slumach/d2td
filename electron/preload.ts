@@ -28,6 +28,8 @@ const api: LauncherApi = {
   loadCheckpoint: (slot: SaveSlot) => ipcRenderer.invoke('load-checkpoint', slot),
   saveCheckpoint: (slot: SaveSlot, json: string) => ipcRenderer.invoke('save-checkpoint', slot, json),
   clearCheckpoint: (slot: SaveSlot) => ipcRenderer.invoke('clear-checkpoint', slot),
+  loadProfile: () => ipcRenderer.invoke('load-profile'),
+  saveProfile: (json: string) => ipcRenderer.invoke('save-profile', json),
 };
 
 contextBridge.exposeInMainWorld('d2td', api);

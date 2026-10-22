@@ -3,6 +3,7 @@
 // player builds only on the arcs they own, pays from their own gold, and changes only
 // their own towers.
 
+import { sendHome } from './items/loot.ts';
 import { MAX_TIER, MAX_TOWER_LEVEL, type EvolutionDef } from './data.ts';
 import { idiv } from './fixed.ts';
 import { arcAt, inBounds, isBlocked, isPathTile, tileCenter } from './map.ts';
@@ -188,6 +189,8 @@ export function evolve(sim: Sim, a: Tower, b: Tower): void {
   const partnerLevel = partner.picks[partner.tier - 1] === recipe.partner.skill ? partner.level - 1 : MAX_TOWER_LEVEL - 1;
   removeTower(sim, attack.id);
   removeTower(sim, partner.id);
+  // The evolved tower keeps the attack tower's gear; the partner's goes back to its owner
+  sendHome(sim, partner.owner, Object.values(partner.gear ?? {}));
   s.towers.push({
     ...attack,
     id: s.nextId++,
@@ -207,4 +210,6 @@ export function evolve(sim: Sim, a: Tower, b: Tower): void {
 export function sell(sim: Sim, tower: Tower): void {
   sim.state.gold[tower.owner]! += sellValue(sim, tower);
   removeTower(sim, tower.id);
+  // What it wore goes back to its owner, not to the vendor
+  sendHome(sim, tower.owner, Object.values(tower.gear ?? {}));
 }

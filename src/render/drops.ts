@@ -5,40 +5,12 @@
 import Phaser from 'phaser';
 
 import type { ItemData } from '../sim/items/data.ts';
-import { itemName, type Item } from '../sim/items/item.ts';
+import type { Item } from '../sim/items/item.ts';
 import type { Drop } from '../sim/items/loot.ts';
 import type { Command } from '../sim/state.ts';
 import { project } from './iso.ts';
+import { labelText, nameColour } from './itemtext.ts';
 import { FONT } from './ui.ts';
-
-/** D2R's item name colours. */
-export const QUALITY_COLOURS: Record<string, string> = {
-  low: '#8a8a8a',
-  normal: '#ffffff',
-  superior: '#ffffff',
-  magic: '#6d6dff',
-  rare: '#ffff64',
-  set: '#00ff00',
-  unique: '#c7b377',
-  runeword: '#c7b377',
-};
-/** Runes and our consumables show orange, as D2R shows runes; socketed and ethereal whites grey. */
-const RUNE = '#ffa800';
-const GREY = '#8a8a8a';
-
-export function nameColour(data: ItemData, item: Item): string {
-  const base = data.bases[item.code];
-  if (base?.isRune || base?.consumable) return RUNE;
-  if ((item.quality === 'normal' || item.quality === 'superior') && (item.sockets > 0 || item.ethereal)) return GREY;
-  return QUALITY_COLOURS[item.quality] ?? '#ffffff';
-}
-
-/** The label: the item's name, and the count of a stack. */
-export function labelText(data: ItemData, item: Item): string {
-  const name = itemName(data, item);
-  const qty = (item.quantity ?? 1) > 1 ? ` (${item.quantity})` : '';
-  return `${name}${qty}`;
-}
 
 interface View {
   box: Phaser.GameObjects.Container;

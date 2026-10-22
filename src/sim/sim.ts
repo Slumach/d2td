@@ -68,6 +68,7 @@ export function createSim(data: GameData, seed: number, opts: SimOptions = {}): 
       dropRng: createRng((seed ^ 0x5eed_d209) >>> 0),
       drops: [],
       inventories: Array.from({ length: players }, () => []),
+      homeward: Array.from({ length: players }, () => []),
       spawns: [],
       waves: [],
     },

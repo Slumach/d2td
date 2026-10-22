@@ -335,6 +335,16 @@ Every kill rolls its drops as D2 does (src/sim/items/drops.ts), on a drop stream
 
 npm run drops (all 75 campaign waves killed once a run, 20 runs, no magic find): Normal 128 items a run (79 white, 33 magic, 6 rare, about one set item and a unique every ten runs), 1.6 runes; Nightmare 89 items, 0.7 sets and 0.7 uniques, 4.7 runes up to Lem; Hell 73 items, 0.6 sets, 0.2 uniques, 1.6 runes, the odd Mal, Gul or Cham. A Smith's Hammer is rare in the campaign (about one in 100,000 Hell kills) and comes with the Tiers.
 
+### Stage E: inventory, stash, socketing, selling, trading (Oct 22)
+
+- Panels: I (or the panel's inventory button) opens D2R's inventory on the right and the stash on the left, drawn with D2R's own panel art and D2R's HD inventory sprites for every item (hd/items/items.json, uniques.json and sets.json map each code, unique and set item to its sprite; extracted at setup). Items move as in D2: click to hold one on the cursor, click where it goes; right-click or Escape puts it back. Tooltips are D2R's: name in its quality colour, the base under it, damage or defence with what the item adds in blue, required level, class restriction, the magic properties in itemstatcost.txt's order with D2R's strings, sockets and ethereal, and set bonuses (green once enough pieces are worn on that tower).
+- The paper doll is the selected tower's: click one of your towers, open the inventory, and its ten slots show what it wears. D2's rules apply: two-handed weapons leave no hand for a shield, class items only on their class's towers. Equip and unequip are commands carrying the whole item record. A tower sold or used up in an evolution sends its gear back to its owner's inventory, or to the stash when the inventory is full.
+- Sockets: hold a gem, rune or jewel over an item with an empty socket (in the inventory or on a tower) and click. Sockets never unfill. Runes spelling a runeword, in order, in exactly that many sockets of a white or superior base of an allowed type, make the runeword. Smith's Hammer, held over an item and clicked, adds a socket up to the base's maximum for its item level and refuses there (and on runewords).
+- Rune tooltips list every runeword the rune is in, in rune order: the runes (in brackets the ones this player owns none of, in the inventory or stash), the base types and the sockets needed.
+- Selling: drop an inventory item on the Sell box. The price is D2's cost (the base, then each affix's multiply and add, a unique's or set item's cost mult and add, plus whatever fills its sockets) divided by 4, capped by the vendor's purse for the ring's stage (balance.json vendorCap): Normal 100 gold in Act 1 rising by act to 1,500 in Act 5, Nightmare 2,500 to 10,000, Hell 15,000 to D2's 35,000, and 10% more per endless Tier, compounding. Uniques, set items and runewords ask first.
+- Profile: inventory, stash (10 x 10 pages, a page added whenever one is needed) and best wave, in the app data folder per Windows user (userData/profile.json, written to a temporary file and renamed so a crash never loses it), in localStorage in a browser. Saved on every change. While a game runs the sim owns the inventory (every peer must agree what fits); the profile mirrors it and records what the towers wear as in play. Leaving a game any way (quit, restart, defeat, disconnect, or closing the app, which the next start catches) brings everything home into the inventory, overflow into the stash. Items from any mode work in every mode. Checkpoints keep no items: a continued game starts with bare towers.
+- Trading (multiplayer): each player has a Trade button per other player on the inventory panel. D2R's trade window replaces the stash for both: their offer above, yours below; drop inventory items on your grid to offer them (they fade in the inventory), click one to take it back, click your gold to add 100 (shift 1000, right-click less), and click the check to accept. Any change clears both accepts; when both have accepted, items and gold move at once, or nothing moves if it no longer fits. Trades are match commands, so they work between FFA rings too, and every peer applies them on the same tick.
+
 ## Overnight decisions
 
 Calls made without asking, each the option closest to Diablo II's own rules.
@@ -351,6 +361,9 @@ Calls made without asking, each the option closest to Diablo II's own rules.
 - Oct 22: D2's NoDrop shrinks with players in the game; the ring always rolls as one player (each kill's drop is one player's), so NoDrop is D2's single-player value.
 - Oct 22: minions of a unique or superunique drop from their own regular treasure class, as D2's minions do; only the leader uses the unique class.
 - Oct 22: Smith's Hammer needs art and D2 has none for it; it is drawn as the Hellforge Hammer, the quest hammer D2 already has.
+- Oct 22: D2 has no sell box in the inventory; sales happen at a vendor's trade window. With no vendor on the ring, the inventory panel has a Sell box beside the gold.
+- Oct 22: D2 moves items by click-to-hold rather than drag and drop; the panels do it D2's way.
+- Oct 22: the stash is outside the game (the profile), so items in it cannot be socketed or hammered: they are moved to the inventory first.
 
 ## Open questions
 
