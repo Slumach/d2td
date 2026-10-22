@@ -4,7 +4,7 @@
 
 import { ARCHETYPES } from './archetypes/index.ts';
 import type { HitFilter, SkillDef, SkillJson } from './archetypes/types.ts';
-import { auraMultiplier, isAura, standardDps, withTierBonus } from './dps.ts';
+import { auraMultiplier, isAura, pairValue, standardDps, withDamageBonus, withTierBonus } from './dps.ts';
 import { VELOCITY_TO_UNITS_PER_TICK, UNITS_PER_TILE, compoundPct, d2FramesToTicks, idiv } from './fixed.ts';
 import { DIFFICULTIES, DIFFICULTY_NAMES, levelVariantId, variantId, type DifficultyName } from './difficulty.ts';
 import { ELEMENTS, MONSTER_MODS, type Element, type MonsterMod, type Rank } from './state.ts';
@@ -239,6 +239,8 @@ export interface BalanceJson {
    * are valued by the multiplier they give a level-5 referenceSkill tower.
    */
   tierLadder: { dpsPct: number; caps: Record<string, number>; referenceSkill: string; debuffTargetResist: number };
+  /** An evolved tower is worth dpsPct of its two parents together at their top levels. */
+  evolution?: { dpsPct: number };
   /**
    * D2 hardcodes these mod effects, so they are design values; resistances add to the
    * monster's own. House rule: Magic Resistant also resists magic (D2's only covers fire,
@@ -334,6 +336,12 @@ export interface EvolutionDef {
   attack: { skill: string; minTier: number };
   partner: { skill: string; minTier: number };
   ignoreSkillDelay: boolean;
+  /**
+   * Per mille on the evolved tower's damage (attack, and the partner when it casts): what
+   * lifts the two parents together, at their top levels, to balance.json evolution.dpsPct
+   * of what they were. Computed from the tables at load time, like the tier bonuses.
+   */
+  bonus: number;
 }
 
 export interface WaveGroup {
@@ -459,7 +467,7 @@ export interface GameData {
    * skill swinging `weapon` (whole HP). Built once and kept in `skills` under the returned
    * id, so missiles and curses look it up like any skill.
    */
-  skillVariant: (id: string, plus: number, weapon?: { min: number; max: number }) => string;
+  skillVariant: (id: string, plus: number, weapon?: { min: number; max: number }, bonus?: number) => string;
   /**
    * A skill an item casts or projects (chance to cast, item auras), by its skills.txt name
    * at a skills.txt level: the key of a SkillDef kept in `skills` whose level index 0 is
@@ -1095,9 +1103,19 @@ export function buildGameData(
   }
   const ladders = buildLadders(tables, design, skills, jsonById, weaponFor, options.checkTierBonus ?? true);
 
+  const evolutionPct = design.balance.evolution?.dpsPct ?? 250;
   const evolutions = Object.entries(design.evolutions).map(([id, e]) => {
     for (const skill of [e.attack.skill, e.partner.skill]) if (!skills[skill]) throw new Error(`${id}: no skill ${skill}`);
-    return { id, name: e.name, attack: e.attack, partner: e.partner, ignoreSkillDelay: e.ignoreSkillDelay === true };
+    // The evolved tower is the pair at their top levels (attack, partner's aura or curse, partner's casts),
+    // its attack's delay dropped when the recipe says so; the bonus lifts that to the target over the pair.
+    // Summon and corpse pairs have no standard number: they take the target as it stands.
+    const top = MAX_TOWER_LEVEL - 1;
+    const attack = skills[e.attack.skill]!;
+    const partner = skills[e.partner.skill]!;
+    const pair = pairValue(attack, partner, top);
+    const evolved = pairValue(attack, partner, top, e.ignoreSkillDelay === true);
+    const bonus = pair > 0 && evolved > 0 ? Math.max(1000, Math.ceil((pair * evolutionPct * 10) / evolved)) : evolutionPct * 10;
+    return { id, name: e.name, attack: e.attack, partner: e.partner, ignoreSkillDelay: e.ignoreSkillDelay === true, bonus };
   });
 
   const m = design.monsters;
@@ -1130,8 +1148,8 @@ export function buildGameData(
         }
       : undefined;
 
-  const skillVariant = (id: string, plus: number, weapon?: { min: number; max: number }) => {
-    const key = `${id}+${plus}${weapon ? `@${weapon.min}-${weapon.max}` : ''}`;
+  const skillVariant = (id: string, plus: number, weapon?: { min: number; max: number }, bonus = 1000) => {
+    const key = `${id}+${plus}${weapon ? `@${weapon.min}-${weapon.max}` : ''}${bonus !== 1000 ? `*${bonus}` : ''}`;
     if (skills[key]) return key;
     const json = jsonById.get(id);
     if (!json) throw new Error(`No skill ${id} to raise`);
@@ -1140,6 +1158,7 @@ export function buildGameData(
     let def = resolveSkill(tables, json, design, weaponFor(id), levels);
     if (ladder) def = withTierBonus(def, ladder.tierBonus);
     if (weapon && def.archetype === 'melee') def = { ...def, weapon: { min: weapon.min * 256, max: weapon.max * 256 } };
+    def = withDamageBonus(def, bonus);
     skills[key] = { ...def, id: key };
     return key;
   };

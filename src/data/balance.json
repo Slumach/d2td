@@ -57,6 +57,7 @@
       }
     }
   },
+  "evolution": { "dpsPct": 250 },
   "tierLadder": { "dpsPct": 110, "caps": { "2": 24, "3": 30 }, "referenceSkill": "holy-bolt", "debuffTargetResist": 50 },
   "monsterMods": {
     "extraFast": { "speedPct": 50 },

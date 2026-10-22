@@ -149,7 +149,15 @@ describe('evolution', () => {
     expect(evolved.evolved).toBe('hammerdin');
     expect(evolved.partnerSkill).toBe('concentration');
     expect(evolved.partnerLevel).toBe(aura.level - 1);
-    expect(activeSkill(sim, evolved)).toEqual({ skill: sim.data.skills['blessed-hammer'], lvl: EVOLVED_LEVEL_INDEX });
+    // The attack at its top level with the recipe's bonus, so the evolved tower is worth 2.5x the pair
+    const recipe = sim.data.evolutions.find((r) => r.id === 'hammerdin')!;
+    const active = activeSkill(sim, evolved)!;
+    expect(active.lvl).toBe(EVOLVED_LEVEL_INDEX);
+    expect(active.skill.id).toBe(`blessed-hammer+0*${recipe.bonus}`);
+    expect(recipe.bonus).toBeGreaterThanOrEqual(2500);
+    const plain = sim.data.skills['blessed-hammer']!;
+    if (plain.archetype !== 'splash' || active.skill.archetype !== 'splash') throw new Error('blessed-hammer should be splash');
+    expect(active.skill.levels[EVOLVED_LEVEL_INDEX]!.max).toBe(Math.trunc((plain.levels[EVOLVED_LEVEL_INDEX]!.max * recipe.bonus) / 1000));
     expect(evolved.spent).toBe(spent + sim.data.economy.evolveCost);
     expect(sim.state.gold[0]!).toBe(gold - sim.data.economy.evolveCost);
     // The partner's tile is free again

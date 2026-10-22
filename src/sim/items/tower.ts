@@ -4,6 +4,7 @@
 
 import { archetypeOf } from '../archetypes/registry.ts';
 import type { SkillDef, TowerBuff } from '../archetypes/types.ts';
+import { isAura } from '../dps.ts';
 import { idiv } from '../fixed.ts';
 import type { Element, Sim, Tower } from '../state.ts';
 import { NO_GEAR, towerGear, type Gear, type TowerGear } from './gear.ts';
@@ -37,8 +38,13 @@ export function geared(sim: Sim, tower: Tower, skill: SkillDef): SkillDef {
   const gear = gearOf(sim, tower);
   const plus = plusLevels(sim, gear, skill);
   const weapon = skill.archetype === 'melee' ? gear.weapon : undefined;
-  if (plus === 0 && !weapon) return skill;
-  return sim.data.skills[sim.data.skillVariant(skill.id, plus, weapon)]!;
+  // An evolved tower's attack and its casting partner hit with the recipe's evolution bonus;
+  // a partner aura or curse keeps its own effect
+  const recipe = tower.evolved ? sim.data.evolutions.find((e) => e.id === tower.evolved) : undefined;
+  const boosted = recipe && (skill.id === recipe.attack.skill || (skill.id === recipe.partner.skill && !isAura(skill)));
+  const bonus = boosted ? recipe.bonus : 1000;
+  if (plus === 0 && !weapon && bonus === 1000) return skill;
+  return sim.data.skills[sim.data.skillVariant(skill.id, plus, weapon, bonus)]!;
 }
 
 /**

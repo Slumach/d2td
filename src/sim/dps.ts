@@ -34,16 +34,20 @@ function avg(r: DamageRange): number {
   return idiv(r.min + r.max, 2);
 }
 
-function interval(skill: SkillDef, lvl: number, attackSpeedPct = 0): number {
-  return Math.max(1, idiv((skill.rates[lvl] ?? skill.rateTicks) * 100, 100 + attackSpeedPct), skill.delayTicks);
+function interval(skill: SkillDef, lvl: number, attackSpeedPct = 0, ignoreDelay = false): number {
+  return Math.max(1, idiv((skill.rates[lvl] ?? skill.rateTicks) * 100, 100 + attackSpeedPct), ignoreDelay ? 0 : skill.delayTicks);
 }
 
-export function standardDps(skill: SkillDef, lvl: number): number {
-  const per = (damage: number) => idiv(damage * PER, interval(skill, lvl));
+export function standardDps(skill: SkillDef, lvl: number, ignoreDelay = false): number {
+  const per = (damage: number) => idiv(damage * PER, interval(skill, lvl, 0, ignoreDelay));
   switch (skill.archetype) {
-    case 'projectile':
-      // One shot per target: a volley lands one shot on the standard target
-      return per(idiv(avg(skill.levels[lvl]!) * plainPct(skill.filter), 100));
+    case 'projectile': {
+      // One shot per target: a volley lands one shot on the standard target; a bow skill's
+      // arrow carries the weapon at its share with the skill's damage percent
+      const l = skill.levels[lvl]!;
+      const weapon = skill.weapon ? idiv(idiv(avg(skill.weapon) * skill.weaponPct, 100) * (100 + l.damagePct), 100) : 0;
+      return per(idiv((avg(l) + weapon) * plainPct(skill.filter), 100));
+    }
     case 'pierce':
       return per(idiv(avg(skill.levels[lvl]!) * plainPct(skill.filter), 100));
     case 'splash': {
@@ -126,6 +130,48 @@ const scaled = (r: DamageRange, permille: number): DamageRange => ({ min: idiv(r
 const scalePct = (v: number, permille: number) => idiv(v * permille, PER);
 
 /**
+ * What a recipe's two parents are worth together at their top levels (per mille of DPS
+ * against the standard target): the attack under the partner's aura or curse, plus the
+ * partner's own damage when it casts by itself. With `ignoreDelay` the attack's own delay
+ * is dropped, as an evolution with ignoreSkillDelay plays it.
+ */
+export function pairValue(attack: SkillDef, partner: SkillDef, lvl: number, ignoreDelay = false): number {
+  const a = standardDps(attack, lvl, ignoreDelay);
+  const mult = isAura(partner) ? auraMultiplier(partner, lvl, attack, 50) : PER;
+  return idiv(a * mult, PER) + (isAura(partner) ? 0 : standardDps(partner, lvl));
+}
+
+/**
+ * A skill's damage, and only its damage, times `permille`: an evolution's bonus. Auras and
+ * curses keep their effects (the partner aura's strength is the partner's, not the bonus's).
+ */
+export function withDamageBonus(skill: SkillDef, permille: number): SkillDef {
+  if (permille === PER) return skill;
+  switch (skill.archetype) {
+    case 'projectile':
+      return { ...skill, ...(skill.weapon ? { weapon: scaled(skill.weapon, permille) } : {}), levels: skill.levels.map((l) => ({ ...l, ...scaled(l, permille) })) };
+    case 'pierce':
+    case 'zone':
+      return { ...skill, levels: skill.levels.map((l) => ({ ...l, ...scaled(l, permille) })) } as SkillDef;
+    case 'splash':
+      return { ...skill, levels: skill.levels.map((l) => ({ ...l, ...scaled(l, permille), sub: scaled(l.sub, permille) })) };
+    case 'melee':
+      return { ...skill, weapon: scaled(skill.weapon, permille) };
+    case 'control':
+      return { ...skill, levels: skill.levels.map((l) => ({ ...l, ...scaled(l, permille) })) };
+    case 'summon':
+      return {
+        ...skill,
+        levels: skill.levels.map((l) => ({ ...l, ...scaled(l, permille), hp: scalePct(l.hp, permille), bolts: l.bolts.map((b) => ({ ...b, ...scaled(b, permille) })) })),
+      };
+    case 'corpse':
+      return { ...skill, levels: skill.levels.map((l) => ({ ...l, minPct: scalePct(l.minPct, permille), maxPct: scalePct(l.maxPct, permille) })) };
+    default:
+      return skill;
+  }
+}
+
+/**
  * A skill with a flat tier bonus (per mille): damage for attack skills, the aura's
  * effects for auras. Used when a tier cannot out-damage the one before it by its cap.
  */
@@ -133,6 +179,7 @@ export function withTierBonus(skill: SkillDef, permille: number): SkillDef {
   if (permille === PER) return skill;
   switch (skill.archetype) {
     case 'projectile':
+      return { ...skill, ...(skill.weapon ? { weapon: scaled(skill.weapon, permille) } : {}), levels: skill.levels.map((l) => ({ ...l, ...scaled(l, permille) })) };
     case 'pierce':
     case 'zone':
       return { ...skill, levels: skill.levels.map((l) => ({ ...l, ...scaled(l, permille) })) } as SkillDef;

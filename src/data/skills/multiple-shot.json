@@ -3,6 +3,7 @@
   "skill": "Multiple Shot",
   "archetype": "projectile",
   "damageType": "phys",
+  "tierBonus": 7974,
   "rangeTenths": 70,
   "rateTicks": 20,
   "projectile": {

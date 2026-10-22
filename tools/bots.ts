@@ -151,7 +151,8 @@ function computeParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boole
   switch (skill.archetype) {
     case 'projectile': {
       const l = skill.levels[lvl]!;
-      direct(avg(l), Math.min(l.count, CROWD), skill.filter);
+      const weapon = skill.weapon ? (((avg(skill.weapon) * skill.weaponPct) / 100) * (100 + l.damagePct)) / 100 : 0;
+      direct(avg(l) + weapon, Math.min(l.count, CROWD), skill.filter);
       break;
     }
     case 'pierce': {

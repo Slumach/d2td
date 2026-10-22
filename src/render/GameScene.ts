@@ -17,10 +17,11 @@ import { actJustStarted, takeCheckpoint, type Checkpoint } from '../sim/checkpoi
 import { baseMonsterId, baseSkillId, buildGameData, MAX_TIER, MAX_TOWER_LEVEL, stageName, waveLabel as labelOf, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
 import { effectsOn, projected, reachOf, terms } from './aurainfo.ts';
 import { GroundDrops } from './drops.ts';
-import { standardDps } from '../sim/dps.ts';
+import { isAura, standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
 import { aliveOf, arcOwner, ringOf, seatOf, type MatchMode } from '../sim/match.ts';
 import { meets } from '../sim/towers.ts';
+import { geared } from '../sim/items/tower.ts';
 import { ARC_COUNT, arcAt, isBlocked, isPathTile, positionAt } from '../sim/map.ts';
 import {
   activeSkill,
@@ -1635,7 +1636,11 @@ export class GameScene extends Phaser.Scene {
     const auraName = (e: { skill: string; item: boolean }) => `${this.skillName(e.skill)}${e.item ? ' (item)' : ''}`;
     if (active) {
       const buff = sim.fx.towers[tower.id];
-      const base = standardDps(active.skill, active.lvl);
+      // An evolved tower fires both lines: its partner's casts count with its attack
+      const partnerSkill = tower.evolved && tower.partnerSkill ? geared(sim, tower, sim.data.skills[tower.partnerSkill]!) : undefined;
+      const partnerDps = partnerSkill && !isAura(partnerSkill) ? standardDps(partnerSkill, tower.partnerLevel) : 0;
+      const recipe = tower.evolved ? sim.data.evolutions.find((r) => r.id === tower.evolved) : undefined;
+      const base = standardDps(active.skill, active.lvl, recipe?.ignoreSkillDelay === true) + partnerDps;
       // 1/256 HP per 1000 ticks, at 20 ticks a second; the auras this tower stands in broken out
       const perSecond = (damagePct: number, speedPct: number) => Math.round((((base * TICKS_PER_SECOND) / 1000 / 256) * (100 + damagePct) * (100 + speedPct)) / 10000);
       const dps = perSecond(buff?.damagePct ?? 0, buff?.attackSpeedPct ?? 0);
