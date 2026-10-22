@@ -3,6 +3,7 @@
   "skill": "Death Sentry",
   "archetype": "summon",
   "damageType": "ltng",
+  "tierBonus": 2727,
   "rangeTenths": 60,
   "rateTicks": 30,
   "summon": {

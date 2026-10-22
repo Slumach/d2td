@@ -3,7 +3,7 @@
   "skill": "Strafe",
   "archetype": "projectile",
   "damageType": "phys",
-  "tierBonus": 3576,
+  "tierBonus": 8010,
   "rangeTenths": 70,
   "rateTicks": 25,
   "projectile": {

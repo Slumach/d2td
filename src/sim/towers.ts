@@ -114,16 +114,11 @@ function removeTower(sim: Sim, id: number): void {
 }
 
 /**
- * What `player`'s next tower costs: buildCost, multiplied by buildCostGrowthPct for each
- * tower they already own.
+ * What `player`'s next tower costs: buildCost, the same for every tower however many they
+ * own. Power and price sit in the top tiers instead (Oct 23).
  */
-export function buildCostFor(sim: Sim, player: number): number {
-  const e = sim.data.economy;
-  const owned = sim.state.towers.filter((t) => t.owner === player).length;
-  let cost = e.buildCost;
-  // Steep for the first towers, then a flatter tail so a new tower stays an option late
-  for (let i = 0; i < owned; i++) cost = idiv(cost * (i < e.buildCostTail.fromTowers ? e.buildCostGrowthPct : e.buildCostTail.growthPct), 100);
-  return cost;
+export function buildCostFor(sim: Sim, _player: number): number {
+  return sim.data.economy.buildCost;
 }
 
 export function build(sim: Sim, player: number, x: number, y: number, cls: string, skill?: string): void {

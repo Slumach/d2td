@@ -109,7 +109,7 @@ describe('tower model', () => {
     const tower = built(sim, 7, 6, 'holy-bolt');
     run(sim, { type: 'upgrade', towerId: tower.id });
     const value = sellValue(sim, tower);
-    expect(value).toBe(Math.trunc(((150 + sim.data.economy.levelCosts[0]![0]!) * 60) / 100));
+    expect(value).toBe(Math.trunc(((sim.data.economy.buildCost + sim.data.economy.levelCosts[0]![0]!) * 60) / 100));
     const before = sim.state.gold[0]!;
     run(sim, { type: 'sell', towerId: tower.id });
     expect(sim.state.gold[0]!).toBe(before + value);
@@ -249,18 +249,7 @@ describe('evolution', () => {
     expect(sellValue(sim, evolved)).toBe(Math.trunc((evolved.spent * 60) / 100));
   });
 
-  it('flattens the build price past buildCostTail.fromTowers towers', () => {
-    const sim = testSim();
-    const e = sim.data.economy;
-    let expected = e.buildCost;
-    for (let n = 0; n < 8; n++) {
-      expect(buildCostFor(sim, 0)).toBe(expected);
-      placeTower(sim, 2 + 2 * n, 1, 'holy-bolt');
-      expected = Math.trunc((expected * (n < e.buildCostTail.fromTowers ? e.buildCostGrowthPct : e.buildCostTail.growthPct)) / 100);
-    }
-  });
-
-  it('raises the price of each build by buildCostGrowthPct for every tower the player owns', () => {
+  it('charges the same flat price for every build, however many towers the player owns', () => {
     const sim = testSim();
     const e = sim.data.economy;
     sim.state.gold[0] = 1_000_000;
@@ -269,7 +258,7 @@ describe('evolution', () => {
       prices.push(buildCostFor(sim, 0));
       step(sim, [{ type: 'build', x, y, cls: 'paladin', skill: 'holy-bolt' }]);
     }
-    expect(prices).toEqual([e.buildCost, Math.trunc((e.buildCost * e.buildCostGrowthPct) / 100), Math.trunc((Math.trunc((e.buildCost * e.buildCostGrowthPct) / 100) * e.buildCostGrowthPct) / 100)]);
+    expect(prices).toEqual([e.buildCost, e.buildCost, e.buildCost]);
     expect(sim.state.towers.map((t) => t.spent)).toEqual(prices);
   });
 });

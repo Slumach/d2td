@@ -3,6 +3,5 @@
   "skill": "Fanaticism",
   "archetype": "buffAura",
   "damageType": "none",
-  "tierBonus": 1195,
   "buffAura": { "radiusCalc": "aurarangecalc" }
 }

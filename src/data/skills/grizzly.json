@@ -4,6 +4,7 @@
   "displayName": "Grizzly",
   "archetype": "summon",
   "damageType": "phys",
+  "tierBonus": 2727,
   "rangeTenths": 30,
   "rateTicks": 20,
   "summon": {

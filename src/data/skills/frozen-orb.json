@@ -3,6 +3,7 @@
   "skill": "Frozen Orb",
   "archetype": "splash",
   "damageType": "cold",
+  "tierBonus": 1728,
   "rangeTenths": 45,
   "rateTicks": 25,
   "splash": { "delivery": "missile", "radiusTenths": 20, "edgeDamagePct": 100 }

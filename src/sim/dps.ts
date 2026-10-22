@@ -173,11 +173,16 @@ export function withDamageBonus(skill: SkillDef, permille: number): SkillDef {
 
 /**
  * A skill with a flat tier bonus (per mille): damage for attack skills, the aura's
- * effects for auras. Used when a tier cannot out-damage the one before it by its cap.
+ * effects for auras, a summon's damage and life, a corpse blast. Used when a tier cannot
+ * out-damage the one before it by its cap, and for the top tier's jump on skills with no
+ * standard number.
  */
 export function withTierBonus(skill: SkillDef, permille: number): SkillDef {
   if (permille === PER) return skill;
   switch (skill.archetype) {
+    case 'summon':
+    case 'corpse':
+      return withDamageBonus(skill, permille);
     case 'projectile':
       return { ...skill, ...(skill.weapon ? { weapon: scaled(skill.weapon, permille) } : {}), levels: skill.levels.map((l) => ({ ...l, ...scaled(l, permille) })) };
     case 'pierce':

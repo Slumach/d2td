@@ -168,7 +168,8 @@ async function main(): Promise<void> {
     if (!(last in at)) throw new Error(`--set ${path}: no such balance.json field`);
     at[last] = value.includes(',') ? value.split(',').map(Number) : Number(value);
   }
-  const data = buildGameData(loadTables(), { ...DESIGN, balance: balance as unknown as typeof DESIGN.balance });
+  // An override of the tier ladder changes the tier bonuses the skill files hold; trial runs use the computed ones
+  const data = buildGameData(loadTables(), { ...DESIGN, balance: balance as unknown as typeof DESIGN.balance }, undefined, { checkTierBonus: args.set.length === 0 });
   if (args.one) {
     const [strategy, seed] = args.one.split(':');
     process.stdout.write(JSON.stringify(playRing(data, strategy as Strategy, Number(seed))));

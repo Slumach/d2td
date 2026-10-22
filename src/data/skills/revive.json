@@ -3,6 +3,7 @@
   "skill": "Revive",
   "archetype": "summon",
   "damageType": "phys",
+  "tierBonus": 2727,
   "rangeTenths": 40,
   "rateTicks": 20,
   "summon": {

@@ -140,14 +140,8 @@ export interface BalanceJson {
   /** The run is lost when the weight of everything alive on the ring reaches aliveLimit; weights by rank. */
   aliveLimit: number;
   aliveWeight: Record<Rank, number>;
+  /** Every tower costs this to build, however many the player owns. */
   buildCost: number;
-  /**
-   * Each tower a player owns multiplies the price of their next build by this percent: the
-   * first costs buildCost, the second buildCost x pct / 100, and so on. It is the only brake
-   * on the number of towers.
-   */
-  buildCostGrowthPct: number;
-  buildCostTail: { fromTowers: number; growthPct: number };
   /**
    * An act boss's HP is this percent of its monstats HP, climbing in a straight line by wave
    * number from `first` on the run's first boss wave to `last` on its last campaign boss
@@ -177,7 +171,11 @@ export interface BalanceJson {
   tierCosts: number[];
   evolveCost: number;
   evolvedLevels: OverLevels;
-  lineLevels: { costPctPerLevel: number; skillLevelsPerLevel: number };
+  /**
+   * Levels past 5 within a tier, by tier (T1, T2, T3): steep below the top so a line climbs,
+   * gentler at T3 so the top tier keeps taking gold at a fair price.
+   */
+  lineLevels: { costPctPerLevel: number[]; skillLevelsPerLevel: number[] };
   sellRefundPct: number;
   bountyPerLevel: number;
   /** Bounty multiplier by rank; bossBountyMultiplier overrides a boss by id. */
@@ -236,10 +234,13 @@ export interface BalanceJson {
    * buildGameData): Nightmare and Hell monsters are tougher than Normal ones, by this much.
    */
   /**
-   * Tier ladders: a tier must reach dpsPct of the tower it replaces; caps by tier. Auras
-   * are valued by the multiplier they give a level-5 referenceSkill tower.
+   * Tier ladders: an attack tier must reach dpsPct of the tower it replaces, by tier (the
+   * top tier jumps further than T2, so power sits in it); an aura tier must reach auraPct
+   * of the aura it replaces, valued by the multiplier it gives a level-5 referenceSkill
+   * tower. Caps by tier. Summons, corpse skills and pulses, which have no standard number,
+   * take the top tier's extra jump (its dpsPct over T2's) as a flat bonus.
    */
-  tierLadder: { dpsPct: number; caps: Record<string, number>; referenceSkill: string; debuffTargetResist: number };
+  tierLadder: { dpsPct: Record<string, number>; auraPct: number; caps: Record<string, number>; referenceSkill: string; debuffTargetResist: number };
   /** An evolved tower is worth dpsPct of its two parents together at their top levels. */
   evolution?: { dpsPct: number };
   /**
@@ -385,9 +386,6 @@ export interface WaveDef {
 export interface Economy {
   startingGold: number;
   buildCost: number;
-  buildCostGrowthPct: number;
-  /** From the fromTowers-th tower owned on, each tower raises the next build's price by growthPct instead. */
-  buildCostTail: { fromTowers: number; growthPct: number };
   /** levelCosts[tier - 1][n] is the gold to go from level n + 1 to n + 2 in that tier. */
   levelCosts: number[][];
   /** tierCosts[0] reaches T2, tierCosts[1] reaches T3. */
@@ -910,15 +908,14 @@ export function economyFrom(balance: BalanceJson): Economy {
   return {
     startingGold: balance.startingGold,
     buildCost: balance.buildCost,
-    buildCostGrowthPct: balance.buildCostGrowthPct,
-    buildCostTail: balance.buildCostTail,
     levelCosts: balance.levelCostBase.map((base) => steps.map((permille) => idiv(base * permille, 1000))),
     tierCosts: balance.tierCosts,
     evolveCost: balance.evolveCost,
     evolvedLevels: balance.evolvedLevels,
-    lineLevels: balance.levelCostBase.map((base) => {
+    lineLevels: balance.levelCostBase.map((base, i) => {
       const last = idiv(base * steps.at(-1)!, 1000);
-      return { costBase: idiv(last * balance.lineLevels.costPctPerLevel, 100), costPctPerLevel: balance.lineLevels.costPctPerLevel, skillLevelsPerLevel: balance.lineLevels.skillLevelsPerLevel };
+      const pct = balance.lineLevels.costPctPerLevel[i]!;
+      return { costBase: idiv(last * pct, 100), costPctPerLevel: pct, skillLevelsPerLevel: balance.lineLevels.skillLevelsPerLevel[i]! };
     }),
     sellRefundPct: balance.sellRefundPct,
     bountyPerLevel: balance.bountyPerLevel,
@@ -1038,7 +1035,7 @@ function buildLadders(
   weaponFor: (id: string) => string | undefined,
   checkTierBonus: boolean,
 ): Ladder[] {
-  const { dpsPct, caps, referenceSkill, debuffTargetResist } = design.balance.tierLadder;
+  const { dpsPct, auraPct, caps, referenceSkill, debuffTargetResist } = design.balance.tierLadder;
   const reference = skills[referenceSkill];
   if (!reference) throw new Error(`tierLadder referenceSkill ${referenceSkill} is not a T1 or non-class skill`);
   const top = MAX_TOWER_LEVEL - 1;
@@ -1048,7 +1045,8 @@ function buildLadders(
       for (let t = 1; t < line.tiers.length; t++) {
         const tier = t + 1;
         const cap = caps[String(tier)];
-        if (cap === undefined) throw new Error(`balance.json tierLadder has no cap for T${tier}`);
+        const attackPct = dpsPct[String(tier)];
+        if (cap === undefined || attackPct === undefined) throw new Error(`balance.json tierLadder has no cap or dpsPct for T${tier}`);
         const before = line.tiers[t - 1]!.map((id) => skills[id]!);
         for (const id of line.tiers[t]!) {
           const json = jsonById.get(id)!;
@@ -1060,7 +1058,8 @@ function buildLadders(
           const value = (s: SkillDef, lvl: number) =>
             metric === 'aura' ? auraMultiplier(s, lvl, reference, debuffTargetResist) : standardDps(s, lvl);
           const previous = Math.max(...before.map((s) => value(s, top)));
-          const floor = Math.ceil((previous * dpsPct) / 100);
+          const pct = metric === 'aura' ? auraPct : attackPct;
+          const floor = Math.ceil((previous * pct) / 100);
 
           // Summons, corpse skills and pulses have no standard-target number; they climb
           // the whole range, as does anything replacing a tier that had none
@@ -1083,7 +1082,10 @@ function buildLadders(
           const base = resolveAt(levels);
 
           let tierBonus = 1000;
-          if (!reached && json.archetype !== 'debuff') {
+          if (!measurable && metric === 'dps' && ['summon', 'corpse', 'control'].includes(json.archetype)) {
+            // No standard number to climb to: the top tier's extra jump over T2's, flat
+            tierBonus = Math.max(1000, idiv(1000 * attackPct, dpsPct['2'] ?? attackPct));
+          } else if (!reached && json.archetype !== 'debuff') {
             // The lowest flat bonus that lifts level 1 to the floor
             let lo = 1000;
             let hi = 1000;

@@ -1,3 +1,12 @@
+0.3.4
+
+- Prices: every tower costs the same 600 to build, however many you own. The top of a line is dearer and much stronger: T3 starts at three times what the T2 it replaces could do, an evolution is worth four times its two parents, and evolved towers and T3 lines keep levelling at a price that grows 15% a level.
+- Find Item is a gold aura: monsters killed near it, by any tower, pay its chance as extra gold (51% at level 5). The aura panel shows it.
+- Free for all: pan past the edge of your ring to the next player's, or click their name under the map; you see their towers, monsters and globes. Tab (or the Party button) opens a scoreboard of every player's kills, alive count, gold, towers and wave. The automap moved to M.
+- Online: hosting goes through a relay server first when one is set, so friends can join without router setup; the router and direct codes remain.
+- Hurricane swirls its rocks and branches round the tower; Cloak of Shadows shows its mist on the monsters it blinds.
+- Missile art added since the first setup now loads (some spells drew nothing before re-extracting).
+
 0.3.2
 
 - The Barbarian's War Cries are a support line: Battle Cry weakens the monsters in reach (less damage, lower defence), War Cry stuns, Shout protects the summons of nearby towers and Battle Orders makes nearby towers hit harder. Find Item is a first-tier pick that re-finds a corpse's gold and drop. His melee reaches the diagonal path tiles too.

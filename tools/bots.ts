@@ -41,6 +41,47 @@ function lineOf(sim: Sim, skill: string): { cls: string; line: string } {
   throw new Error(`no class has ${skill} at T1`);
 }
 
+/** Where a skill sits: its class, line and tier index, or undefined if no line has it. */
+function placeOf(sim: Sim, skill: string): { cls: string; line: string; tier: number } | undefined {
+  for (const c of Object.values(sim.data.classes)) {
+    for (const [line, l] of Object.entries(c.lines)) {
+      const tier = l.tiers.findIndex((opts) => opts.includes(skill));
+      if (tier >= 0) return { cls: c.id, line, tier };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The gold a tower still needs to have `skill` picked at `minTier` or above, and the next
+ * command toward it with that command's price; undefined if its line cannot get there (another
+ * line, or another branch already picked).
+ */
+function pathTo(sim: Sim, t: Tower, skill: string, minTier: number): { gold: number; step?: { commands: Command[]; cost: number } } | undefined {
+  const at = placeOf(sim, skill);
+  if (t.evolved || !at || at.cls !== t.cls || at.line !== t.line) return undefined;
+  if (t.picks.length > at.tier && t.picks[at.tier] !== skill) return undefined;
+  const target = Math.max(minTier, at.tier + 1);
+  if (t.tier >= target) return { gold: 0 };
+  const e = sim.data.economy;
+  let gold = 0;
+  for (let lv = t.level; lv < MAX_TOWER_LEVEL; lv++) gold += e.levelCosts[t.tier - 1]![lv - 1]!;
+  for (let tier = t.tier + 1; tier <= target; tier++) {
+    gold += e.tierCosts[tier - 2]!;
+    if (tier < target) gold += e.levelCosts[tier - 1]!.reduce((n, c) => n + c, 0);
+  }
+  let step: { commands: Command[]; cost: number };
+  if (t.level < MAX_TOWER_LEVEL) step = { commands: [{ type: 'upgrade', towerId: t.id }], cost: upgradeCost(sim, t)! };
+  else {
+    const commands: Command[] = [{ type: 'upgradeTier', towerId: t.id }];
+    const opts = sim.data.classes[t.cls]!.lines[t.line]!.tiers[t.tier] ?? [];
+    // Take the recipe's branch when it is this tier's pick
+    if (opts.length > 1) commands.push({ type: 'pickBranch', towerId: t.id, skill: opts.includes(skill) ? skill : opts[0]! });
+    step = { commands, cost: e.tierCosts[t.tier - 1]! };
+  }
+  return { gold, step };
+}
+
 /** Bots act every this many ticks, roughly a human's pace. */
 export const DECISION_TICKS = 10;
 
@@ -507,6 +548,9 @@ interface BotConfig {
 /** A payoff several purchases away is worth less than one now, and needs a defence first. */
 const LOOKAHEAD_DISCOUNT_PCT = 50;
 const LOOKAHEAD_MIN_TOWERS = 3;
+/** Two tiers ahead (T1 to T3): further off, so worth less again. */
+const FAR_LOOKAHEAD_PCT = 40;
+const sum = (xs: number[]) => xs.reduce((n, x) => n + x, 0);
 
 function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov: Coverage): Option[] {
   const towers = sim.state.towers;
@@ -559,6 +603,63 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
     }
   }
 
+  // Evolutions further off: an adjacent pair whose lines can still make a recipe is worth the
+  // evolved tower, discounted, over all the gold left to get there; the step bought is the
+  // one on the tower further behind. And a new tower beside one it could evolve with.
+  if (config.evolve && towers.length >= LOOKAHEAD_MIN_TOWERS) {
+    const planned = (attack: Tower, partner: Tower, recipe: (typeof sim.data.evolutions)[number], extra: number, commandsIfNoStep?: Command[]): Option | undefined => {
+      const pa = pathTo(sim, attack, recipe.attack.skill, recipe.attack.minTier);
+      const pp = pathTo(sim, partner, recipe.partner.skill, recipe.partner.minTier);
+      if (!pa || !pp || (pa.gold === 0 && pp.gold === 0 && !commandsIfNoStep)) return undefined;
+      const behind = pa.gold >= pp.gold ? pa : pp;
+      const commands = commandsIfNoStep ?? behind.step?.commands;
+      const stepCost = commandsIfNoStep ? extra : behind.step?.cost;
+      if (!commands || stepCost === undefined) return undefined;
+      const merged: Tower = {
+        ...attack, tier: MAX_TIER + 1, level: MAX_TOWER_LEVEL, evolved: recipe.id, partnerSkill: recipe.partner.skill,
+        partnerLevel: EVOLVED_LEVEL_INDEX, picks: [...attack.picks],
+      };
+      const gain = (gainOf(sim, towers, judge, merged, [partner.id]) * FAR_LOOKAHEAD_PCT) / 100;
+      return { cost: extra + pa.gold + pp.gold + e.evolveCost, stepCost, gain, commands, damage: true };
+    };
+    const adjacentTo = (a: Tower, b: { tileX: number; tileY: number }) => Math.abs(a.tileX - b.tileX) <= 1 && Math.abs(a.tileY - b.tileY) <= 1;
+    for (const recipe of sim.data.evolutions) {
+      const atA = placeOf(sim, recipe.attack.skill);
+      const atP = placeOf(sim, recipe.partner.skill);
+      if (!atA || !atP) continue;
+      for (const t of towers) {
+        if (t.evolved) continue;
+        // Pairs already standing side by side
+        if (t.cls === atA.cls && t.line === atA.line) {
+          for (const u of towers) {
+            if (u === t || u.evolved || !adjacentTo(t, u) || u.cls !== atP.cls || u.line !== atP.line) continue;
+            const o = planned(t, u, recipe, 0);
+            if (o) out.push(o);
+          }
+        }
+        // A new tower to stand beside t and make the pair with it
+        const mine = t.cls === atA.cls && t.line === atA.line ? 'attack' : t.cls === atP.cls && t.line === atP.line ? 'partner' : undefined;
+        if (!mine) continue;
+        const other = mine === 'attack' ? atP : atA;
+        const t1 = sim.data.classes[other.cls]!.lines[other.line]!.tiers[0]![0]!;
+        if (!config.builds.includes(t1) || towers.length >= (config.maxTowers ?? Infinity)) continue;
+        if (towers.some((u) => u !== t && !u.evolved && adjacentTo(t, u) && u.cls === other.cls && u.line === other.line)) continue;
+        let spot: { x: number; y: number } | undefined;
+        for (let dy = -1; dy <= 1 && !spot; dy++) for (let dx = -1; dx <= 1 && !spot; dx++) if (canBuild(sim, t.tileX + dx, t.tileY + dy)) spot = { x: t.tileX + dx, y: t.tileY + dy };
+        if (!spot) continue;
+        const c = tileCenter(spot);
+        const fresh: Tower = {
+          id: -2, owner: 0, cls: other.cls, tileX: spot.x, tileY: spot.y, x: c.x, y: c.y, line: other.line, tier: 1, level: 1,
+          picks: [t1], spent: 0, cooldown: 0, targeting: 'first', evolved: '', partnerSkill: '', partnerLevel: 0, summonCooldown: 0, partnerCooldown: 0,
+        };
+        const o = mine === 'attack'
+          ? planned(t, fresh, recipe, buildCostFor(sim, 0), [{ type: 'build', x: spot.x, y: spot.y, cls: other.cls, skill: t1 }])
+          : planned(fresh, t, recipe, buildCostFor(sim, 0), [{ type: 'build', x: spot.x, y: spot.y, cls: other.cls, skill: t1 }]);
+        if (o) out.push(o);
+      }
+    }
+  }
+
   for (const t of towers) {
     const level = upgradeCost(sim, t);
     if (level !== undefined) {
@@ -573,7 +674,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
     const established = towers.length >= LOOKAHEAD_MIN_TOWERS;
     if (config.tiers && established && line && tierPrice !== undefined && t.tier < line.tiers.length && t.picks.length >= t.tier) {
       let remaining = tierPrice;
-      for (let lv = t.level; lv < MAX_TOWER_LEVEL; lv++) remaining += sim.data.economy.levelCosts[t.tier - 1]![lv - 1]!;
+      for (let lv = t.level; lv < MAX_TOWER_LEVEL; lv++) remaining += e.levelCosts[t.tier - 1]![lv - 1]!;
       const opts = line.tiers[t.tier] ?? [];
       for (const skill of opts) {
         const next = { ...t, tier: t.tier + 1, level: 1, picks: [...t.picks, skill] };
@@ -582,8 +683,18 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
         if (t.level >= MAX_TOWER_LEVEL && opts.length > 1) commands.push({ type: 'pickBranch', towerId: t.id, skill });
         // Pay only for the next step now; the option is judged on the whole path
         const stepCost = t.level < MAX_TOWER_LEVEL ? level! : tierPrice;
-        const gain = (gainOf(sim, towers, judge, next) * LOOKAHEAD_DISCOUNT_PCT) / 100;
-        out.push({ cost: remaining, stepCost, gain, commands, damage: isDamage(sim.data.skills[skill]) });
+        const damage = isDamage(sim.data.skills[skill]);
+        out.push({ cost: remaining, stepCost, gain: (gainOf(sim, towers, judge, next) * LOOKAHEAD_DISCOUNT_PCT) / 100, commands, damage });
+        // And the tier after it: the power sits in the top tier, and the tier between can
+        // look no better than another tower, so a bot judging one tier ahead never climbs
+        const after = line.tiers[t.tier + 1];
+        const afterPrice = e.tierCosts[t.tier];
+        if (!after || afterPrice === undefined) continue;
+        const through = remaining + sum(e.levelCosts[t.tier]!) + afterPrice;
+        for (const top of after) {
+          const far = { ...t, tier: t.tier + 2, level: 1, picks: [...t.picks, skill, top] };
+          out.push({ cost: through, stepCost, gain: (gainOf(sim, towers, judge, far) * FAR_LOOKAHEAD_PCT) / 100, commands, damage });
+        }
       }
     }
   }
@@ -796,7 +907,9 @@ export function createBot(strategy: Strategy, sim: Sim, pool?: readonly Item[]):
     const builds = pool && pool.length > 0 ? lootBuilds(sim, pool) : [];
     return engineBot({ ...CONFIGS.MIXED3!, strategy, ...(builds.length > 0 ? { builds } : {}) }, sim);
   }
-  return engineBot(CONFIGS[strategy]!, sim);
+  // BOT_MAX_TOWERS=n holds a bot to n towers: a few high towers against the bot's own choice
+  const cap = Number(process.env['BOT_MAX_TOWERS'] ?? 0);
+  return engineBot(cap > 0 ? { ...CONFIGS[strategy]!, maxTowers: cap } : CONFIGS[strategy]!, sim);
 }
 
 /** Debug view: a bot's options right now, best power per gold first. */

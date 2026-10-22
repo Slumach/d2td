@@ -3,7 +3,7 @@
   "skill": "Hurricane",
   "archetype": "control",
   "damageType": "cold",
-  "tierBonus": 1397,
+  "tierBonus": 2491,
   "control": {
     "mode": "aura",
     "radiusCalc": "aurarangecalc",

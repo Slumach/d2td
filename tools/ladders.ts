@@ -30,11 +30,11 @@ function show(metric: 'dps' | 'aura', v: number): string {
 
 export function ladderReport(data: GameData): string[] {
   const out: string[] = [];
-  const { dpsPct, referenceSkill, debuffTargetResist } = DESIGN.balance.tierLadder;
+  const { dpsPct, auraPct, referenceSkill, debuffTargetResist } = DESIGN.balance.tierLadder;
   const reference = data.skills[referenceSkill]!;
   for (const cls of Object.values(data.classes)) {
     for (const [lineId, line] of Object.entries(cls.lines)) {
-      out.push(`${cls.name} ${line.name} line: a tier-up must reach ${dpsPct}% of the strongest tower it replaces`);
+      out.push(`${cls.name} ${line.name} line: a tier-up must reach ${Object.entries(dpsPct).map(([t, p]) => `T${t} ${p}%`).join(', ')} of the strongest tower it replaces`);
       line.tiers.forEach((options, t) => {
         for (const id of options) {
           const skill = data.skills[id]!;
@@ -45,7 +45,7 @@ export function ladderReport(data: GameData): string[] {
           );
           let note = 'T1, levels from the skill JSON';
           if (ladder) {
-            note = `floor ${show(metric, Math.ceil((ladder.previous * dpsPct) / 100))}`;
+            note = `floor ${show(metric, Math.ceil((ladder.previous * (ladder.metric === 'aura' ? auraPct : dpsPct[String(ladder.tier)]!)) / 100))}`;
             if (!ladder.reached && ladder.tierBonus === 1000) note += ', not reached by the cap: a debuff, so no bonus';
             else if (!ladder.reached) note += `, not reached by the cap: TIER BONUS x${(ladder.tierBonus / 1000).toFixed(3)}`;
           }

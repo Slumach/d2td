@@ -3,7 +3,7 @@
   "skill": "Chain Lightning",
   "archetype": "pierce",
   "damageType": "ltng",
-  "tierBonus": 1364,
+  "tierBonus": 2651,
   "rangeTenths": 45,
   "rateTicks": 25,
   "pierce": { "mode": "chain", "hopsCalc": "calc1", "jumpCalc": "aurarangecalc", "falloffPct": 0 }

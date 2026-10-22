@@ -218,7 +218,7 @@ describe('data', () => {
 
   it('builds tier ladders: every tier-up reaches the floor, five rising steps to the cap', () => {
     for (const data of [fixtureGameData(), ...(hasTables() ? [buildGameData(loadTables(), DESIGN)] : [])]) {
-      const { dpsPct, caps } = DESIGN.balance.tierLadder;
+      const { dpsPct, auraPct, caps } = DESIGN.balance.tierLadder;
       // The fixture carries the classes it has rows for; the real tables carry them all
       const laddered = Object.values(data.classes).flatMap((c) => Object.values(c.lines).flatMap((l) => l.tiers.slice(1).flat()));
       expect(data.ladders.length).toBe(laddered.length);
@@ -239,7 +239,7 @@ describe('data', () => {
           if (!ladder.reached) expect(ladder.levels).toEqual([cap - 4, cap - 3, cap - 2, cap - 1, cap]);
           continue;
         }
-        expect(ladder.start * 100).toBeGreaterThanOrEqual(ladder.previous * dpsPct);
+        expect(ladder.start * 100).toBeGreaterThanOrEqual(ladder.previous * (ladder.metric === 'aura' ? auraPct : dpsPct[String(ladder.tier)]!));
         if (ladder.reached) expect(ladder.tierBonus).toBe(1000);
         else {
           expect(ladder.levels).toEqual([cap - 4, cap - 3, cap - 2, cap - 1, cap]);

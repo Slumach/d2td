@@ -3,6 +3,7 @@
   "skill": "Bone Spirit",
   "archetype": "projectile",
   "damageType": "mag",
+  "tierBonus": 1450,
   "rangeTenths": 55,
   "rateTicks": 25,
   "projectile": { "count": 1 }
