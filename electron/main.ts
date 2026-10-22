@@ -17,6 +17,7 @@ import { DEFAULT_PORT, PROTOCOL, type ClientMessage } from '../src/net/protocol.
 import { GAME_HEIGHT, GAME_WIDTH } from '../src/render/layout.ts';
 import { extractGame, verifyGame } from '../tools/extract/game.ts';
 import { CascSource, type CascStorage } from '../tools/extract/source.ts';
+import { heroGearFiles, heroGearPath, parseHeroGearPath } from '../tools/extract/sprites.ts';
 import { detectD2R, looksLikeD2R } from '../tools/lib/d2r.ts';
 import { describe, log, openLog } from './log.ts';
 import { localAddresses } from './net/addresses.ts';
@@ -102,9 +103,34 @@ function serveApp(): void {
   protocol.handle('app', (request) => {
     const path = decodeURIComponent(new URL(request.url).pathname).replace(/^\/+/, '') || 'index.html';
     const file = inside(isRendererPath(path) ? rendererDir() : assetsDir(), path);
+    if (file && !existsSync(file)) composeWornLook(path);
     if (!file || !existsSync(file)) return new Response('Not found', { status: 404 });
     return net.fetch(pathToFileURL(file).toString());
   });
+}
+
+/** The D2R storage, opened once when a worn look is first composited. */
+let gearSource: CascSource | undefined;
+
+/**
+ * A tower wearing a weapon or shield draws with them: the first request for that look's
+ * atlas composites it from the player's own D2R files into the assets folder, beside the
+ * extracted art. Nothing is written when the path is not a worn look or D2R is not set.
+ */
+function composeWornLook(path: string): void {
+  const spec = parseHeroGearPath(path);
+  if (!spec || !settings.d2rPath) return;
+  try {
+    gearSource ??= new CascSource(openCasc(settings.d2rPath), settings.d2rPath);
+    for (const f of heroGearFiles(gearSource, spec)) {
+      const out = join(assetsDir(), f.path);
+      mkdirSync(dirname(out), { recursive: true });
+      writeFileSync(out, f.bytes);
+    }
+    log(`gear: composited ${heroGearPath(spec)}`);
+  } catch (e) {
+    log(`gear: ${heroGearPath(spec)}: ${describe(e)}`);
+  }
 }
 
 // CascLib is a native module; require it at run time so the bundler leaves it alone

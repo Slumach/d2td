@@ -55,6 +55,7 @@ import {
   animKey,
   createAnimations,
   heroAttackMode,
+  heroGearOf,
   heroKey,
   iconIndex,
   iconKey,
@@ -1004,6 +1005,36 @@ export class GameScene extends Phaser.Scene {
   /** Towers whose skill (or evolved partner skill) acted on the tick being drawn. */
   private actedThisTick: Tower[] = [];
 
+  /** Worn looks asked for, loaded or failed, so each is requested once. */
+  private gearLooks = new Map<string, 'loading' | 'ready' | 'failed'>();
+
+  /**
+   * The texture of a tower's worn weapon and shield, once loaded; the first sight of a pair
+   * asks for it (the app composites it from the game files) and the line's own look stands
+   * in until it arrives.
+   */
+  private wornLook(t: Tower): string | undefined {
+    const gear = heroGearOf(t);
+    if (!gear) return undefined;
+    const state = this.gearLooks.get(gear.key);
+    if (state === 'ready') return gear.key;
+    if (state) return undefined;
+    this.gearLooks.set(gear.key, 'loading');
+    this.load.multiatlas(gear.key, gear.json, gear.dir);
+    this.load.once(`filecomplete-multiatlas-${gear.key}`, () => {
+      createAnimations(this);
+      this.gearLooks.set(gear.key, 'ready');
+    });
+    const failed = (file: Phaser.Loader.File) => {
+      if (file.key !== gear.key) return;
+      this.gearLooks.set(gear.key, 'failed');
+      this.load.off('loaderror', failed);
+    };
+    this.load.on('loaderror', failed);
+    this.load.start();
+    return undefined;
+  }
+
   private syncTowers(): void {
     const s = this.sim.state;
     const seen = new Set<number>();
@@ -1011,7 +1042,7 @@ export class GameScene extends Phaser.Scene {
     for (const t of s.towers) {
       seen.add(t.id);
       const { x: px, y: py } = project(t.x, t.y);
-      const texture = heroKey(t);
+      const texture = this.wornLook(t) ?? heroKey(t);
       let view = this.towers.get(t.id);
       if (view && view.texture !== texture) {
         view.sprite.destroy();

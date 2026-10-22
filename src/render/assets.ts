@@ -80,6 +80,18 @@ export function heroKey(tower: { cls: string; line: string; tier: number; evolve
   const look = tower.evolved ? 'evolved' : `t${Math.min(Math.max(tower.tier, 1), sprites.heroTiers.length)}`;
   return `hero:${cls}:${line}:${look}`;
 }
+/**
+ * The look a tower's worn weapon or shield needs, when it wears either: its texture key and
+ * the atlas path the app composites on first request (tools/extract/sprites.ts heroGearFiles).
+ */
+export function heroGearOf(tower: { cls: string; line: string; tier: number; evolved: string; gear?: { weapon?: { code: string }; shield?: { code: string } } }): { key: string; json: string; dir: string } | undefined {
+  const weapon = tower.gear?.weapon?.code ?? '';
+  const shield = tower.gear?.shield?.code ?? '';
+  if (!weapon && !shield) return undefined;
+  const [, cls, line, look] = heroKey(tower).split(':') as [string, string, string, string];
+  const name = `${line}-${look}-${weapon || 'own'}-${shield || 'own'}`;
+  return { key: `hero:${cls}:${name}`, json: `hero-gear/${cls}/${name}.json`, dir: `hero-gear/${cls}/` };
+}
 export const missileKey = (id: string) => `mis:${id}`;
 export const overlayKey = (id: string) => `ovl:${id}`;
 export const objectKey = (id: string) => `obj:${id}`;

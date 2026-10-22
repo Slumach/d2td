@@ -479,18 +479,8 @@ function heroClassJobs(
     const weapon = gear.weapon ? named('w', gear.weapon) : undefined;
     // Unarmed is D2's hand-to-hand class; nil leaves the weapon and shield layers empty
     const weaponClass = weapon ? String(weapon['wclass']).toLowerCase() : 'hth';
-    const equipmentFor = (tier: HeroTier): Record<string, string> => ({
-      HD: tier.helm ? gfx(named('a', tier.helm)) : 'lit',
-      TR: tier.body,
-      LG: tier.body,
-      RA: tier.body,
-      LA: tier.body,
-      S1: tier.body,
-      S2: tier.body,
-      RH: weapon ? gfx(weapon) : 'nil',
-      LH: weapon ? 'lit' : 'nil',
-      SH: gear.shield ? gfx(named('a', gear.shield)) : 'nil',
-    });
+    const equipmentFor = (tier: HeroTier): Record<string, string> =>
+      heroEquipment(tier, tier.helm ? gfx(named('a', tier.helm)) : undefined, weapon ? gfx(weapon) : undefined, gear.shield ? gfx(named('a', gear.shield)) : undefined);
     const looks = tiers.map((tier, i) => {
       const equipment = equipmentFor(tier);
       const specs = heroModes.map((mode) => ({ folder: `chars/${token}`, token, mode, weaponClass, variant: (c: string) => equipment[c] ?? 'lit', lenient: true }));
@@ -505,6 +495,8 @@ function heroClassJobs(
     return {
       label: `hero ${cls} ${line}`,
       inputs: [...new Set(inputs)],
+      // 2: a weapon draws in both hand layers (a bow is a left-hand layer, a crossbow both)
+      rev: 2,
       run: () => {
         const out: OutputFile[] = [];
         const plain = remapped(shared.palette, []);
@@ -520,6 +512,91 @@ function heroClassJobs(
       },
     };
   });
+}
+
+/**
+ * The layer variants a hero look draws: the tier's armour on every body part and its helm,
+ * the weapon in both hand layers (D2 draws a sword in the right hand, a bow in the left and
+ * a crossbow in both; a hand with no file for the weapon draws nothing), and the shield.
+ */
+function heroEquipment(tier: HeroTier, helm: string | undefined, weapon: string | undefined, shield: string | undefined): Record<string, string> {
+  return {
+    HD: helm ?? 'lit',
+    TR: tier.body,
+    LG: tier.body,
+    RA: tier.body,
+    LA: tier.body,
+    S1: tier.body,
+    S2: tier.body,
+    RH: weapon ?? 'nil',
+    LH: weapon ?? 'nil',
+    SH: shield ?? 'nil',
+  };
+}
+
+/** A tower's look with the weapon and shield it wears, composited on request (heroGearFiles). */
+export interface HeroGearSpec {
+  cls: string;
+  line: string;
+  /** t1, t2, t3 or evolved. */
+  look: string;
+  /** weapons.txt code, or '' to keep the line's own weapon. */
+  weapon: string;
+  /** armor.txt code of a shield, or '' to keep the line's own (none under a two-handed weapon). */
+  shield: string;
+}
+
+/** Where a worn look's atlas lives under the assets folder, without the .json. */
+export function heroGearPath(s: HeroGearSpec): string {
+  return `hero-gear/${s.cls}/${s.line}-${s.look}-${s.weapon || 'own'}-${s.shield || 'own'}`;
+}
+
+/** The look a hero-gear atlas or page path names, or undefined if it is not one. */
+export function parseHeroGearPath(path: string): HeroGearSpec | undefined {
+  const m = /^hero-gear\/([a-z]+)\/([a-z]+)-(t\d|evolved)-([a-z0-9]+)-([a-z0-9]+)(?:-\d+\.png|\.json)$/.exec(path);
+  if (!m) return undefined;
+  const [, cls, line, look, weapon, shield] = m as unknown as string[];
+  return { cls: cls!, line: line!, look: look!, weapon: weapon === 'own' ? '' : weapon!, shield: shield === 'own' ? '' : shield! };
+}
+
+/**
+ * Composites one tower look with a worn weapon and shield from the game files: the class's
+ * line at that tier, the weapon's own weapon class (a bow on a Paladin swings as a bowman),
+ * its graphic in the hands, and the shield on the shield arm unless the weapon takes both
+ * hands. The app does this the first time a tower wears the pair and keeps the atlas.
+ */
+export function heroGearFiles(source: DataSource, spec: HeroGearSpec): OutputFile[] {
+  const h = (sprites.heroes as Record<string, HeroClass>)[spec.cls];
+  const gear = h?.lines[spec.line];
+  if (!h || !gear) throw new Error(`No hero look ${spec.cls} ${spec.line}`);
+  const tiers = sprites.heroTiers as HeroTier[];
+  const tierIndex = spec.look === 'evolved' ? tiers.length - 1 : Number(spec.look.slice(1)) - 1;
+  const tier = tiers[tierIndex];
+  if (!tier) throw new Error(`No hero tier ${spec.look}`);
+  const armor = readTable(source, 'armor.txt');
+  const weapons = readTable(source, 'weapons.txt');
+  const gfx = (row: TxtRow) => String(column(row, 'alternategfx') || row['code']).toLowerCase();
+  const byCode = (rows: TxtRow[], code: string) => rows.find((r) => String(r['code']).toLowerCase() === code.toLowerCase());
+  const byName = (rows: TxtRow[], name: string) => rows.find((r) => r['name'] === name);
+  const weapon = spec.weapon ? byCode(weapons, spec.weapon) : gear.weapon ? byName(weapons, gear.weapon) : undefined;
+  if (spec.weapon && !weapon) throw new Error(`No weapon ${spec.weapon}`);
+  const weaponClass = weapon ? String(weapon['wclass']).toLowerCase() : 'hth';
+  const twoHanded = !!weapon && (String(column(weapon, '2handed')) === '1' || ['2hs', '2ht', 'bow', 'xbw', 'stf'].includes(weaponClass));
+  const shieldRow = twoHanded ? undefined : spec.shield ? byCode(armor, spec.shield) : gear.shield ? byName(armor, gear.shield) : undefined;
+  const helm = tier.helm ? byName(armor, tier.helm) : undefined;
+  const equipment = heroEquipment(tier, helm ? gfx(helm) : undefined, weapon ? gfx(weapon) : undefined, shieldRow ? gfx(shieldRow) : undefined);
+  const token = h.token.toLowerCase();
+  const palette = decodePalDat(source.read('global/palette/act1/pal.dat'));
+  const pl2 = decodePl2(source.read('global/palette/act1/pal.pl2'));
+  const shared = { source, palette, pl2, animdata: decodeAnimData(source.read('global/animdata.d2')) } as unknown as Shared;
+  const colours = spec.look === 'evolved' ? remapped(palette, [pl2Shift(pl2, sprites.colorShifts.evolved)]) : remapped(palette, []);
+  const modes = ['NU', h.attackMode].flatMap((mode) => {
+    const s: CompositeSpec = { folder: `chars/${token}`, token, mode, weaponClass, variant: (c: string) => equipment[c] ?? 'lit', lenient: true };
+    // A weapon class the class has no pose for (no COF) keeps the line's own
+    return compositeInputs(source, s) ? [compositeMode(shared, s, colours)] : [];
+  });
+  if (modes.length === 0) throw new Error(`${spec.cls} has no ${weaponClass} poses`);
+  return atlasFrom(heroGearPath(spec), modes, DIRECTION_NAMES_8, { hero: spec.cls, line: spec.line, tier: spec.look, equipment });
 }
 
 /** A single-layer DCC as mode "missile" frames, with its own origin. */

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { decodePl2, PL2_SIZE } from '../lib/pl2.ts';
 import { composite } from './composite.ts';
-import { remapped, trim } from './sprites.ts';
+import { heroGearPath, parseHeroGearPath, remapped, trim } from './sprites.ts';
 
 describe('pal.pl2', () => {
   it('matches the 443,175-byte layout of D2 pal.pl2 and reads the hue tables', () => {
@@ -69,5 +69,17 @@ describe('composite glow layers', () => {
     expect(Array.from(px.subarray(0, 4))).toEqual([100, 50, 0, 255]);
     // Pixel 1: glow alone, green at full colour with its brightness as alpha
     expect(Array.from(px.subarray(4, 8))).toEqual([0, 255, 0, 50]);
+  });
+});
+
+describe('worn looks', () => {
+  it('name an atlas by class, line, tier, weapon and shield, and read it back from its JSON or page path', () => {
+    const spec = { cls: 'paladin', line: 'zealot', look: 't2', weapon: 'lbw', shield: '' };
+    expect(heroGearPath(spec)).toBe('hero-gear/paladin/zealot-t2-lbw-own');
+    expect(parseHeroGearPath('hero-gear/paladin/zealot-t2-lbw-own.json')).toEqual(spec);
+    expect(parseHeroGearPath('hero-gear/paladin/zealot-t2-lbw-own-0.png')).toEqual(spec);
+    expect(parseHeroGearPath('hero-gear/paladin/zealot-evolved-own-tow.json')).toEqual({ ...spec, look: 'evolved', weapon: '', shield: 'tow' });
+    expect(parseHeroGearPath('hero/paladin/zealot-t2.json')).toBeUndefined();
+    expect(parseHeroGearPath('hero-gear/../../secret.json')).toBeUndefined();
   });
 });
