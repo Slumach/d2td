@@ -189,6 +189,8 @@ Gold only in v0.1. The M1 grey-box was far too easy with flat costs and flat HP,
 
 Target rhythm (Green TD, not a treadmill): tier-ups and evolutions are big jumps, about 2.5x DPS, that buy three or four comfortable waves while the levels climb underneath; levels within a tier are small and few. A player should feel ahead right after a purchase and behind two waves later. The harness logs per-wave margin so the sawtooth is visible, and the 110% floor is only the no-downgrade guarantee, not the target.
 
+The ring report (tools/report.ts, `npm run report`) has every bot play all 75 waves on the ring in single player and prints, without targets or tuning: the wave each run dies on, alive weight at each wave's start and its peak while it was the newest wave, and where the bots' towers stood at the end, by nearest path leg (U-bend pocket, round the outside of the U, the run into a handoff corner, a long straight, or inland, more than two tiles from any leg). It is the input to the rebalance pass.
+
 - Bounty per kill = monster level x 2 (balance.json bountyPerLevel), with no per-wave curve: the levels climb with the campaign. Champions x3, uniques x5, act bosses x20, Andariel x50.
 - Send Next Wave pays for the time it skips (see Enemies, waves and difficulty); there is no wave-clear bonus.
 - Starting gold 300, enough for two towers. No lives: the alive count is the loss condition.

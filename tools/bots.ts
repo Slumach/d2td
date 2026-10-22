@@ -118,7 +118,19 @@ const CROWD = 3;
  * rides on every direct hit. Summons count for the damage they deal and the HP they put
  * in the way; corpse skills and pulses for what they take off a crowd.
  */
+/** attackParts reads only the data, and a big build repeats the same few towers: memoised per data. */
+const partsMemo = new WeakMap<GameData, Map<string, Parts>>();
+
 function attackParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boolean, buff: Buff, hpCap: number): Parts {
+  let memo = partsMemo.get(sim.data);
+  if (!memo) partsMemo.set(sim.data, (memo = new Map()));
+  const key = `${skill.id}|${lvl}|${ignoreDelay}|${buff.damagePct},${buff.attackSpeedPct},${buff.fire}|${hpCap}`;
+  let parts = memo.get(key);
+  if (!parts) memo.set(key, (parts = computeParts(sim, skill, lvl, ignoreDelay, buff, hpCap)));
+  return parts;
+}
+
+function computeParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boolean, buff: Buff, hpCap: number): Parts {
   const rate = Math.max(1, ((skill.rates[lvl] ?? skill.rateTicks) * 100) / (100 + buff.attackSpeedPct));
   const interval = Math.max(rate, ignoreDelay ? 0 : skill.delayTicks);
   const hit = (damage: number, filter?: HitFilter) =>
@@ -637,6 +649,12 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
     return undefined;
   }
 
+  // The best option depends only on the wave (the coming monsters, the tier gates) and the
+  // towers, not on gold or the monsters out, so it is worked out again only when one changes
+  let cached: { key: string; best: Option | undefined } | undefined;
+  const keyOf = (s: Sim) =>
+    `${s.state.wave}|${s.state.towers.map((t) => `${t.id}:${t.tileX},${t.tileY}:${t.tier}.${t.level}:${t.picks.join('+')}:${t.evolved}:${t.partnerSkill}.${t.partnerLevel}`).join(';')}`;
+
   return {
     strategy: config.strategy,
     evolvedOn,
@@ -647,11 +665,16 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
       if (opening) return [...opening, ...out];
 
       // Best power per gold; save up for it rather than buying something worse now
-      let best: Option | undefined;
-      for (const o of options(s, config, ranged, melee, cov)) {
-        if (o.gain <= 0) continue;
-        if (!best || o.gain / o.cost > best.gain / best.cost) best = o;
+      const key = keyOf(s);
+      if (cached?.key !== key) {
+        let pick: Option | undefined;
+        for (const o of options(s, config, ranged, melee, cov)) {
+          if (o.gain <= 0) continue;
+          if (!pick || o.gain / o.cost > pick.gain / pick.cost) pick = o;
+        }
+        cached = { key, best: pick };
       }
+      const best = cached.best;
       if (!best || (s.state.gold[0] ?? 0) < (best.stepCost ?? best.cost)) return out;
       return [...best.commands, ...out];
     },
