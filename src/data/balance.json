@@ -15,6 +15,7 @@
   "earlySendGoldPerTenLevels": 2,
   "placeholderLevelPercentiles": [20, 80],
   "auraRangePerTile": 8,
+  "stationaryVelocity": 3,
   "chillPct": 50,
   "staticFloorPct": [0, 33, 50],
   "corpseLifetimeTicks": 200,

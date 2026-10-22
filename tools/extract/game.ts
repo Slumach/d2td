@@ -34,8 +34,9 @@ export const CHECKSUM_FILE = 'checksums.json';
  *     inventory panel.
  * 11: Act 2: its monsters (in Act 2's palette), its maps, and D2R's monster names.
  * 12: Act 3: its monsters and maps.
+ * 13: Act 4: its monsters and maps.
  */
-export const EXTRACT_VERSION = 12;
+export const EXTRACT_VERSION = 13;
 /** What verifyGame reports when the extraction is from an older version of the game. */
 export const OUTDATED = 'version';
 

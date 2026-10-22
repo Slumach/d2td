@@ -1,0 +1,169 @@
+{
+  "comment": "Act 4's two maps for the ring, authored by us: the Outer Steppes and the Plains of Despair (the field) and the Chaos Sanctuary (the boss lair). Tiles are referenced by DT1 file, orientation and main-sub index (and v, which of a key's random variants); the art is read from the player's install and baked at extraction (tools/extract/map.ts). Scenery goes on the tiles src/data/map/ring.json gives each kind, so the picture matches the buildable mask.",
+  "palette": "global/palette/act4/pal.dat",
+  "seed": 4004,
+  "maps": {
+    "field": {
+      "floor": {
+        "file": "Act4/Mesa/Floor.dt1",
+        "ground": ["10-0", "10-1"],
+        "sprinkle": { "file": "Act4/Mesa/Floor.dt1", "tiles": ["10-12"], "chancePct": 5 }
+      },
+      "road": {
+        "file": "Act4/Mesa/Floor.dt1",
+        "tiles": ["12-1", "12-2", "12-17", "12-20", "12-22", "12-24", "13-20", "13-24", "13-29", "13-30"],
+        "halfWidth": 0.68,
+        "wobble": 0.06,
+        "edge": 0.1
+      },
+      "scenery": {
+        "treeline": {
+          "prefabs": ["spire1", "spire2", "spire3", "pylon1", "pylon2", "pylon3", "tower1"],
+          "every": 2.5,
+          "outside": 1.5,
+          "front": {
+            "file": "Act4/Mesa/Floor.dt1",
+            "tiles": [
+              "11-0",
+              "11-1",
+              "11-2",
+              "11-3",
+              "11-4",
+              "11-5",
+              "11-6",
+              "11-7",
+              "11-9",
+              "11-10",
+              "11-11",
+              "11-12",
+              "11-13",
+              "11-14",
+              "11-15",
+              "11-16",
+              "11-17",
+              "11-18",
+              "11-19",
+              "11-20"
+            ]
+          }
+        },
+        "rocks": { "prefabs": ["darkrock1", "darkrock2", "lavarock1"] },
+        "bushes": { "prefabs": ["lavarock2", "lavarock3", "lavarock4", "darkrock1"] },
+        "cottage": { "centre": "statue1", "corners": "spire1" }
+      }
+    },
+    "lair": {
+      "floor": { "file": "Act4/Diab/Floor.dt1", "ground": ["40-0", "40-1"] },
+      "road": {
+        "file": "Act4/Diab/Floor.dt1",
+        "tiles": ["30-14", "30-15", "30-16"],
+        "halfWidth": 0.72,
+        "wobble": 0,
+        "edge": 0.06
+      },
+      "scenery": {
+        "treeline": {
+          "prefabs": ["cathedral1", "cathedral2", "cathedral3", "cathedral4", "spire4", "spire5"],
+          "every": 2.5,
+          "outside": 1,
+          "front": {
+            "file": "Act4/Diab/Floor.dt1",
+            "tiles": [
+              "31-0",
+              "31-1",
+              "31-2",
+              "31-3",
+              "31-4",
+              "31-5",
+              "31-6",
+              "31-7",
+              "31-8",
+              "31-9",
+              "31-10",
+              "31-11",
+              "31-12",
+              "31-13",
+              "31-14",
+              "31-15",
+              "31-16",
+              "31-17",
+              "31-18",
+              "31-19",
+              "31-20",
+              "31-21",
+              "31-22",
+              "31-23"
+            ]
+          }
+        },
+        "rocks": { "prefabs": ["darkrock1", "darkrock2"] },
+        "bushes": { "prefabs": ["lavarock1", "lavarock2", "lavarock3", "lavarock4"] },
+        "cottage": { "centre": "facade", "corners": "statue2" }
+      }
+    }
+  },
+  "prefabs": {
+    "spire1": { "pieces": [{ "file": "Act4/Mesa/Surf_Struct.dt1", "o": 7, "key": "11-6", "at": [0, 0] }] },
+    "spire2": { "pieces": [{ "file": "Act4/Mesa/Surf_Struct.dt1", "o": 7, "key": "11-7", "at": [0, 0] }] },
+    "spire3": { "pieces": [{ "file": "Act4/Mesa/Surf_Struct.dt1", "o": 12, "key": "11-6", "at": [0, 0] }] },
+    "tower1": { "pieces": [{ "file": "Act4/Mesa/Surf_Struct.dt1", "o": 7, "key": "11-8", "at": [0, 0] }] },
+    "pylon1": {
+      "pieces": [
+        { "file": "Act4/Mesa/Chain_Walls.dt1", "o": 3, "key": "14-9", "at": [0, 0] },
+        { "file": "Act4/Mesa/Chain_Walls.dt1", "o": 4, "key": "14-9", "at": [0, 0] }
+      ]
+    },
+    "pylon2": {
+      "pieces": [
+        { "file": "Act4/Mesa/Chain_Walls.dt1", "o": 3, "key": "14-2", "at": [0, 0] },
+        { "file": "Act4/Mesa/Chain_Walls.dt1", "o": 4, "key": "14-2", "at": [0, 0] }
+      ]
+    },
+    "pylon3": {
+      "pieces": [
+        { "file": "Act4/Mesa/Chain_Walls.dt1", "o": 3, "key": "14-1", "at": [0, 0] },
+        { "file": "Act4/Mesa/Chain_Walls.dt1", "o": 4, "key": "14-1", "at": [0, 0] }
+      ]
+    },
+    "darkrock1": { "pieces": [{ "file": "Act4/Lava/Rocks.dt1", "o": 12, "key": "23-0", "at": [0, 0], "v": 0 }] },
+    "darkrock2": { "pieces": [{ "file": "Act4/Lava/Rocks.dt1", "o": 12, "key": "23-0", "at": [0, 0], "v": 1 }] },
+    "lavarock1": { "pieces": [{ "file": "Act4/Lava/Rocks.dt1", "o": 12, "key": "23-1", "at": [0, 0], "v": 0 }] },
+    "lavarock2": { "pieces": [{ "file": "Act4/Lava/Rocks.dt1", "o": 12, "key": "23-1", "at": [0, 0], "v": 1 }] },
+    "lavarock3": { "pieces": [{ "file": "Act4/Lava/Rocks.dt1", "o": 12, "key": "23-1", "at": [0, 0], "v": 2 }] },
+    "lavarock4": { "pieces": [{ "file": "Act4/Lava/Rocks.dt1", "o": 12, "key": "23-1", "at": [0, 0], "v": 3 }] },
+    "statue1": { "pieces": [{ "file": "Act4/Lava/Specials.dt1", "o": 12, "key": "22-8", "at": [0, 0] }] },
+    "statue2": { "pieces": [{ "file": "Act4/Lava/Specials.dt1", "o": 12, "key": "22-7", "at": [0, 0] }] },
+    "cathedral1": {
+      "pieces": [
+        { "file": "Act4/Diab/Walls.dt1", "o": 2, "key": "30-1", "at": [0, 0] },
+        { "file": "Act4/Diab/Walls.dt1", "o": 1, "key": "30-1", "at": [0, 0] }
+      ]
+    },
+    "cathedral2": {
+      "pieces": [
+        { "file": "Act4/Diab/Walls.dt1", "o": 2, "key": "30-3", "at": [0, 0] },
+        { "file": "Act4/Diab/Walls.dt1", "o": 1, "key": "30-3", "at": [0, 0] }
+      ]
+    },
+    "cathedral3": {
+      "pieces": [
+        { "file": "Act4/Diab/Walls.dt1", "o": 2, "key": "30-4", "at": [0, 0] },
+        { "file": "Act4/Diab/Walls.dt1", "o": 1, "key": "30-4", "at": [0, 0] }
+      ]
+    },
+    "cathedral4": {
+      "pieces": [
+        { "file": "Act4/Diab/Walls.dt1", "o": 2, "key": "30-5", "at": [0, 0] },
+        { "file": "Act4/Diab/Walls.dt1", "o": 1, "key": "30-5", "at": [0, 0] }
+      ]
+    },
+    "spire4": { "pieces": [{ "file": "Act4/Diab/Walls.dt1", "o": 7, "key": "30-0", "at": [0, 0] }] },
+    "spire5": { "pieces": [{ "file": "Act4/Diab/Walls.dt1", "o": 9, "key": "30-0", "at": [0, 0] }] },
+    "facade": {
+      "pieces": [
+        { "file": "Act4/Diab/Walls.dt1", "o": 3, "key": "30-0", "at": [0, 0] },
+        { "file": "Act4/Diab/Walls.dt1", "o": 4, "key": "30-0", "at": [0, 0] }
+      ]
+    }
+  }
+}

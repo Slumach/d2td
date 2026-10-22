@@ -79,7 +79,7 @@ describe('data', () => {
     // Each act closes on its own boss; Act 1 on Blood Raven on Normal and Andariel after, and
     // an act without content repeats that difficulty's Act 1 boss
     const boss = (w: (typeof waves)[number]) => baseMonsterId(w.groups.find((g) => g.rank === 'boss')!.monster);
-    const own = ['', 'duriel', 'mephisto'];
+    const own = ['', 'duriel', 'mephisto', 'diablo'];
     const expected = [0, 1, 2].flatMap((d) => [1, 2, 3, 4, 5].map((a) => (a === 1 ? (d === 0 ? 'bloodraven' : 'andariel') : own[a - 1] || (d === 0 ? 'bloodraven' : 'andariel'))));
     expect(waves.filter((w) => w.final).map(boss)).toEqual(expected);
     // Act 1 shows different monsters on each difficulty

@@ -139,6 +139,11 @@ export interface BalanceJson {
    * difficulty), from this low percentile on its first wave to this high one on its last.
    */
   placeholderLevelPercentiles: [number, number];
+  /**
+   * The walk speed (monstats Velocity units) of a monster the tables leave stationary (the
+   * Trapped Soul, Velocity 0): on the ring everything walks, at the slowest walkers' pace.
+   */
+  stationaryVelocity: number;
   auraRangePerTile: number;
   /** D2 hardcodes how much a chilled monster slows: a design value. */
   chillPct: number;
@@ -412,7 +417,7 @@ const midway = (row: TableRow, min: string, max: string) => idiv(int(row, min) +
  * superunique: its class's stats with its own name, mods and pack; its unique rank adds the
  * unique HP bonus when it spawns).
  */
-export function monsterDef(tables: Tables, design: MonstersJson, id: string, auraRangePerTile: number, difficulty = 0, atLevel?: number): MonsterDef {
+export function monsterDef(tables: Tables, design: MonstersJson, id: string, auraRangePerTile: number, difficulty = 0, atLevel?: number, stationaryVelocity = 3): MonsterDef {
   const boss = [...design.superuniques, ...design.bosses].find((b) => b.id === id);
   const su = boss?.superunique ? findRow(tables.superuniques, 'Superunique', boss.superunique) : undefined;
   if (boss && su && str(su, 'Class') !== boss.class) throw new Error(`${id}: superuniques.txt class is ${str(su, 'Class')}, not ${boss.class}`);
@@ -474,7 +479,7 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
     maxHp: hpOf(maxCol!, 'maxHP'),
     minDamage: pct(col('A1MinD'), lvlCol('DM')),
     maxDamage: pct(col('A1MaxD'), lvlCol('DM')),
-    speed: int(row, 'Velocity') * VELOCITY_TO_UNITS_PER_TICK,
+    speed: (int(row, 'Velocity') || stationaryVelocity) * VELOCITY_TO_UNITS_PER_TICK,
     resist,
     undead: int(row, 'lUndead') === 1 || int(row, 'hUndead') === 1,
     demon: int(row, 'demon') === 1,
@@ -857,7 +862,7 @@ export function buildGameData(
   const monsters: Record<string, MonsterDef> = {};
   const defOf: DefOf = (id, difficulty, level) => {
     const key = level === undefined ? variantId(id, difficulty) : levelVariantId(id, difficulty, level);
-    return (monsters[key] ??= monsterDef(tables, m, id, design.balance.auraRangePerTile, difficulty, level));
+    return (monsters[key] ??= monsterDef(tables, m, id, design.balance.auraRangePerTile, difficulty, level, design.balance.stationaryVelocity));
   };
   // Every monster of the roster at its own level on every difficulty (tests and tools look them up)
   const everyone = [

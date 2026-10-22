@@ -377,7 +377,8 @@ function bakeAct(source: DataSource, tiles: Tiles, layout: ActLayout, out: Outpu
         const half = r.halfWidth + r.wobble * (valueNoise(u * 1.3, v * 1.3, seed) * 2 - 1);
         let alpha = Math.max(0, Math.min(1, (half - d) / r.edge + 0.5));
         if (alpha > 0 && alpha < 1) alpha = Math.max(0, Math.min(1, alpha + (hash2(x, y, seed + 3) - 0.5) * 0.5));
-        if (alpha === 0) continue;
+        // A road tile with holes (Chaos Sanctuary's lava pieces) lets the ground show through them
+        if (alpha === 0 || !road.rgba[o + 3]) continue;
         for (let k = 0; k < 3; k++) ground.rgba[o + k] = Math.round(ground.rgba[o + k]! * (1 - alpha) + road.rgba[o + k]! * alpha);
         ground.rgba[o + 3] = 255;
       }

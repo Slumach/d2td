@@ -34,7 +34,7 @@
     { "name": "Act 1", "waves": 6, "field": "Blood Moor", "lair": "Catacombs" },
     { "name": "Act 2", "waves": 5, "field": "Rocky Waste", "lair": "Tal Rasha's Tomb" },
     { "name": "Act 3", "waves": 5, "field": "Spider Forest", "lair": "Durance of Hate" },
-    { "name": "Act 4", "waves": 3, "field": "Plains of Despair", "lair": "Chaos Sanctuary" },
+    { "name": "Act 4", "waves": 3, "field": "Outer Steppes", "lair": "Chaos Sanctuary" },
     { "name": "Act 5", "waves": 6, "field": "Bloody Foothills", "lair": "Worldstone Chamber" }
   ],
   "campaign": {
@@ -114,6 +114,23 @@
         { "monster": "vampire4", "kind": "tank", "area": "Durance of Hate" },
         { "boss": "mephisto", "area": "Durance of Hate" }
       ]
+    },
+    "4": {
+      "normal": [
+        { "monster": "regurgitator1", "kind": "tank", "area": "Outer Steppes", "superunique": "izual" },
+        { "monster": "fingermage1", "kind": "swarm", "area": "Plains of Despair", "superunique": "hephasto" },
+        { "boss": "diablo", "area": "Chaos Sanctuary" }
+      ],
+      "nightmare": [
+        { "monster": "megademon2", "kind": "tank", "area": "City of the Damned" },
+        { "monster": "trappedsoul1", "kind": "swarm", "area": "River of Flame", "superunique": "vizier" },
+        { "boss": "diablo", "area": "Chaos Sanctuary" }
+      ],
+      "hell": [
+        { "monster": "doomknight2", "kind": "tank", "area": "River of Flame", "superunique": "deseis" },
+        { "monster": "megademon1", "kind": "tank", "area": "Chaos Sanctuary", "superunique": "infector" },
+        { "boss": "diablo", "area": "Chaos Sanctuary" }
+      ]
     }
   },
   "placeholder": [
@@ -172,12 +189,18 @@
     { "id": "bremm", "superunique": "Bremm Sparkfist", "class": "councilmember3", "minion": "councilmember3" },
     { "id": "toorc", "superunique": "Toorc Icefist", "class": "councilmember1" },
     { "id": "wyand", "superunique": "Wyand Voidfinger", "class": "councilmember2" },
-    { "id": "maffer", "superunique": "Maffer Dragonhand", "class": "councilmember3" }
+    { "id": "maffer", "superunique": "Maffer Dragonhand", "class": "councilmember3" },
+    { "id": "izual", "class": "izual" },
+    { "id": "hephasto", "superunique": "The Feature Creep", "class": "hephasto" },
+    { "id": "vizier", "superunique": "Grand Vizier of Chaos", "class": "fingermage3", "minion": "fingermage3" },
+    { "id": "deseis", "superunique": "Lord De Seis", "class": "doomknight3", "minion": "doomknight1" },
+    { "id": "infector", "superunique": "Infector of Souls", "class": "megademon3", "minion": "megademon3" }
   ],
   "bosses": [
     { "id": "bloodraven", "class": "bloodraven", "minion": "zombie2" },
     { "id": "andariel", "class": "andariel" },
     { "id": "duriel", "class": "duriel" },
-    { "id": "mephisto", "class": "mephisto" }
+    { "id": "mephisto", "class": "mephisto" },
+    { "id": "diablo", "class": "diablo" }
   ]
 }
