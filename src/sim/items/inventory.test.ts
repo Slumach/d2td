@@ -119,6 +119,23 @@ describe('inventory commands', () => {
   });
 });
 
+describe('selling a drop where it lies', () => {
+  it('pays the owner the capped price and refuses other players', () => {
+    const match = createMatch(fixtureGameData(3), 1, 'team', 2);
+    const sim = match.zones[0]!;
+    // A wave still out, so the drop is not collected as cleared
+    while (sim.state.waves.length < 1) sim.state.waves.push({ remaining: 0 });
+    sim.state.waves[0]!.remaining = 1;
+    sim.state.drops.push({ id: 77, item: item('tsw'), owner: 0, wave: 0, x: 0, y: 0 });
+    const gold = sim.state.gold[0]!;
+    stepMatch(match, [{ player: 1, command: { type: 'sellDrop', dropId: 77 } }]);
+    expect(sim.state.drops.length).toBe(1);
+    stepMatch(match, [{ player: 0, command: { type: 'sellDrop', dropId: 77 } }]);
+    expect(sim.state.drops).toEqual([]);
+    expect(sim.state.gold[0]! - gold).toBe(25);
+  });
+});
+
 describe('the belt', () => {
   it('holds gems, runes and jewels, sockets from its slots, and gives them back', () => {
     const sim = testSim();

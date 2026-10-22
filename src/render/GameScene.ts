@@ -337,7 +337,21 @@ export class GameScene extends Phaser.Scene {
     menuMusic(this, false);
     this.sounds = new SoundBank(this);
     this.sounds.startLoops();
-    this.drops = new GroundDrops(this, DEPTH.overlay - 1, (c) => this.issue(c), (item) => this.sounds.item(this.sim.data.items.bases[item.code]?.dropSound), (make) => this.camera.asWorld(make));
+    this.drops = new GroundDrops(
+      this,
+      DEPTH.overlay - 1,
+      (c) => this.issue(c),
+      (item) => this.sounds.item(this.sim.data.items.bases[item.code]?.dropSound),
+      (make) => this.camera.asWorld(make),
+      (d) => {
+        const sell = () => {
+          this.issue({ type: 'sellDrop', dropId: d.id });
+          this.sounds.item('item_gold');
+        };
+        if (this.inventory) this.inventory.confirmSale(d.item, sell);
+        else sell();
+      },
+    );
 
     const hudArt = hudManifest(this);
     this.d2 = hudArt

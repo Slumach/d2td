@@ -12,6 +12,7 @@ import { rollKillDrops, rollTreasure } from './drops.ts';
 import { WIRTS_LEG, type ItemData } from './data.ts';
 import { rollItem, type Item } from './item.ts';
 import { gearOf } from './tower.ts';
+import { sellPrice } from './price.ts';
 
 /** D2's inventory: ten columns, four rows. */
 export const INV_W = 10;
@@ -154,6 +155,15 @@ export function pickup(sim: Sim, player: number, dropId: number): void {
   const drop = s.drops.find((d) => d.id === dropId);
   if (!drop || drop.owner !== player) return;
   if (stow(sim, player, drop.item)) s.drops = s.drops.filter((d) => d.id !== dropId);
+}
+
+/** Sells a drop where it lies: its owner gets the capped sell price and the drop is gone. */
+export function sellDrop(sim: Sim, player: number, dropId: number): void {
+  const s = sim.state;
+  const drop = s.drops.find((d) => d.id === dropId);
+  if (!drop || drop.owner !== player) return;
+  s.gold[player]! += sellPrice(sim, drop.item);
+  s.drops = s.drops.filter((d) => d.id !== dropId);
 }
 
 /** Drops of cleared waves go to their owners' inventories if there is room; the rest are lost. */

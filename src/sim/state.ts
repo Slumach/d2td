@@ -89,6 +89,8 @@ export type CommandBody =
   | { type: 'socket'; target: ItemRef; uid: string }
   | { type: 'hammer'; target: ItemRef; uid: string }
   | { type: 'sellItem'; uid: string }
+  /** Sells one of the player's drops where it lies, at the capped sell price. */
+  | { type: 'sellDrop'; dropId: number }
   /** The trade window: handled by the match, which spans rings (src/sim/items/trade.ts). */
   | TradeCommand;
 

@@ -19,7 +19,7 @@ import { createRng } from './rng.ts';
 import type { Command, Sim, TimedCommand, Tower } from './state.ts';
 import { updateSummons } from './archetypes/summon.ts';
 import { geared, gearOf, withGear } from './items/tower.ts';
-import { collectCleared, pickup } from './items/loot.ts';
+import { collectCleared, pickup, sellDrop } from './items/loot.ts';
 import { cowWavesDue, openCowPortal, startCowWave } from './cow.ts';
 import { equip, fromBelt, hammer, loadInventory, moveItem, sellItem, socket, stashIn, stashOut, toBelt, unequip } from './items/inventory.ts';
 import { build, evolve, pickBranch, pickSkill, sell, setTargeting, towerById, upgrade, upgradeTier } from './towers.ts';
@@ -127,6 +127,7 @@ function applyCommand(sim: Sim, command: Command): void {
   if (command.type === 'build') return build(sim, player, command.x, command.y, command.cls, command.skill);
   if (command.type === 'callWave') return sendEarly(sim);
   if (command.type === 'pickup') return pickup(sim, player, command.dropId);
+  if (command.type === 'sellDrop') return sellDrop(sim, player, command.dropId);
   if (command.type === 'cowPortal') return openCowPortal(sim, player, command.uid);
   switch (command.type) {
     case 'loadInventory':

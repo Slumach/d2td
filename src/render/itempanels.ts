@@ -14,7 +14,7 @@ import { freeIn, STASH_H, STASH_W } from '../launcher/profile.ts';
 import type { ItemData, Slot } from '../sim/items/data.ts';
 import { canWear, type Item } from '../sim/items/item.ts';
 import { fitsAt } from '../sim/items/inventory.ts';
-import { INV_H, INV_W, type InvItem } from '../sim/items/loot.ts';
+import { freeSpot, INV_H, INV_W, type InvItem } from '../sim/items/loot.ts';
 import { sellPrice } from '../sim/items/price.ts';
 import type { Command, Sim, Tower } from '../sim/state.ts';
 import { hudKey, type HudManifest } from './d2hud.ts';
@@ -265,7 +265,7 @@ export class ItemPanels {
     grid.on('pointerdown', (ptr: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
       e.stopPropagation();
       if (ptr.rightButtonDown()) return this.held ? this.dropHeld() : this.rightClick(ptr.x - g.x, ptr.y - g.y);
-      this.clickGrid('inv', ptr.x - g.x, ptr.y - g.y);
+      this.clickGrid('inv', ptr.x - g.x, ptr.y - g.y, (ptr.event as MouseEvent).shiftKey);
     });
     grid.on('pointermove', (ptr: Phaser.Input.Pointer) => this.hoverGrid('inv', ptr.x - g.x, ptr.y - g.y, ptr.x, ptr.y));
     grid.on('pointerout', () => this.tip.hide());
@@ -309,7 +309,7 @@ export class ItemPanels {
       sgrid.on('pointerdown', (ptr: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
         e.stopPropagation();
         if (ptr.rightButtonDown()) return this.dropHeld();
-        this.clickGrid('stash', ptr.x - sg.x, ptr.y - sg.y);
+        this.clickGrid('stash', ptr.x - sg.x, ptr.y - sg.y, (ptr.event as MouseEvent).shiftKey);
       });
       sgrid.on('pointermove', (ptr: Phaser.Input.Pointer) => this.hoverGrid('stash', ptr.x - sg.x, ptr.y - sg.y, ptr.x, ptr.y));
       sgrid.on('pointerout', () => this.tip.hide());
@@ -637,13 +637,15 @@ export class ItemPanels {
     this.dropHeld();
   }
 
-  private clickGrid(grid: 'inv' | 'stash', px: number, py: number): void {
+  private clickGrid(grid: 'inv' | 'stash', px: number, py: number, shift = false): void {
     const sim = this.host.sim();
     if (!sim) return;
     const tick = sim.state.tick;
     const under = this.itemUnder(grid, px, py);
     if (!this.held) {
       if (!under) return;
+      // Shift-click sells where it sits, at the capped price
+      if (shift) return this.sellFromGrid(grid, under.item);
       return this.pickUp(under.item, grid === 'inv' ? { from: 'inv', uid: under.item.uid } : { from: 'stash', uid: under.item.uid, page: this.page });
     }
     const { item, source } = this.held;
@@ -739,11 +741,36 @@ export class ItemPanels {
       this.host.sound('item_gold');
       this.dropHeld();
     };
-    if (item.unique || item.runeword || item.setItem) this.askConfirm(`Sell ${itemLines(this.host.data, item, this.host)[0]!.text} for ${price} gold?`, sell);
+    if (item.unique || item.runeword || item.setItem) this.askConfirm(`Sell ${itemLines(this.host.data, item, this.host)[0]!.text} for ${price} gold?`, sell, () => this.dropHeld());
     else sell();
   }
 
-  private askConfirm(text: string, yes: () => void): void {
+  /** Shift-click: sells an inventory item in place, or a stash item through a free inventory spot. */
+  private sellFromGrid(grid: 'inv' | 'stash', item: Item): void {
+    const sim = this.host.sim();
+    if (!sim) return;
+    const sell = () => {
+      if (grid === 'stash') {
+        const spot = freeSpot(this.host.data, this.inventory(), item);
+        if (!spot) return this.host.toast('No room in the inventory to sell from');
+        this.host.keeper.sendOut(item, sim.state.tick);
+        this.host.issue({ type: 'stashOut', item, ...spot });
+      }
+      this.host.issue({ type: 'sellItem', uid: item.uid });
+      this.host.sound('item_gold');
+    };
+    this.confirmSale(item, sell);
+  }
+
+  /** Uniques, set items and runewords ask once; anything else sells at once. */
+  confirmSale(item: Item, sell: () => void): void {
+    const sim = this.host.sim();
+    if (!sim) return;
+    if (item.unique || item.runeword || item.setItem) this.askConfirm(`Sell ${itemLines(this.host.data, item, this.host)[0]!.text} for ${sellPrice(sim, item)} gold?`, sell, () => undefined);
+    else sell();
+  }
+
+  private askConfirm(text: string, yes: () => void, no: () => void): void {
     this.closeConfirm();
     const cx = GAME_WIDTH / 2;
     const cy = 360;
@@ -759,7 +786,7 @@ export class ItemPanels {
       });
     };
     btn('Sell', -70, yes);
-    btn('Keep', 70, () => this.dropHeld());
+    btn('Keep', 70, no);
   }
 
   private closeConfirm(): void {

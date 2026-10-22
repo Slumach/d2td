@@ -26,6 +26,8 @@ export class GroundDrops {
     private readonly dropSound: (item: Item) => void,
     /** Creates game objects in the world camera (WorldView.asWorld). */
     private readonly world: <T>(make: () => T) => T,
+    /** Shift-click on a label: sell the drop where it lies. */
+    private readonly sell: (d: Drop) => void,
   ) {}
 
   /** Matches the labels to the sim's drops; a new one plays its drop sound. */
@@ -69,6 +71,7 @@ export class GroundDrops {
     box.setInteractive({ useHandCursor: true }).on('pointerdown', (p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
       if (!p.leftButtonDown()) return;
       e.stopPropagation();
+      if ((p.event as MouseEvent).shiftKey) return this.sell(d);
       this.issue({ type: 'pickup', dropId: d.id });
     });
     box.on('pointerover', () => bg.setFillStyle(0x203060, 0.85));
