@@ -1,0 +1,9 @@
+{
+  "tyrael": { "name": "Tyrael", "class": "paladin", "monster": "tyrael1" },
+  "akara": { "name": "Akara", "class": "sorceress", "monster": "akara" },
+  "the-summoner": { "name": "The Summoner", "class": "necromancer", "monster": "summoner" },
+  "talic": { "name": "Talic", "class": "barbarian", "monster": "ancientbarb1" },
+  "kashya": { "name": "Kashya", "class": "amazon", "monster": "kashya" },
+  "natalya": { "name": "Natalya", "class": "assassin", "monster": "natalya" },
+  "spirit-of-scosglen": { "name": "Spirit of Scosglen", "class": "druid", "monster": "druidbear" }
+}

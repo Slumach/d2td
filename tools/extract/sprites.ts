@@ -29,12 +29,15 @@ import { column, readTable } from './paths.ts';
 import type { DataSource } from './source.ts';
 
 import { ART_ACT, NAMED_ART, MONSTER_ART, SUPERUNIQUE_ART } from '../../src/data/monsterArt.ts';
+import legends from '../../src/data/legends.json';
 import sprites from '../../src/data/render/sprites.json';
 import { MISSILE_INDEX, artMissiles, artOverlays } from '../../src/render/art.ts';
 
 /** D2 file direction order for 8-direction animations, by direction index. */
 export const DIRECTION_NAMES_8 = ['sw', 'nw', 'ne', 'se', 's', 'w', 'n', 'e'];
 const PADDING = 1;
+/** A T5 legend's figure: standing, and swinging when its towers act. */
+const LEGEND_MODES = ['NU', 'A1'];
 
 export interface OutputFile {
   path: string;
@@ -262,7 +265,8 @@ function firstVariant(row: TxtRow, code: string): string {
 }
 
 /** What a monster plays for a mode it has no COF for: a stationary one stands, a caster casts. */
-const MODE_FALLBACK: Record<string, string[]> = { WL: ['NU', 'S1'], A1: ['S1', 'A2', 'SC'], S1: ['NU'], DT: ['DD'], DD: ['DT'] };
+// A1 last falls back to standing: a town NPC drawn as a T5 legend (Akara, Kashya) has no attack
+const MODE_FALLBACK: Record<string, string[]> = { WL: ['NU', 'S1'], A1: ['S1', 'A2', 'SC', 'NU'], S1: ['NU'], DT: ['DD'], DD: ['DT'] };
 
 interface CompositeSpec {
   folder: string;
@@ -342,7 +346,9 @@ function monsterJobs(shared: Shared): SpriteJob[] {
   const { source } = shared;
   const bosses = new Set(NAMED_ART);
   const summons = new Set(sprites.summons.ids);
-  const ids = [...new Set([...MONSTER_ART, ...summons])];
+  // The T5 legends' NPCs and monsters, standing and swinging
+  const legendArt = new Set(Object.values(legends).map((l) => l.monster));
+  const ids = [...new Set([...MONSTER_ART, ...summons, ...legendArt])];
   // A superunique wears its class's art in its own palette: palshift.dat row Utrans
   const superuniques = readTable(source, 'superuniques.txt');
   const jobs: SpriteJob[] = [];
@@ -353,7 +359,7 @@ function monsterJobs(shared: Shared): SpriteJob[] {
     const token = String(row['Code']).toLowerCase();
     const weaponClass = column(ex, 'BaseW').toLowerCase();
     const folder = `monsters/${token}`;
-    const modes = summons.has(id) ? sprites.summons.modes : sprites.monsterModes;
+    const modes = summons.has(id) ? sprites.summons.modes : legendArt.has(id) ? LEGEND_MODES : sprites.monsterModes;
     // A mode the base weapon class lacks plays hand to hand (a Goatman's death is hth)
     const cofFor = (mode: string, wc: string) => `global/${folder}/cof/${token}${mode}${wc}.cof`.toLowerCase();
     const classFor = (mode: string) => (!source.exists(cofFor(mode, weaponClass)) && source.exists(cofFor(mode, 'hth')) ? 'hth' : weaponClass);

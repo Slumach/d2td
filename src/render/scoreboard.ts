@@ -34,7 +34,8 @@ export function scoreRows(match: Match, me: number, nameOf: (slot: number) => st
       alive: s.alive,
       aliveLimit: aliveLimitOf(sim),
       gold: s.gold[seat] ?? 0,
-      towers: s.towers.filter((t) => t.owner === seat).length,
+      // A legend's two riders are part of it, not towers of their own
+      towers: s.towers.filter((t) => t.owner === seat && t.legendOf === undefined).length,
       wave: waveLabel(s.wave),
       out: s.status === 'lost',
       you: p === me,

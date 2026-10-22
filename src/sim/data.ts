@@ -170,6 +170,11 @@ export interface BalanceJson {
   /** Cost to reach T2 and T3. */
   tierCosts: number[];
   evolveCost: number;
+  /**
+   * T5 legends: the fee to combine three evolved towers, the damage they then do (percent of
+   * what the three did), and the legend's own level ladder past its level 5.
+   */
+  legend: { cost: number; dpsPct: number; levels: OverLevels };
   evolvedLevels: OverLevels;
   /**
    * Levels past 5 within a tier, by tier (T1, T2, T3): steep below the top so a line climbs,
@@ -270,8 +275,24 @@ export interface DesignData {
   skills: SkillJson[];
   classes: ClassJson[];
   evolutions: Record<string, EvolutionJson>;
+  /** T5 legends, one per class (src/data/legends.json); hidden from every list until buildable. */
+  legends?: Record<string, LegendJson>;
   monsters: MonstersJson;
   balance: BalanceJson;
+}
+
+export interface LegendJson {
+  name: string;
+  class: string;
+  /** monstats.txt Id of the NPC or monster it is drawn as. */
+  monster: string;
+}
+
+export interface LegendDef {
+  id: string;
+  name: string;
+  cls: string;
+  monster: string;
 }
 
 // ---- resolved game data ----
@@ -392,6 +413,11 @@ export interface Economy {
   tierCosts: number[];
   evolveCost: number;
   /**
+   * T5 legends: the fee to combine three evolved towers, the damage they then do (percent of
+   * what the three did), and the legend's own level ladder past its level 5.
+   */
+  legend: { cost: number; dpsPct: number; levels: OverLevels };
+  /**
    * An evolved tower's levels past its base level 5: the first costs costBase, each next one
    * costPctPerLevel percent of the one before, and each adds skillLevelsPerLevel skills.txt
    * levels to both its skills (attack and partner), the way +skills do.
@@ -451,6 +477,7 @@ export interface GameData {
   skills: Record<string, SkillDef>;
   classes: Record<string, ClassDef>;
   evolutions: EvolutionDef[];
+  legends: LegendDef[];
   monsters: Record<string, MonsterDef>;
   waves: WaveDef[];
   ladders: Ladder[];
@@ -911,6 +938,7 @@ export function economyFrom(balance: BalanceJson): Economy {
     levelCosts: balance.levelCostBase.map((base) => steps.map((permille) => idiv(base * permille, 1000))),
     tierCosts: balance.tierCosts,
     evolveCost: balance.evolveCost,
+    legend: balance.legend,
     evolvedLevels: balance.evolvedLevels,
     lineLevels: balance.levelCostBase.map((base, i) => {
       const last = idiv(base * steps.at(-1)!, 1000);
@@ -1237,6 +1265,7 @@ export function buildGameData(
     skills,
     classes,
     evolutions,
+    legends: Object.entries(design.legends ?? {}).map(([id, l]) => ({ id, name: l.name, cls: l.class, monster: l.monster })),
     monsters,
     waves,
     ladders,

@@ -97,6 +97,9 @@ export function validCommand(v: unknown): Command | null {
     case 'evolve':
       if (!int(c['towerA']) || !int(c['towerB'])) return null;
       return { type: 'evolve', towerA: c['towerA'] as number, towerB: c['towerB'] as number };
+    case 'ascend':
+      if (!int(c['towerA']) || !int(c['towerB']) || !int(c['towerC'])) return null;
+      return { type: 'ascend', towerA: c['towerA'] as number, towerB: c['towerB'] as number, towerC: c['towerC'] as number };
     case 'callWave':
       return { type: 'callWave' };
     case 'pickup':

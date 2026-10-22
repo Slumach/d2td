@@ -28,6 +28,8 @@ import {
   canBuild,
   earlySendBonus,
   evolutionFor,
+  legendOptions,
+  ridersOf,
   aliveLimitOf,
   pendingChoices,
   sellValue,
@@ -1072,14 +1074,33 @@ export class GameScene extends Phaser.Scene {
     return undefined;
   }
 
+  /** The last cooldowns seen of each legend rider, to tell when it acted. */
+  private riders = new Map<number, { cooldown: number; partnerCooldown: number }>();
+
   private syncTowers(): void {
     const s = this.sim.state;
     const seen = new Set<number>();
     this.actedThisTick = [];
+    // A legend's riders have no figure of their own: their casts show at the legend, first,
+    // so the legend knows to swing
     for (const t of s.towers) {
+      if (t.legendOf !== undefined) {
+        const was = this.riders.get(t.id);
+        this.riders.set(t.id, { cooldown: t.cooldown, partnerCooldown: t.partnerCooldown });
+        if (!was) continue;
+        const acted = t.cooldown > was.cooldown;
+        if (acted || t.partnerCooldown > was.partnerCooldown) this.actedThisTick.push(t);
+        const active = acted ? activeSkill(this.sim, t) : undefined;
+        if (active) this.castEffects(t, active.skill.id, active.lvl);
+        if (t.partnerCooldown > was.partnerCooldown && t.partnerSkill) this.castEffects(t, t.partnerSkill, t.partnerLevel);
+      }
+    }
+    for (const t of s.towers) {
+      if (t.legendOf !== undefined) continue;
       seen.add(t.id);
       const { x: px, y: py } = project(t.x, t.y);
-      const texture = this.wornLook(t) ?? heroKey(t);
+      const legend = t.legend ? this.sim.data.legends.find((l) => l.id === t.legend) : undefined;
+      const texture = legend ? monsterKey(legend.monster, 'normal') : (this.wornLook(t) ?? heroKey(t));
       let view = this.towers.get(t.id);
       if (view && view.texture !== texture) {
         view.sprite.destroy();
@@ -1100,13 +1121,21 @@ export class GameScene extends Phaser.Scene {
       const partnerActed = t.partnerCooldown > view.partnerCooldown;
       view.cooldown = t.cooldown;
       view.partnerCooldown = t.partnerCooldown;
-      const attack = heroAttackMode(t.cls);
-      if (acted || partnerActed) {
-        this.actedThisTick.push(t);
-        view.sprite.play(animKey(texture, attack, view.facing));
-        view.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => view!.sprite.play(animKey(texture, 'NU', view!.facing)));
+      const attack = legend ? 'A1' : heroAttackMode(t.cls);
+      // A legend swings when any of its three acts; an NPC with no attack of its own stands
+      const ridersActed = legend ? this.actedThisTick.some((r) => r.legendOf === t.id) : false;
+      const stand = this.modeKey(texture, 'NU', view.facing) ?? animKey(texture, 'NU', view.facing);
+      if (acted || partnerActed || ridersActed) {
+        if (acted || partnerActed) this.actedThisTick.push(t);
+        const swing = this.modeKey(texture, attack, view.facing);
+        // Three towers act often: a legend finishes one swing before the next
+        const swinging = legend && view.sprite.anims.isPlaying && view.sprite.anims.currentAnim?.key === swing;
+        if (swing && !swinging) {
+          view.sprite.play(swing);
+          view.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => view!.sprite.play(stand));
+        }
       } else if (!view.sprite.anims.isPlaying || view.sprite.anims.currentAnim?.key.includes('|NU|')) {
-        this.playIfChanged(view.sprite, animKey(texture, 'NU', view.facing), true);
+        this.playIfChanged(view.sprite, stand, true);
       }
       if (acted) {
         const active = activeSkill(this.sim, t);
@@ -1782,10 +1811,14 @@ export class GameScene extends Phaser.Scene {
     const line = sim.data.classes[tower.cls]?.lines[tower.line];
     const lines: string[] = [];
     const className = sim.data.classes[tower.cls]?.name ?? tower.cls;
+    const legend = tower.legend ? sim.data.legends.find((l) => l.id === tower.legend) : undefined;
+    const three = legend ? [tower, ...ridersOf(sim, tower)].map((t) => sim.data.evolutions.find((r) => r.id === t.evolved)?.name ?? t.evolved) : [];
     lines.push(
-      recipe
-        ? `${className}, evolved with ${this.skillName(tower.partnerSkill)} built in   Level ${tower.level}`
-        : `${className}, ${line?.name ?? 'no line yet'}   Tier ${tower.tier}   Level ${tower.level}`,
+      legend
+        ? `${className} legend: ${three.join(', ')}   Level ${tower.level}`
+        : recipe
+          ? `${className}, evolved with ${this.skillName(tower.partnerSkill)} built in   Level ${tower.level}`
+          : `${className}, ${line?.name ?? 'no line yet'}   Tier ${tower.tier}   Level ${tower.level}`,
     );
     const auras = effectsOn(sim, tower);
     const auraName = (e: { skill: string; item: boolean }) => `${this.skillName(e.skill)}${e.item ? ' (item)' : ''}`;
@@ -1855,6 +1888,15 @@ export class GameScene extends Phaser.Scene {
       evolvable = true;
       buttons.push({ label: `Evolve ${match.recipe.name} ${e.evolveCost}g`, enabled: this.gold >= e.evolveCost, onClick: () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }) });
     }
+    // T5: shown only once three evolutions stand together
+    for (const o of legendOptions(sim, tower)) {
+      evolvable = true;
+      buttons.push({
+        label: `Evolve ${o.legend.name} ${e.legend.cost}g`,
+        enabled: this.gold >= e.legend.cost,
+        onClick: () => this.issue({ type: 'ascend', towerA: tower.id, towerB: o.others[0].id, towerC: o.others[1].id }),
+      });
+    }
     if (!evolvable && !tower.evolved && active) lines.push(this.evolveHint(tower));
     const next = TARGETING_MODES[(TARGETING_MODES.indexOf(tower.targeting) + 1) % TARGETING_MODES.length]!;
     buttons.push({ label: 'Targeting', enabled: true, onClick: () => this.issue({ type: 'setTargeting', towerId: tower.id, mode: next }) });
@@ -1868,7 +1910,7 @@ export class GameScene extends Phaser.Scene {
     });
     const skillId = recipe?.attack.skill ?? active?.skill.id;
     const icon = skillId ? this.skillButton(skillId, '', () => undefined).icon : undefined;
-    const title = recipe ? recipe.name : active ? active.skill.name : `${className} tower`;
+    const title = legend ? legend.name : recipe ? recipe.name : active ? active.skill.name : `${className} tower`;
     return { icon, title, lines, buttons };
   }
 
@@ -1878,9 +1920,12 @@ export class GameScene extends Phaser.Scene {
     const active = activeSkill(sim, tower);
     const recipe = tower.evolved ? sim.data.evolutions.find((r) => r.id === tower.evolved) : undefined;
     const line = sim.data.classes[tower.cls]?.lines[tower.line];
-    const title = recipe
-      ? `${recipe.name}: ${this.skillName(recipe.attack.skill)} with ${this.skillName(tower.partnerSkill)} aura`
-      : `${line?.name ?? 'Inert'} T${tower.tier} L${tower.level}: ${active ? active.skill.name : 'pick a skill'}`;
+    const legend = tower.legend ? sim.data.legends.find((l) => l.id === tower.legend) : undefined;
+    const title = legend
+      ? `${legend.name} L${tower.level}`
+      : recipe
+        ? `${recipe.name}: ${this.skillName(recipe.attack.skill)} with ${this.skillName(tower.partnerSkill)} aura`
+        : `${line?.name ?? 'Inert'} T${tower.tier} L${tower.level}: ${active ? active.skill.name : 'pick a skill'}`;
     this.info.setText(`${title}   targeting ${tower.targeting}`);
 
     const pick = pendingChoices(sim, tower);
@@ -1912,6 +1957,14 @@ export class GameScene extends Phaser.Scene {
       specs.push({
         ...this.skillButton(match.recipe.attack.skill, `Evolve ${match.recipe.name} (${e.evolveCost}g)`, () => this.issue({ type: 'evolve', towerA: tower.id, towerB: other.id }), this.gold >= e.evolveCost),
         colour: '#5a2a70',
+      });
+    }
+    for (const o of legendOptions(sim, tower)) {
+      specs.push({
+        label: `Evolve ${o.legend.name} (${e.legend.cost}g)`,
+        enabled: this.gold >= e.legend.cost,
+        colour: '#7a5a10',
+        onClick: () => this.issue({ type: 'ascend', towerA: tower.id, towerB: o.others[0].id, towerC: o.others[1].id }),
       });
     }
     const next = TARGETING_MODES[(TARGETING_MODES.indexOf(tower.targeting) + 1) % TARGETING_MODES.length]!;

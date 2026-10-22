@@ -20,6 +20,7 @@
   "levelCostPctPerLevel": 220,
   "tierCosts": [400, 10000],
   "evolveCost": 45000,
+  "legend": { "cost": 150000, "dpsPct": 250, "levels": { "costBase": 100000, "costPctPerLevel": 115, "skillLevelsPerLevel": 5 } },
   "evolvedLevels": { "costBase": 30000, "costPctPerLevel": 115, "skillLevelsPerLevel": 5 },
   "lineLevels": { "costPctPerLevel": [180, 180, 115], "skillLevelsPerLevel": [2, 2, 4] },
   "sellRefundPct": 60,

@@ -71,6 +71,8 @@ export type CommandBody =
   | { type: 'pickBranch'; towerId: number; skill: string }
   | { type: 'setTargeting'; towerId: number; mode: Targeting }
   | { type: 'evolve'; towerA: number; towerB: number }
+  /** T5: three adjacent evolved towers of a class become its legend, on towerA's tile. */
+  | { type: 'ascend'; towerA: number; towerB: number; towerC: number }
   | { type: 'sell'; towerId: number }
   | { type: 'callWave' }
   /** Picks up one of the player's drops into their inventory. */
@@ -201,6 +203,13 @@ export interface Tower {
   partnerCooldown: number;
   /** A skill with charges (Phoenix Strike) casts them in turn; this counts its casts. */
   charge?: number;
+  /**
+   * T5: the legend this tower stands for (data.legends id). A legend is three evolved towers
+   * that stay towers: this one, which shows and is selected, and two riding on it (legendOf).
+   */
+  legend?: string;
+  /** The legend tower this evolved tower is part of: it acts from there, unseen. */
+  legendOf?: number;
 }
 
 export interface Missile {

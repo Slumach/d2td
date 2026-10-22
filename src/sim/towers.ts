@@ -4,13 +4,14 @@
 // their own towers.
 
 import { sendHome } from './items/loot.ts';
-import { MAX_TIER, MAX_TOWER_LEVEL, type EvolutionDef, type OverLevels } from './data.ts';
+import { MAX_TIER, MAX_TOWER_LEVEL, type EvolutionDef, type LegendDef, type OverLevels } from './data.ts';
 import { idiv } from './fixed.ts';
 import { arcAt, inBounds, isBlocked, isPathTile, tileCenter } from './map.ts';
 import { TARGETING_MODES, type Sim, type Targeting, type Tower } from './state.ts';
 
+/** The tower on a tile: a legend's riders stand on its tile unseen, so it is the legend. */
 export function towerAt(sim: Sim, x: number, y: number): Tower | undefined {
-  return sim.state.towers.find((t) => t.tileX === x && t.tileY === y);
+  return sim.state.towers.find((t) => t.tileX === x && t.tileY === y && t.legendOf === undefined);
 }
 
 export function towerById(sim: Sim, id: number): Tower | undefined {
@@ -52,6 +53,9 @@ export function pendingChoices(sim: Sim, tower: Tower): string[] {
 }
 
 export function upgradeCost(sim: Sim, tower: Tower): number | undefined {
+  // A legend levels on its own ladder, its riders with it; a rider is never bought alone
+  if (tower.legendOf !== undefined) return undefined;
+  if (tower.legend) return overLevelCost(sim.data.economy.legend.levels, tower.level - MAX_TOWER_LEVEL);
   // An evolved tower keeps levelling past its base level 5 on its own steep ladder
   if (tower.evolved) return overLevelCost(sim.data.economy.evolvedLevels, tower.level - MAX_TOWER_LEVEL);
   if (!tower.picks[tower.tier - 1]) return undefined;
@@ -81,8 +85,63 @@ export function tierCost(sim: Sim, tower: Tower): number | undefined {
   return sim.data.economy.tierCosts[tower.tier - 1];
 }
 
+/** The towers riding on a legend (its other two evolutions). */
+export function ridersOf(sim: Sim, tower: Tower): Tower[] {
+  return tower.legend ? sim.state.towers.filter((t) => t.legendOf === tower.id) : [];
+}
+
 export function sellValue(sim: Sim, tower: Tower): number {
-  return idiv(tower.spent * sim.data.economy.sellRefundPct, 100);
+  const spent = tower.spent + ridersOf(sim, tower).reduce((n, t) => n + t.spent, 0);
+  return idiv(spent * sim.data.economy.sellRefundPct, 100);
+}
+
+const adjacentTiles = (a: Tower, b: Tower) => a.id !== b.id && Math.abs(a.tileX - b.tileX) <= 1 && Math.abs(a.tileY - b.tileY) <= 1;
+
+/**
+ * T5: the legend three towers make, if they do: three evolved towers of one player and one
+ * class, three different recipes, each beside the other two. Hidden until it is true.
+ */
+export function legendFor(sim: Sim, a: Tower, b: Tower, c: Tower): LegendDef | undefined {
+  const three = [a, b, c];
+  if (new Set(three.map((t) => t.id)).size !== 3) return undefined;
+  if (three.some((t) => !t.evolved || t.legend || t.legendOf !== undefined || t.owner !== a.owner || t.cls !== a.cls)) return undefined;
+  if (new Set(three.map((t) => t.evolved)).size !== 3) return undefined;
+  if (!adjacentTiles(a, b) || !adjacentTiles(a, c) || !adjacentTiles(b, c)) return undefined;
+  return sim.data.legends.find((l) => l.cls === a.cls);
+}
+
+/** Every pair of other towers that makes a legend with `tower`, for its panel's button and the bots. */
+export function legendOptions(sim: Sim, tower: Tower): { legend: LegendDef; others: [Tower, Tower] }[] {
+  if (!tower.evolved || tower.legend || tower.legendOf !== undefined) return [];
+  const near = sim.state.towers.filter((t) => adjacentTiles(tower, t) && t.evolved && t.legendOf === undefined && !t.legend);
+  const out: { legend: LegendDef; others: [Tower, Tower] }[] = [];
+  for (let i = 0; i < near.length; i++) {
+    for (let j = i + 1; j < near.length; j++) {
+      const legend = legendFor(sim, tower, near[i]!, near[j]!);
+      if (legend) out.push({ legend, others: [near[i]!, near[j]!] });
+    }
+  }
+  return out;
+}
+
+/**
+ * T5: the three become the legend on a's tile. All three stay towers, so every skill they
+ * had keeps acting: a shows (as the legend's NPC) and the other two ride on it unseen,
+ * freeing their tiles. Their levels reset to 5 and the legend's ladder takes them on.
+ */
+export function ascend(sim: Sim, a: Tower, b: Tower, c: Tower): void {
+  const legend = legendFor(sim, a, b, c);
+  const cost = sim.data.economy.legend.cost;
+  if (!legend || !pay(sim, a.owner, cost)) return;
+  a.legend = legend.id;
+  a.tier = MAX_TIER + 2;
+  a.spent += cost;
+  for (const t of [a, b, c]) {
+    t.level = MAX_TOWER_LEVEL;
+    t.cooldown = 0;
+    t.partnerCooldown = 0;
+  }
+  for (const t of [b, c]) Object.assign(t, { legendOf: a.id, tileX: a.tileX, tileY: a.tileY, x: a.x, y: a.y });
 }
 
 /** True if the tower has learned `skill` and has reached at least `minTier`. */
@@ -165,6 +224,7 @@ export function upgrade(sim: Sim, tower: Tower): void {
   if (cost === undefined || !pay(sim, tower.owner, cost)) return;
   tower.spent += cost;
   tower.level++;
+  for (const r of ridersOf(sim, tower)) r.level = tower.level;
 }
 
 export function upgradeTier(sim: Sim, tower: Tower): void {
@@ -218,7 +278,13 @@ export function evolve(sim: Sim, a: Tower, b: Tower): void {
 }
 
 export function sell(sim: Sim, tower: Tower): void {
+  if (tower.legendOf !== undefined) return;
   sim.state.gold[tower.owner]! += sellValue(sim, tower);
+  // A legend goes with its riders, and their gear goes home with them
+  for (const r of ridersOf(sim, tower)) {
+    removeTower(sim, r.id);
+    sendHome(sim, r.owner, Object.values(r.gear ?? {}));
+  }
   removeTower(sim, tower.id);
   // What it wore goes back to its owner, not to the vendor
   sendHome(sim, tower.owner, Object.values(tower.gear ?? {}));

@@ -3,7 +3,7 @@
 // if a file in skills/ is missing from this list.
 
 import type { SkillJson } from '../sim/archetypes/types.ts';
-import type { BalanceJson, ClassJson, DesignData, EvolutionJson, MonstersJson } from '../sim/data.ts';
+import type { BalanceJson, ClassJson, DesignData, EvolutionJson, LegendJson, MonstersJson } from '../sim/data.ts';
 import balance from './balance.json';
 import amazon from './classes/amazon.json';
 import assassin from './classes/assassin.json';
@@ -13,6 +13,7 @@ import necromancer from './classes/necromancer.json';
 import paladin from './classes/paladin.json';
 import sorceress from './classes/sorceress.json';
 import evolutions from './evolutions.json';
+import legends from './legends.json';
 import monsters from './monsters.json';
 import amplifyDamage from './skills/amplify-damage.json';
 import bash from './skills/bash.json';
@@ -188,6 +189,7 @@ export const DESIGN: DesignData = {
   skills: SKILL_JSON,
   classes: [paladin as ClassJson, sorceress as ClassJson, necromancer as ClassJson, amazon as ClassJson, barbarian as ClassJson, druid as ClassJson, assassin as ClassJson],
   evolutions: evolutions as Record<string, EvolutionJson>,
+  legends: legends as Record<string, LegendJson>,
   monsters: monsters as MonstersJson,
   balance: balance as unknown as BalanceJson,
 };

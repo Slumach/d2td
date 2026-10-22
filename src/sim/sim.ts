@@ -22,10 +22,10 @@ import { geared, gearOf, withGear } from './items/tower.ts';
 import { collectCleared, pickup, sellDrop } from './items/loot.ts';
 import { cowWavesDue, openCowPortal, startCowWave } from './cow.ts';
 import { equip, fromBelt, hammer, loadInventory, moveItem, sellItem, socket, stashIn, stashOut, toBelt, unequip } from './items/inventory.ts';
-import { build, evolve, pickBranch, pickSkill, sell, setTargeting, towerById, upgrade, upgradeTier } from './towers.ts';
+import { ascend, build, evolve, pickBranch, pickSkill, sell, setTargeting, towerById, upgrade, upgradeTier } from './towers.ts';
 
 export type * from './state.ts';
-export { buildCostFor, canBuild, evolutionFor, pendingChoices, sellValue, tierCost, towerAt, towerById, upgradeCost } from './towers.ts';
+export { buildCostFor, canBuild, evolutionFor, legendFor, legendOptions, pendingChoices, ridersOf, sellValue, tierCost, towerAt, towerById, upgradeCost } from './towers.ts';
 export { activeSkill } from './auras.ts';
 export { damageAgainst, effectiveResist } from './combat.ts';
 
@@ -172,6 +172,11 @@ function applyCommand(sim: Sim, command: Command): void {
     const a = towerById(sim, command.towerA);
     const b = towerById(sim, command.towerB);
     if (a && b && a.owner === player) evolve(sim, a, b);
+    return;
+  }
+  if (command.type === 'ascend') {
+    const [a, b, c] = [command.towerA, command.towerB, command.towerC].map((id) => towerById(sim, id));
+    if (a && b && c && a.owner === player) ascend(sim, a, b, c);
     return;
   }
   const tower = towerById(sim, command.towerId);

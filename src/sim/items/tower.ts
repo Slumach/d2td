@@ -44,7 +44,11 @@ export function geared(sim: Sim, tower: Tower, skill: SkillDef): SkillDef {
   const recipe = tower.evolved ? sim.data.evolutions.find((e) => e.id === tower.evolved) : undefined;
   const own = skill.castBy ?? skill.id;
   const boosted = recipe && (own === recipe.attack.skill || (own === recipe.partner.skill && !isAura(skill)));
-  const bonus = boosted ? recipe.bonus : 1000;
+  // A legend's three evolutions hit harder again, every damaging skill they cast
+  // (an aura that only buffs or curses keeps its effect; Hurricane's damage counts)
+  const harms = skill.archetype !== 'buffAura' && skill.archetype !== 'debuff';
+  const legend = (tower.legend || tower.legendOf !== undefined) && harms ? sim.data.economy.legend.dpsPct : 100;
+  const bonus = idiv((boosted ? recipe.bonus : 1000) * legend, 100);
   if (plus === 0 && !weapon && bonus === 1000) return skill;
   return sim.data.skills[sim.data.skillVariant(skill.id, plus, weapon, bonus)]!;
 }
@@ -91,6 +95,7 @@ export function boughtLevels(sim: Sim, tower: Tower): number {
   const past = tower.level - MAX_TOWER_LEVEL;
   if (past <= 0) return 0;
   const e = sim.data.economy;
+  if (tower.legend || tower.legendOf !== undefined) return past * e.legend.levels.skillLevelsPerLevel;
   return past * (tower.evolved ? e.evolvedLevels.skillLevelsPerLevel : (e.lineLevels[tower.tier - 1]?.skillLevelsPerLevel ?? 0));
 }
 
