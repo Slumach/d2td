@@ -15,18 +15,23 @@
 // A Skeletal Mage shoots one of its skill's missiles (fire, cold, lightning or poison,
 // picked when it is raised) at the missile level of its summon skill calc.
 
-import { aliveWithin, damageAgainst, dealDamage, distSq, poison, withBonus } from '../combat.ts';
+import { aliveWithin, damageAgainst, dealDamage, distSq, findTarget, poison, withBonus } from '../combat.ts';
+import { geared } from '../items/tower.ts';
+import { archetypeOf } from './registry.ts';
 import { UNITS_PER_TILE, d2FramesToTicks, idiv, isqrt } from '../fixed.ts';
 import { ahead, nearestPathDist, positionAt, wrap } from '../map.ts';
 import { rollInt } from '../rng.ts';
 import type { Corpse, Element, Monster, Sim, Summon, Tower } from '../state.ts';
 import { findRow, int, str } from '../tables.ts';
-import { calcAt, common, damageAt, elementalAtLevel, etype, fields, filterFrom, lengthAt, perLevel, physicalAtLevel, tenthsToUnits } from './common.ts';
+import { calcAt, calcExpr, common, damageAt, elementalAtLevel, etype, fields, filterFrom, lengthAt, perLevel, physicalAtLevel, tenthsToUnits } from './common.ts';
 import type { ArchetypeModule, SummonDef } from './types.ts';
 
 interface SummonJson {
-  kind?: 'melee' | 'ranged' | 'revive';
+  kind?: 'melee' | 'ranged' | 'revive' | 'trap';
   countCalc: string;
+  /** Trap: a calc for its shots, written here (Lightning Sentry's "par1", 10), and the skills each shot casts. */
+  shotsCalc?: string;
+  shotSkills?: string[];
   /** skills.txt column with the summons' damage percent bonus. */
   damagePctCalc?: string;
   respawnTicks: number;
@@ -85,6 +90,7 @@ export const summon: ArchetypeModule<SummonDef> = {
       archetype: 'summon',
       kind,
       monster,
+      shotSkills: f.shotSkills ?? [],
       respawnTicks: f.respawnTicks,
       durationTicks: f.durationTicks ?? 0,
       shotRangeUnits: tenthsToUnits(f.shotRangeTenths ?? 0),
@@ -96,6 +102,7 @@ export const summon: ArchetypeModule<SummonDef> = {
         const hpPct = f.hpPctCalc ? calcAt(ctx.skillRow, f.hpPctCalc, level) : kind === 'revive' ? 100 : 0;
         return {
           count: Math.max(0, calcAt(ctx.skillRow, f.countCalc, level)),
+          shots: f.shotsCalc ? Math.max(1, calcExpr(ctx.skillRow, f.shotsCalc, level)) : 0,
           hp: stats ? withBonus(Math.max(1, int(stats, 'minHP')) * 256, hpPct) : 0,
           min: dmg('A1MinD'),
           max: dmg('A1MaxD'),
@@ -141,6 +148,28 @@ export const summon: ArchetypeModule<SummonDef> = {
       return true;
     }
 
+    if (skill.kind === 'trap') {
+      // D2 throws a trap where the fight is: on the path under the first monster in range
+      const target = findTarget(sim, tower, skill.rangeUnits, () => true, 'first');
+      if (!target) return false;
+      s.summons.push({
+        ...unit,
+        id: s.nextId++,
+        kind: 'trap',
+        def: skill.monster,
+        dist: target.dist,
+        x: target.x,
+        y: target.y,
+        hp: Math.max(1, level.hp),
+        maxHp: Math.max(1, level.hp),
+        minDamage: 0,
+        maxDamage: 0,
+        shots: level.shots,
+        lvl,
+      });
+      return true;
+    }
+
     let spot: { dist: number; x: number; y: number };
     if (skill.kind === 'ranged') {
       spot = rangedSpot(sim, tower, mine.length);
@@ -177,6 +206,39 @@ function summonSkillOf(sim: Sim, tower: Tower): SummonDef | undefined {
   return skill?.archetype === 'summon' ? skill : undefined;
 }
 
+/**
+ * A trap's turn: when its cooldown is up, it casts each of its tower's trap shot skills from
+ * where it stands (the skill's own act, its own target in its own range, at the level the
+ * trap was set at, with the tower's +skills and evolution bonus), and is spent after its shots.
+ */
+function fireTrap(sim: Sim, unit: Summon): void {
+  if (--unit.cooldown > 0) return;
+  const tower = sim.state.towers.find((t) => t.id === unit.towerId);
+  const skill = tower && summonSkillOf(sim, tower);
+  if (!tower || !skill || skill.kind !== 'trap') {
+    unit.hp = 0;
+    return;
+  }
+  const from: Tower = { ...tower, x: unit.x, y: unit.y };
+  const lvl = unit.lvl ?? 0;
+  let fired = false;
+  let rate = sim.data.rules.monsterAttackTicks;
+  for (const id of skill.shotSkills) {
+    const shot = geared(sim, tower, sim.data.skills[id]!);
+    const act = archetypeOf(shot).act;
+    if (act && act(sim, from, shot, lvl, NO_BUFF)) {
+      fired = true;
+      rate = Math.max(1, shot.rates[lvl] ?? shot.rateTicks);
+    }
+  }
+  if (!fired) return;
+  unit.cooldown = rate;
+  unit.shots = (unit.shots ?? 1) - 1;
+  if (unit.shots <= 0) unit.hp = 0;
+}
+
+const NO_BUFF = { damagePct: 0, attackSpeedPct: 0, fireMin: 0, fireMax: 0 };
+
 /** A ranged summon's shot: poison spreads over the bolt's length, cold chills for it. */
 function shoot(sim: Sim, unit: Summon, target: Monster): void {
   const amount = rollInt(sim.state.rng, unit.minDamage, unit.maxDamage);
@@ -196,6 +258,10 @@ export function updateSummons(sim: Sim): void {
   for (const unit of s.summons) {
     sim.actor = s.towers.find((t) => t.id === unit.towerId)?.owner ?? 0;
     sim.actorTower = unit.towerId;
+    if (unit.kind === 'trap') {
+      fireTrap(sim, unit);
+      continue;
+    }
     if (unit.shovedTicks > 0) unit.shovedTicks--;
     if (unit.kind === 'revive' && unit.ticksLeft > 0 && --unit.ticksLeft === 0) unit.hp = 0;
     if (unit.hp <= 0 || --unit.cooldown > 0) continue;
@@ -228,7 +294,7 @@ export function blockerAhead(sim: Sim, monster: Pick<Monster, 'dist' | 'rank' | 
   let best: Summon | undefined;
   let bestGap = 0;
   for (const unit of sim.state.summons) {
-    if (unit.kind === 'ranged' || unit.hp <= 0 || monster.brokeThrough.includes(unit.id)) continue;
+    if (unit.kind === 'ranged' || unit.kind === 'trap' || unit.hp <= 0 || monster.brokeThrough.includes(unit.id)) continue;
     const gap = ahead(sim.map, monster.dist, unit.dist);
     if (gap <= -block || gap - block > step) continue;
     if (!best || gap < bestGap) {

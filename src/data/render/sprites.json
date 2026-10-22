@@ -1,6 +1,6 @@
 {
   "monsterModes": ["WL", "A1", "DT", "DD"],
-  "summons": { "ids": ["necroskeleton", "necromage", "dopplezon", "druidhawk", "fenris", "druidbear", "shadowmaster"], "modes": ["NU", "WL", "A1", "DT", "S1"] },
+  "summons": { "ids": ["necroskeleton", "necromage", "dopplezon", "druidhawk", "fenris", "druidbear", "shadowmaster", "lightningsentry", "deathsentry"], "modes": ["NU", "WL", "A1", "DT", "S1"] },
   "objects": { "redportal": { "token": "PP", "modes": ["OP", "ON"], "variant": "lit" } },
   "heroes": {
     "paladin": {
@@ -120,9 +120,12 @@
     "arctic-blast": { "fly": "arcticblast1" },
     "tornado": { "fly": "tornado" },
     "fire-blast": { "fly": "bomb in air" },
-    "lightning-sentry": { "bolt": "lightninghit" },
-    "death-sentry": { "corpse": "corpseexplosion", "impact": ["explodingarrowexp"] },
-    "phoenix-strike": { "impact": ["meteorexplode"] },
+    "lightning-sentry-bolt": { "bolt": "lightninghit" },
+    "death-sentry-bolt": { "bolt": "lightninghit" },
+    "death-sentry-blast": { "corpse": "corpseexplosion", "impact": ["explodingarrowexp"] },
+    "phoenix-meteor": { "fall": "royalstrikemeteor", "impact": ["meteorexplode"] },
+    "phoenix-lightning": { "arc": "royalstrikechainlightning" },
+    "phoenix-ice": { "fly": "royalstrikechaosice" },
     "mind-blast": { "impact": ["mindblast center"] },
     "might": { "overlay": "aura_might_front" },
     "concentration": { "overlay": "concentrationfront" },

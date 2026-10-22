@@ -184,7 +184,7 @@
     },
     "partner": {
       "skill": "find-item",
-      "minTier": 3
+      "minTier": 1
     }
   },
   "fire-druid": {

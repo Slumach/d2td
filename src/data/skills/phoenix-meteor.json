@@ -1,0 +1,16 @@
+{
+  "id": "phoenix-meteor",
+  "skill": "Royal Strike",
+  "displayName": "Phoenix Strike",
+  "castBy": "phoenix-strike",
+  "archetype": "splash",
+  "damageType": "fire",
+  "rangeTenths": 11,
+  "rateTicks": 25,
+  "splash": {
+    "delivery": "strike",
+    "missile": "royalstrikemeteor",
+    "damageFromMissile": true,
+    "radiusCalc": "aurarangecalc"
+  }
+}

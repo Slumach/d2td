@@ -18,6 +18,7 @@ import {
   missileOf,
   missileSpeed,
   perLevel,
+  tenthsToUnits,
 } from './common.ts';
 import type { ArchetypeModule, PierceDef } from './types.ts';
 
@@ -28,7 +29,13 @@ interface PierceJson {
   /** Chain mode: skills.txt columns for the hop count and jump range. */
   hopsCalc?: string;
   jumpCalc?: string;
+  /** Chain mode: a fixed hop count and jump in tenths of a tile, when the row has no calc for them. */
+  hops?: number;
+  jumpTenths?: number;
   falloffPct?: number;
+  /** The missiles.txt row and its damage, when the skill row has none of its own (Phoenix Strike's lightning). */
+  missile?: string;
+  damageFromMissile?: boolean;
 }
 
 function element(skill: PierceDef): Element {
@@ -45,8 +52,8 @@ export const pierce: ArchetypeModule<PierceDef> = {
 
   resolve(json, ctx) {
     const f = fields<PierceJson>(json);
-    const missile = missileOf(ctx.tables, ctx.skillRow);
-    elementalType(json, ctx.skillRow);
+    const missile = missileOf(ctx.tables, ctx.skillRow, f.missile);
+    if (!f.damageFromMissile) elementalType(json, ctx.skillRow);
     return {
       ...common(json, ctx, true),
       archetype: 'pierce',
@@ -57,9 +64,9 @@ export const pierce: ArchetypeModule<PierceDef> = {
       falloffPct: f.falloffPct ?? 0,
       filter: filterFrom(missile, ctx.filterOverride),
       levels: perLevel(json, (level) => ({
-        ...damageAt(ctx.skillRow, level, 'skill'),
-        hops: f.mode === 'chain' && f.hopsCalc ? calcAt(ctx.skillRow, f.hopsCalc, level) : 0,
-        jumpUnits: f.mode === 'chain' && f.jumpCalc ? auraUnits(calcAt(ctx.skillRow, f.jumpCalc, level), ctx.auraRangePerTile) : 0,
+        ...(f.damageFromMissile ? damageAt(missile, level, 'missile') : damageAt(ctx.skillRow, level, 'skill')),
+        hops: f.mode !== 'chain' ? 0 : f.hopsCalc ? calcAt(ctx.skillRow, f.hopsCalc, level) : (f.hops ?? 0),
+        jumpUnits: f.mode !== 'chain' ? 0 : f.jumpCalc ? auraUnits(calcAt(ctx.skillRow, f.jumpCalc, level), ctx.auraRangePerTile) : tenthsToUnits(f.jumpTenths ?? 0),
       })),
     };
   },

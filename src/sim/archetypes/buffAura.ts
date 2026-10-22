@@ -47,8 +47,11 @@ export const buffAura: ArchetypeModule<BuffAuraDef> = {
             f.radiusTenths !== undefined
               ? tenthsToUnits(f.radiusTenths)
               : auraUnits(calcAt(ctx.skillRow, f.radiusCalc ?? 'aurarangecalc', level), ctx.auraRangePerTile),
-          damagePct: (stats['damagepercent'] ?? 0) + (stats['passive_critical_strike'] ?? 0),
+          // Battle Orders: towers are never hit, so its life percent is carried as damage
+          damagePct: (stats['damagepercent'] ?? 0) + (stats['passive_critical_strike'] ?? 0) + (stats['item_maxhp_percent'] ?? 0),
           attackSpeedPct: stats['attackrate'] ?? 0,
+          // Shout: defence for the towers' summons
+          defensePct: Math.max(0, stats['skill_armor_percent'] ?? 0),
           piercePct: Math.min(100, stats['skill_pierce'] ?? 0),
           fireMin: (stats['firemindam'] ?? 0) * shift,
           fireMax: (stats['firemaxdam'] ?? 0) * shift,
@@ -58,7 +61,7 @@ export const buffAura: ArchetypeModule<BuffAuraDef> = {
   },
 
   aura(skill, lvl) {
-    const { radiusUnits, damagePct, attackSpeedPct, piercePct, fireMin, fireMax } = skill.levels[lvl]!;
-    return { radiusUnits, towers: { damagePct, attackSpeedPct, piercePct, fireMin, fireMax } };
+    const { radiusUnits, damagePct, attackSpeedPct, piercePct, defensePct, fireMin, fireMax } = skill.levels[lvl]!;
+    return { radiusUnits, towers: { damagePct, attackSpeedPct, piercePct, defensePct, fireMin, fireMax } };
   },
 };

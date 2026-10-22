@@ -199,6 +199,8 @@ export interface Tower {
   gear?: Gear;
   /** Evolved towers cast their partner's skill too, on its own cooldown. */
   partnerCooldown: number;
+  /** A skill with charges (Phoenix Strike) casts them in turn; this counts its casts. */
+  charge?: number;
 }
 
 export interface Missile {
@@ -234,7 +236,7 @@ export interface Missile {
 export interface Summon {
   id: number;
   towerId: number;
-  kind: 'melee' | 'ranged' | 'revive';
+  kind: 'melee' | 'ranged' | 'revive' | 'trap';
   /** A monstats id: the skill's summon, or the revived corpse's monster. */
   def: string;
   dist: number;
@@ -255,6 +257,9 @@ export interface Summon {
   targetId: number;
   /** Counts down after a monster breaks through and shoves it aside, for the renderer. */
   shovedTicks: number;
+  /** A trap: the shots it has left, and the level index its shots are cast at. */
+  shots?: number;
+  lvl?: number;
 }
 
 export interface Corpse {

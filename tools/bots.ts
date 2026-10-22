@@ -199,7 +199,14 @@ function computeParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boole
     }
     case 'summon': {
       const l = skill.levels[lvl]!;
-      if (skill.kind === 'ranged') {
+      if (skill.kind === 'trap') {
+        // Every trap standing casts its shots: the shot skills' damage, count times
+        for (const id of skill.shotSkills) {
+          const shot = sim.data.skills[id];
+          if (!shot) continue;
+          for (const [e, v] of Object.entries(attackParts(sim, shot, lvl, ignoreDelay, buff, hpCap)) as [Element, number][]) add(e, (v * l.count) / 2);
+        }
+      } else if (skill.kind === 'ranged') {
         for (const b of l.bolts) add(b.element, (l.count * Math.min(hpCap, avg(b))) / attackTicks / l.bolts.length);
       } else if (skill.kind === 'revive') {
         // A revived corpse is about a wave monster's HP times hpPct, standing in the way
@@ -210,6 +217,8 @@ function computeParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boole
       break;
     }
     case 'corpse': {
+      // Find Item loots for gold, not damage
+      if (skill.mode === 'gold') break;
       const l = skill.levels[lvl]!;
       // Half the casts find a corpse; the blast is a share of a wave monster's HP
       const blast = (hpCap * (l.minPct + l.maxPct)) / 200;
@@ -575,6 +584,7 @@ type Goal =
   | { kind: 'build'; tag: string; spot: () => { x: number; y: number } | undefined; skill: string }
   /** Level and tier a tower up to `tier`; `branches[tier]` picks a branching tier. */
   | { kind: 'max'; tag: string; tier: number; branches?: Record<number, string> }
+
   | { kind: 'evolve'; a: string; b: string };
 
 interface OpeningContext {
@@ -748,7 +758,13 @@ const NECRO_BUILDS = ['raise-skeleton', 'teeth', 'amplify-damage'];
 CONFIGS.SORC = { strategy: 'SORC', builds: SORC_BUILDS, tiers: true, evolve: true, elements: true };
 CONFIGS.NECRO = { strategy: 'NECRO', builds: NECRO_BUILDS, tiers: true, evolve: true, elements: true };
 CONFIGS.AMAZON = { strategy: 'AMAZON', builds: ['magic-arrow', 'poison-javelin', 'critical-strike'], tiers: true, evolve: true, elements: true };
-CONFIGS.BARB = { strategy: 'BARB', builds: ['bash', 'double-swing', 'battle-cry'], tiers: true, evolve: true, elements: true };
+CONFIGS.BARB = {
+  strategy: 'BARB',
+  builds: ['bash', 'double-swing', 'battle-cry'],
+  tiers: true,
+  evolve: true,
+  elements: true,
+};
 CONFIGS.DRUID = { strategy: 'DRUID', builds: ['firestorm', 'arctic-blast', 'raven'], tiers: true, evolve: true, elements: true };
 CONFIGS.ASSASSIN = { strategy: 'ASSASSIN', builds: ['fire-blast', 'tiger-strike', 'cloak-of-shadows'], tiers: true, evolve: true, elements: true };
 CONFIGS.MIXED3 = {

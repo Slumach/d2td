@@ -37,6 +37,13 @@ export interface SkillJson {
   skill: string;
   /** The name players know when skills.txt spells it otherwise (Eruption is Fissure). */
   displayName?: string;
+  /**
+   * A skill no tower picks, cast by another (a trap's shots, Phoenix Strike's charges): it
+   * takes that skill's levels and its +skills, bought levels and evolution bonus.
+   */
+  castBy?: string;
+  /** Skills cast in turn, one a cast, instead of this one's own act (Phoenix Strike's charges). */
+  charges?: string[];
   archetype: ArchetypeId;
   damageType: DamageType;
   /**
@@ -66,6 +73,9 @@ export interface SkillCommon {
   name: string;
   /** The name shown to players. */
   displayName: string;
+  /** See SkillJson castBy and charges. */
+  castBy?: string;
+  charges?: string[];
   archetype: ArchetypeId;
   damageType: DamageType;
   skillLevels: number[];
@@ -178,6 +188,8 @@ export interface TowerBuff {
   attackSpeedPct: number;
   /** Bolts fly on through what they hit with this chance (the Amazon's Pierce). */
   piercePct?: number;
+  /** Defence percent for the tower's summons (Shout): monsters hit them less often. */
+  defensePct?: number;
   /** Fire added to every hit, 1/256 HP (Enchant). */
   fireMin: number;
   fireMax: number;
@@ -224,7 +236,10 @@ export interface CurseFx {
  */
 export interface SummonDef extends SkillCommon {
   archetype: 'summon';
-  kind: 'melee' | 'ranged' | 'revive';
+  /** trap: placed on the path in range, fires its shot skills from there, gone when its shots are spent. */
+  kind: 'melee' | 'ranged' | 'revive' | 'trap';
+  /** Trap: the skills each shot casts, from the trap's spot. */
+  shotSkills: string[];
   /** The skills.txt summon monster; empty for revive, which raises the corpse's own monster. */
   monster: string;
   respawnTicks: number;
@@ -233,6 +248,8 @@ export interface SummonDef extends SkillCommon {
   shotRangeUnits: number;
   levels: (DamageRange & {
     count: number;
+    /** Trap: shots before it is gone. */
+    shots: number;
     hp: number;
     /** HP percent (revive: of the corpse's max HP; others: the bonus already in hp), and the damage bonus. */
     hpPct: number;

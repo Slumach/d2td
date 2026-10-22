@@ -286,11 +286,16 @@ function updateTowers(sim: Sim): void {
       continue;
     }
     const active = activeSkill(sim, tower);
-    const act = active && archetypeOf(active.skill).act;
-    if (!active || !act) continue;
-    const buff = withGear(auraBuff, gear, active.skill);
-    if (act(sim, tower, active.skill, active.lvl, buff)) {
-      tower.cooldown = attackInterval(sim, tower, active.skill, active.lvl, buff) - 1;
+    if (!active) continue;
+    // A skill with charges casts them in turn (Phoenix Strike: meteor, lightning, ice)
+    const charges = active.skill.charges;
+    const skill = charges?.length ? geared(sim, tower, sim.data.skills[charges[(tower.charge ?? 0) % charges.length]!]!) : active.skill;
+    const act = archetypeOf(skill).act;
+    if (!act) continue;
+    const buff = withGear(auraBuff, gear, skill);
+    if (act(sim, tower, skill, active.lvl, buff)) {
+      tower.cooldown = attackInterval(sim, tower, skill, active.lvl, buff) - 1;
+      if (charges?.length) tower.charge = (tower.charge ?? 0) + 1;
     }
   }
 }

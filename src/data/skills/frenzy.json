@@ -3,7 +3,7 @@
   "skill": "Frenzy",
   "archetype": "melee",
   "damageType": "phys",
-  "rangeTenths": 11,
+  "rangeTenths": 15,
   "rateTicks": 16,
   "melee": {
     "swings": 2,

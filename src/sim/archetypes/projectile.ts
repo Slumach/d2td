@@ -26,6 +26,8 @@ interface ProjectileJson {
   damagePctCalc?: string;
   /** The missiles.txt row, when the skill row names no server missile (Lightning Sentry's bolt is its trap's). */
   missile?: string;
+  /** Damage from the missile row rather than the skill row (Phoenix Strike's chaos ice). */
+  damageFromMissile?: boolean;
 }
 
 export const projectile: ArchetypeModule<ProjectileDef> = {
@@ -35,7 +37,7 @@ export const projectile: ArchetypeModule<ProjectileDef> = {
     const f = fields<ProjectileJson>(json);
     const missile = missileOf(ctx.tables, ctx.skillRow, f.missile);
     if (json.damageType === 'none') throw new Error(`${json.id}: projectile needs a damage type`);
-    if (!f.weapon) elementalType(json, ctx.skillRow);
+    if (!f.weapon && !f.damageFromMissile) elementalType(json, ctx.skillRow);
     let weapon: DamageRange | undefined;
     if (f.weapon) {
       if (!ctx.weapon) throw new Error(`${json.id}: a weapon projectile needs a class weapon`);
@@ -53,7 +55,7 @@ export const projectile: ArchetypeModule<ProjectileDef> = {
       ...(weapon ? { weapon } : {}),
       weaponPct: srcDam > 0 ? Math.trunc((srcDam * 100) / 128) : 100,
       levels: perLevel(json, (level) => ({
-        ...damageAt(ctx.skillRow, level, 'skill'),
+        ...(f.damageFromMissile ? damageAt(missile, level, 'missile') : damageAt(ctx.skillRow, level, 'skill')),
         count: Math.max(1, f.countCalc ? calcAt(ctx.skillRow, f.countCalc, level) : (f.count ?? 1)),
         damagePct: f.damagePctCalc ? calcAt(ctx.skillRow, f.damagePctCalc, level) : 0,
       })),

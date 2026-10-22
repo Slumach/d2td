@@ -3,6 +3,7 @@
 // everything in radius. Kills leave corpses for corpseLifetimeTicks (balance.json).
 
 import { aliveWithin, dealDamage, distSq, withBonus } from '../combat.ts';
+import { lootCorpse } from '../items/loot.ts';
 import { idiv } from '../fixed.ts';
 import { rollInt } from '../rng.ts';
 import type { Corpse, Element } from '../state.ts';
@@ -48,6 +49,11 @@ export const corpse: ArchetypeModule<CorpseDef> = {
     let bestCount = 0;
     for (const c of s.corpses) {
       if (distSq(tower, c) > skill.rangeUnits * skill.rangeUnits) continue;
+      // Find Item takes the oldest corpse in reach; an explosion wants the most monsters round it
+      if (skill.mode === 'gold') {
+        best = c;
+        break;
+      }
       const count = aliveWithin(sim, c, level.radiusUnits).length;
       if (count > bestCount) {
         best = c;
@@ -56,12 +62,11 @@ export const corpse: ArchetypeModule<CorpseDef> = {
     }
     if (!best) return false;
     if (skill.mode === 'gold') {
-      // Find Item: the corpse is searched for a share of what its monster was worth
-      const def = sim.data.monsters[best.def];
-      const worth = def ? best.rank === 'boss' ? 0 : idiv(def.level * sim.data.economy.bountyPerLevel * (sim.data.economy.rankBountyMultiplier[best.rank] ?? 1) * rollInt(s.rng, level.minPct, level.maxPct), 100) : 0;
-      s.gold[Math.min(tower.owner, s.gold.length - 1)]! += worth;
+      // Find Item, as D2 does it: with the skill's chance the corpse gives up what its monster
+      // would have dropped again: its bounty, and a roll on its treasure class for the tower's owner
       const found = best;
       s.corpses = s.corpses.filter((c) => c.id !== found.id);
+      if (rollInt(s.rng, 0, 99) < rollInt(s.rng, level.minPct, level.maxPct)) lootCorpse(sim, found, tower);
       return true;
     }
     const blast = withBonus(idiv(rollInt(s.rng, level.minPct, level.maxPct) * best.maxHp, 100), buff.damagePct);

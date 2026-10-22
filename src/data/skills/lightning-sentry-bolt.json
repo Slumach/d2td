@@ -1,0 +1,12 @@
+{
+  "id": "lightning-sentry-bolt",
+  "skill": "Lightning Sentry",
+  "castBy": "lightning-sentry",
+  "archetype": "projectile",
+  "damageType": "ltng",
+  "rangeTenths": 50,
+  "rateTicks": 20,
+  "projectile": {
+    "missile": "sentrylightningbolt"
+  }
+}

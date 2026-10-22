@@ -6,7 +6,7 @@ import { dealRaw, distSq, monsterFx } from './combat.ts';
 import { idiv } from './fixed.ts';
 import { ahead, positionAt, wrap } from './map.ts';
 import { rollInt } from './rng.ts';
-import type { Monster, MonsterMod, Rank, Sim } from './state.ts';
+import type { Monster, MonsterMod, Rank, Sim, Summon } from './state.ts';
 
 /** How long a shoved summon shows it, for the renderer. */
 const SHOVE_TICKS = 10;
@@ -191,7 +191,7 @@ export function updateMonsters(sim: Sim): void {
       m.blockedTicks++;
       walk(sim, m, Math.max(0, ahead(sim.map, m.dist, blocker.dist) - rules.blockRangeUnits));
       if (m.attackCooldown === 0) {
-        if (landsOn(sim, m, blocker.towerId)) {
+        if (landsOn(sim, m, blocker)) {
           const hit = rollInt(s.rng, m.minDamage, m.maxDamage);
           blocker.hp -= hit - idiv(hit * Math.min(100, monsterFx(sim, m).damageDownPct), 100);
         }
@@ -221,18 +221,20 @@ export function decayCorpses(sim: Sim): void {
 }
 
 /**
- * Whether a monster's swing lands on a summon. A summon of a tower wearing armour is hit by
- * D2's chance to hit (attack rating against the gear's defence, 5% to 95%, both at the
- * monster's level) and then blocks by the gear's block chance; a summon of an unarmoured
- * tower is always hit, as before items.
+ * Whether a monster's swing lands on a summon, by D2's chance to hit: the monster's attack
+ * rating against the summon's defence (its own monstats defence plus its tower's gear,
+ * raised by Shout and other defence auras on the tower), 5% to 95%, then the gear's block.
  */
-function landsOn(sim: Sim, m: Monster, towerId: number): boolean {
-  const tower = sim.state.towers.find((t) => t.id === towerId);
-  if (!tower?.gear) return true;
-  const gear = gearOf(sim, tower);
-  if (gear.defense <= 0 && gear.blockPct <= 0) return true;
+function landsOn(sim: Sim, m: Monster, unit: Summon): boolean {
+  const tower = sim.state.towers.find((t) => t.id === unit.towerId);
+  const gear = tower?.gear ? gearOf(sim, tower) : undefined;
+  const own = sim.data.monsters[unit.def] ?? sim.data.monsters[sim.data.monsterVariant(unit.def, 0)];
+  const shout = tower ? (sim.fx.towers[tower.id]?.defensePct ?? 0) : 0;
+  const defense = idiv(((own?.defense ?? 0) + (gear?.defense ?? 0)) * (100 + shout), 100);
+  const block = gear?.blockPct ?? 0;
+  if (defense <= 0 && block <= 0) return true;
   const ar = sim.data.monsters[m.def]!.attackRating;
-  const chance = gear.defense > 0 ? Math.min(95, Math.max(5, idiv(100 * ar, Math.max(1, ar + gear.defense)))) : 100;
+  const chance = defense > 0 ? Math.min(95, Math.max(5, idiv(100 * ar, Math.max(1, ar + defense)))) : 100;
   if (rollInt(sim.state.rng, 0, 99) >= chance) return false;
-  return rollInt(sim.state.rng, 0, 99) >= gear.blockPct;
+  return rollInt(sim.state.rng, 0, 99) >= block;
 }

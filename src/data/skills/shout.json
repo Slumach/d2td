@@ -1,0 +1,9 @@
+{
+  "id": "shout",
+  "skill": "Shout",
+  "archetype": "buffAura",
+  "damageType": "none",
+  "buffAura": {
+    "radiusTenths": 15
+  }
+}

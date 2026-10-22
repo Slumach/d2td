@@ -3,7 +3,7 @@
   "skill": "Concentrate",
   "archetype": "melee",
   "damageType": "phys",
-  "rangeTenths": 11,
+  "rangeTenths": 15,
   "rateTicks": 20,
   "melee": {
     "damagePctCalc": "calc1"

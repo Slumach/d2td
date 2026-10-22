@@ -10,5 +10,12 @@
     "radiusTenths": 20,
     "minPctCalc": "calc1",
     "maxPctCalc": "calc1"
-  }
+  },
+  "skillLevels": [
+    1,
+    5,
+    10,
+    15,
+    20
+  ]
 }

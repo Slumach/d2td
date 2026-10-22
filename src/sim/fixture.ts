@@ -327,7 +327,9 @@ const FIXTURE_CLASSES = new Set(['paladin', 'sorceress', 'necromancer']);
 export function fixtureDesign(design: DesignData = DESIGN): DesignData {
   const classes = design.classes.filter((c) => FIXTURE_CLASSES.has(c.id));
   const kept = new Set(classes.flatMap((c) => Object.values(c.lines).flatMap((l) => l.tiers.flat())));
-  const skills = design.skills.filter((s) => kept.has(s.id) || design.classes.every((c) => !Object.values(c.lines).some((l) => l.tiers.flat().includes(s.id))));
+  const inNoLine = (id: string) => design.classes.every((c) => !Object.values(c.lines).some((l) => l.tiers.flat().includes(id)));
+  // Skills cast by another go with their caster
+  const skills = design.skills.filter((s) => (s.castBy ? kept.has(s.castBy) : kept.has(s.id) || inNoLine(s.id)));
   return {
     ...design,
     classes,

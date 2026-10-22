@@ -1,0 +1,15 @@
+{
+  "id": "phoenix-ice",
+  "skill": "Royal Strike",
+  "displayName": "Phoenix Strike",
+  "castBy": "phoenix-strike",
+  "archetype": "projectile",
+  "damageType": "cold",
+  "rangeTenths": 11,
+  "rateTicks": 25,
+  "projectile": {
+    "missile": "royalstrikechaosice",
+    "damageFromMissile": true,
+    "count": 3
+  }
+}

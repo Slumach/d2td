@@ -1,11 +1,17 @@
 {
   "id": "lightning-sentry",
   "skill": "Lightning Sentry",
-  "archetype": "projectile",
+  "archetype": "summon",
   "damageType": "ltng",
   "rangeTenths": 60,
-  "rateTicks": 15,
-  "projectile": {
-    "missile": "sentrylightningbolt"
+  "rateTicks": 30,
+  "summon": {
+    "kind": "trap",
+    "countCalc": "petmax",
+    "shotsCalc": "par1",
+    "shotSkills": [
+      "lightning-sentry-bolt"
+    ],
+    "respawnTicks": 0
   }
 }

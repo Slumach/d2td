@@ -1,0 +1,12 @@
+{
+  "id": "death-sentry-bolt",
+  "skill": "Death Sentry",
+  "castBy": "death-sentry",
+  "archetype": "projectile",
+  "damageType": "ltng",
+  "rangeTenths": 50,
+  "rateTicks": 20,
+  "projectile": {
+    "missile": "sentrylightningbolt"
+  }
+}

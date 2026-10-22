@@ -1,0 +1,17 @@
+{
+  "id": "phoenix-lightning",
+  "skill": "Royal Strike",
+  "displayName": "Phoenix Strike",
+  "castBy": "phoenix-strike",
+  "archetype": "pierce",
+  "damageType": "ltng",
+  "rangeTenths": 11,
+  "rateTicks": 25,
+  "pierce": {
+    "mode": "chain",
+    "missile": "royalstrikechainlightning",
+    "damageFromMissile": true,
+    "hops": 4,
+    "jumpTenths": 30
+  }
+}

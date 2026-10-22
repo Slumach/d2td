@@ -5,7 +5,7 @@
 // shifts combat's rolls.
 
 import { compoundPct } from '../fixed.ts';
-import type { LootFilter, Monster, Sim } from '../state.ts';
+import type { LootFilter, Monster, Rank, Sim, Tower } from '../state.ts';
 import { baseMonsterId } from '../difficulty.ts';
 import { rollInt } from '../rng.ts';
 import { rollKillDrops, rollTreasure } from './drops.ts';
@@ -109,6 +109,30 @@ export function dropLoot(sim: Sim, monster: Monster): void {
   });
   items.push(...cowLevelDrops(sim, monster, items.length));
   for (const item of items) s.drops.push({ id: s.nextId++, item, owner, x: monster.x, y: monster.y, wave: monster.wave, ...(monster.cow ? { cow: true } : {}) });
+}
+
+/**
+ * Find Item's find on a corpse: its monster's bounty again (bosses give nothing), and a roll
+ * on its treasure class at its level, with the looting tower's magic find, to the tower's owner.
+ */
+export function lootCorpse(sim: Sim, corpse: { def: string; rank: Rank; x: number; y: number; id: number }, tower: Tower): void {
+  const s = sim.state;
+  const def = sim.data.monsters[corpse.def];
+  if (!def || corpse.rank === 'boss') return;
+  const owner = Math.min(tower.owner, s.gold.length - 1);
+  const e = sim.data.economy;
+  s.gold[owner]! += def.level * e.bountyPerLevel * (e.rankBountyMultiplier[corpse.rank] ?? 1);
+  const tc = corpse.rank === 'champion' ? def.treasure[1] : corpse.rank === 'unique' ? def.treasure[2] : def.treasure[0];
+  if (!tc) return;
+  const d = sim.data.drops;
+  const items = rollKillDrops(sim.data.items, s.dropRng, {
+    tc,
+    ctx: { mlvl: def.level, magicFind: gearOf(sim, tower).magicFindPct, runePct: d.runeMultiplierPct, noDropPct: 100 },
+    keep: { itemPct: d.dropPct, gemRunePct: d.gemRunePct },
+    hammerPpm: 0,
+    uid: `${s.tick}.c${corpse.id}`,
+  });
+  for (const item of items) s.drops.push({ id: s.nextId++, item, owner, x: corpse.x, y: corpse.y, wave: Math.max(0, s.waves.length - 1) });
 }
 
 /**

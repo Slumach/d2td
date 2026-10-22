@@ -42,7 +42,8 @@ export function geared(sim: Sim, tower: Tower, skill: SkillDef): SkillDef {
   // An evolved tower's attack and its casting partner hit with the recipe's evolution bonus;
   // a partner aura or curse keeps its own effect
   const recipe = tower.evolved ? sim.data.evolutions.find((e) => e.id === tower.evolved) : undefined;
-  const boosted = recipe && (skill.id === recipe.attack.skill || (skill.id === recipe.partner.skill && !isAura(skill)));
+  const own = skill.castBy ?? skill.id;
+  const boosted = recipe && (own === recipe.attack.skill || (own === recipe.partner.skill && !isAura(skill)));
   const bonus = boosted ? recipe.bonus : 1000;
   if (plus === 0 && !weapon && bonus === 1000) return skill;
   return sim.data.skills[sim.data.skillVariant(skill.id, plus, weapon, bonus)]!;

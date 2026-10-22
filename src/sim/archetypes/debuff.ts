@@ -68,6 +68,15 @@ export const debuff: ArchetypeModule<DebuffDef> = {
           const element = RESIST_STATS[stat];
           if (element && value < 0) resistDown[element] = -value;
         }
+        // A defence cut (Battle Cry): towers and summons never roll to hit here, so it is
+        // carried as the physical resistance cut worth the same: against a level-matched
+        // attacker D2 lands 2 / (2 - c) times the hits once defence is cut by c, which is a
+        // 100c / (200 - c) cut to physical resistance (-50% defence: -33%)
+        const armor = stats['skill_armor_percent'] ?? 0;
+        if (armor < 0) {
+          const c = Math.min(100, -armor);
+          resistDown.phys = (resistDown.phys ?? 0) + idiv(100 * c, 200 - c);
+        }
         return {
           radiusUnits: f.radiusTenths !== undefined ? tenthsToUnits(f.radiusTenths) : auraUnits(calcAt(ctx.skillRow, f.radiusCalc ?? 'aurarangecalc', level), ctx.auraRangePerTile),
           resistDown,

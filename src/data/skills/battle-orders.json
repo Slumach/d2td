@@ -1,0 +1,9 @@
+{
+  "id": "battle-orders",
+  "skill": "Battle Orders",
+  "archetype": "buffAura",
+  "damageType": "none",
+  "buffAura": {
+    "radiusTenths": 15
+  }
+}

@@ -109,6 +109,16 @@ export function calcAt(row: TableRow, column: string, level: number): number {
   });
 }
 
+/** A calc written in the skill JSON itself (par1, ln12), evaluated against the skill's row at a level. */
+export function calcExpr(row: TableRow, expr: string, level: number): number {
+  return evalCalc(expr, {
+    lvl: level,
+    params: params(row),
+    elementalMin: elementalAtLevel(row, 'min', level, 'skill'),
+    elementalMax: elementalAtLevel(row, 'max', level, 'skill'),
+  });
+}
+
 /** The skill's server missile row. */
 export function missileOf(tables: Tables, skillRow: TableRow, name?: string): TableRow {
   const id = name ?? (str(skillRow, 'srvmissile') || str(skillRow, 'srvmissilea'));
@@ -176,6 +186,8 @@ export function common(json: SkillJson, ctx: ResolveContext, needsRange: boolean
     id: json.id,
     name: str(row, 'skill'),
     displayName: json.displayName ?? str(row, 'skill'),
+    ...(json.castBy ? { castBy: json.castBy } : {}),
+    ...(json.charges ? { charges: json.charges } : {}),
     archetype: json.archetype,
     damageType: json.damageType,
     skillLevels,

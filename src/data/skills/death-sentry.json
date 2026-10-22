@@ -1,15 +1,18 @@
 {
   "id": "death-sentry",
-  "skill": "mon death sentry",
-  "displayName": "Death Sentry",
-  "archetype": "corpse",
-  "damageType": "fire",
-  "rangeTenths": 40,
+  "skill": "Death Sentry",
+  "archetype": "summon",
+  "damageType": "ltng",
+  "rangeTenths": 60,
   "rateTicks": 30,
-  "corpse": {
-    "radiusCalc": "aurarangecalc",
-    "minPctCalc": "calc1",
-    "maxPctCalc": "calc2",
-    "physicalPctCalc": "calc3"
+  "summon": {
+    "kind": "trap",
+    "countCalc": "petmax",
+    "shotsCalc": "par1",
+    "shotSkills": [
+      "death-sentry-bolt",
+      "death-sentry-blast"
+    ],
+    "respawnTicks": 0
   }
 }

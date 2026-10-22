@@ -16,6 +16,14 @@ import evolutions from './evolutions.json';
 import monsters from './monsters.json';
 import amplifyDamage from './skills/amplify-damage.json';
 import bash from './skills/bash.json';
+import battleOrders from './skills/battle-orders.json';
+import deathSentryBlast from './skills/death-sentry-blast.json';
+import deathSentryBolt from './skills/death-sentry-bolt.json';
+import lightningSentryBolt from './skills/lightning-sentry-bolt.json';
+import phoenixIce from './skills/phoenix-ice.json';
+import phoenixLightning from './skills/phoenix-lightning.json';
+import phoenixMeteor from './skills/phoenix-meteor.json';
+import shout from './skills/shout.json';
 import battleCry from './skills/battle-cry.json';
 import berserk from './skills/berserk.json';
 import concentrate from './skills/concentrate.json';
@@ -107,6 +115,8 @@ export const SKILL_JSON = [
   battleCry,
   warCry,
   findItem,
+  shout,
+  battleOrders,
   // Druid
   firestorm,
   fissure,
@@ -127,6 +137,13 @@ export const SKILL_JSON = [
   cloakOfShadows,
   mindBlast,
   shadowMaster,
+  // Cast by the Assassin's traps and Phoenix Strike, never picked
+  lightningSentryBolt,
+  deathSentryBolt,
+  deathSentryBlast,
+  phoenixMeteor,
+  phoenixLightning,
+  phoenixIce,
   // Paladin
   sacrifice,
   zeal,

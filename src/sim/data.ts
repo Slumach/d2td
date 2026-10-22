@@ -316,6 +316,8 @@ export interface MonsterDef {
   demon: boolean;
   /** D2 attack rating: A1TH percent of monlvl TH at the difficulty's level. Decides hits on armoured summons. */
   attackRating: number;
+  /** Defence: monstats AC percent of monlvl.txt AC at its level (a summon's counts in the hit roll). */
+  defense: number;
   /** Treasure classes for the difficulty: as a normal monster, a champion, a unique (a superunique's own TC). */
   treasure: [string, string, string];
   /** Ticks between AI decisions (monstats aidel). */
@@ -676,6 +678,7 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
     undead: int(row, 'lUndead') === 1 || int(row, 'hUndead') === 1,
     demon: int(row, 'demon') === 1,
     attackRating: idiv(int(row, col('A1TH')) * int(lvlRow, lvlCol('TH')), 100),
+    defense: idiv(int(row, col('AC')) * int(lvlRow, lvlCol('AC')), 100),
     treasure: [
       str(row, col('TreasureClass')),
       str(row, col('TreasureClassChamp')),
@@ -1120,7 +1123,7 @@ export function buildGameData(
   const laddered = new Set(design.classes.flatMap((c) => Object.values(c.lines).flatMap((l) => l.tiers.slice(1).flat())));
   const skills: Record<string, SkillDef> = {};
   for (const json of design.skills) {
-    if (!laddered.has(json.id)) skills[json.id] = resolveSkill(tables, json, design, weaponFor(json.id));
+    if (!laddered.has(json.id) && !json.castBy) skills[json.id] = resolveSkill(tables, json, design, weaponFor(json.id));
   }
 
   const classes: Record<string, ClassDef> = {};
@@ -1131,6 +1134,15 @@ export function buildGameData(
     classes[c.id] = { id: c.id, name: c.name, lines: c.lines };
   }
   const ladders = buildLadders(tables, design, skills, jsonById, weaponFor, options.checkTierBonus ?? true);
+  // Skills no tower picks, cast by another (trap shots, charges): at their caster's levels
+  for (const json of design.skills) {
+    if (!json.castBy) continue;
+    const caster = skills[json.castBy];
+    if (!caster) throw new Error(`${json.id}: castBy ${json.castBy} is no skill`);
+    const casterLadder = ladders.find((l) => l.skill === json.castBy);
+    const def = resolveSkill(tables, json, design, weaponFor(json.castBy), caster.skillLevels);
+    skills[json.id] = casterLadder ? withTierBonus(def, casterLadder.tierBonus) : def;
+  }
 
   const evolutionPct = design.balance.evolution?.dpsPct ?? 250;
   const evolutions = Object.entries(design.evolutions).map(([id, e]) => {
@@ -1182,8 +1194,8 @@ export function buildGameData(
     if (skills[key]) return key;
     const json = jsonById.get(id);
     if (!json) throw new Error(`No skill ${id} to raise`);
-    const ladder = ladders.find((l) => l.skill === id);
-    const levels = (ladder?.levels ?? json.skillLevels ?? []).map((l) => l + plus);
+    const ladder = ladders.find((l) => l.skill === (json.castBy ?? id));
+    const levels = (ladder?.levels ?? json.skillLevels ?? (json.castBy ? jsonById.get(json.castBy)?.skillLevels : undefined) ?? []).map((l) => l + plus);
     let def = resolveSkill(tables, json, design, weaponFor(id), levels);
     if (ladder) def = withTierBonus(def, ladder.tierBonus);
     if (weapon && def.archetype === 'melee') def = { ...def, weapon: { min: weapon.min * 256, max: weapon.max * 256 } };

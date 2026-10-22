@@ -11,5 +11,10 @@
     "missile": "royalstrikemeteor",
     "damageFromMissile": true,
     "radiusCalc": "aurarangecalc"
-  }
+  },
+  "charges": [
+    "phoenix-meteor",
+    "phoenix-lightning",
+    "phoenix-ice"
+  ]
 }

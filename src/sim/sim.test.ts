@@ -349,7 +349,8 @@ describe.skipIf(!hasTables())('real tables', () => {
     const atLevel1 = (id: string) =>
       resolveSkill(loadTables(), DESIGN.skills.find((s) => s.id === id)!, DESIGN, undefined, [1, 1, 1, 1, 1]);
     expect((atLevel1('holy-freeze') as ControlDef).levels[0]!.slowPct).toBe(30);
-    expect((atLevel1('conviction') as DebuffDef).levels[0]!.resistDown).toEqual({ fire: 30, cold: 30, ltng: 30 });
+    // Its defence cut too, as the physical resistance it is worth: 100c / (200 - c)
+    expect((atLevel1('conviction') as DebuffDef).levels[0]!.resistDown).toEqual({ fire: 30, cold: 30, ltng: 30, phys: 32 });
     expect(data.rules.championHpPct).toBe(200);
     expect(data.rules.uniqueHpPct).toBe(300);
   });
