@@ -1,3 +1,11 @@
+0.2.4
+
+- Fixes the launch error of 0.2.3 (the solo spawn mark was made before the text it writes through).
+- The selected tower's panel no longer overlaps its own text or the life globe; the Evolve button carries the cost, and the panel says what an evolution still needs.
+- No volume spike after alt-tab.
+- The life globe starts full and drains as the ring fills (100 alive a player loses it); the mana globe is your share of the game's kills; the numbers above them say which.
+- Gold is always shown in the right skill slot.
+
 0.2.3
 
 - Zoom has a 1.5x step; the screen fit uses whole device pixels so display scaling never blurs the canvas.

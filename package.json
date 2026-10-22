@@ -2,7 +2,7 @@
   "name": "d2td",
   "productName": "D2 Tower Defense",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Non-commercial Diablo II fan tower defense. Bring your own D2R install.",
   "type": "module",
   "main": "dist-electron/main.cjs",
@@ -23,7 +23,7 @@
     "build:app": "tsc --noEmit && tsc --noEmit -p electron && vite build && vite build -c vite.electron.config.ts",
     "app": "npm run build:app && electron .",
     "dist": "npm run build:app && electron-builder --win nsis --publish never && tsx tools/payload-check.ts",
-    "publish": "npm run dist && tsx tools/publish.ts",
+    "publish": "tsx tools/publish.ts",
     "payload-check": "tsx tools/payload-check.ts",
     "mp-soak": "tsx tools/mp-soak.ts",
     "waves": "tsx tools/waves.ts",
@@ -49,10 +49,18 @@
     "directories": {
       "output": "release"
     },
-    "publish": {
-      "provider": "generic",
-      "url": "https://d2td-updates.s3.amazonaws.com"
-    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Slumach",
+        "repo": "d2td",
+        "releaseType": "release"
+      },
+      {
+        "provider": "generic",
+        "url": "https://d2td-updates.s3.amazonaws.com"
+      }
+    ],
     "releaseInfo": {
       "releaseNotesFile": "release-notes.md"
     },

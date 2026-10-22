@@ -402,7 +402,7 @@ What the numbers say:
 
 ### Updates (Oct 22 afternoon)
 
-electron-updater with the generic provider: package.json build.publish names the S3 bucket's URL (d2td-updates), electron-builder writes latest.yml (with release-notes.md as the notes) and the blockmap beside the installer, and `npm run publish` builds and copies all three to the bucket with the AWS CLI and the machine's credentials (tools/publish.ts). The main menu's Update button asks the feed, shows the version and notes, downloads on request and installs on restart (electron/main.ts wireUpdates; the renderer only sees updateCheck, updateDownload, updateInstall and progress events). A development run reports that updates work in the installed game.
+electron-updater: from 0.2.4 the feed is the GitHub Release (package.json build.publish, the github provider first), and the generic S3 feed (d2td-updates) is kept second so installs from before 0.2.4, whose updater reads the bucket, still see new versions. electron-builder writes latest.yml (with release-notes.md as the notes) and the blockmap beside the installer; `npm run publish` (after `npm run dist`) makes the GitHub Release with GH_TOKEN and copies the three files to the bucket with the AWS CLI, skipping whichever half has no credentials (tools/publish.ts). The main menu's Update button asks the feed, shows the version and notes, downloads on request and installs on restart (electron/main.ts wireUpdates; the renderer only sees updateCheck, updateDownload, updateInstall and progress events). A development run reports that updates work in the installed game.
 
 ### The four missing classes (Oct 22 evening)
 
