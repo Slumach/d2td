@@ -9,7 +9,7 @@ import type { TowerGear } from '../items/gear.ts';
 import { castItemSkill, OPEN_WOUNDS_TICKS, openWoundsDamage } from '../items/tower.ts';
 import { ELEMENTS, type Element, type Monster, type Sim, type Tower } from '../state.ts';
 import { findRow, int } from '../tables.ts';
-import { auraStats, calcAt, common, fields, filterFrom, perLevel } from './common.ts';
+import { auraStats, calcAt, common, extraTargets, fields, filterFrom, perLevel } from './common.ts';
 import type { ArchetypeModule, MeleeDef } from './types.ts';
 
 interface MeleeJson {
@@ -55,7 +55,7 @@ export const melee: ArchetypeModule<MeleeDef> = {
           elementalPct[element] = calcAt(ctx.skillRow, column, level);
         }
         return {
-          swings: f.swingsCalc ? Math.max(1, calcAt(ctx.skillRow, f.swingsCalc, level)) : Math.max(1, f.swings ?? 1),
+          swings: f.swingsCalc ? Math.max(1, calcAt(ctx.skillRow, f.swingsCalc, level)) : Math.max(1, f.swings ?? 1) + extraTargets(ctx.reach, level),
           damagePct: f.damagePctCalc ? calcAt(ctx.skillRow, f.damagePctCalc, level) : 0,
           elementalPct,
         };

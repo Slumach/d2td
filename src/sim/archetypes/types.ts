@@ -144,7 +144,8 @@ export interface SplashDef extends SkillCommon {
   subFilter: HitFilter | undefined;
   /** The sub-missile's own EType. */
   subElement: Element;
-  levels: (DamageRange & { sub: DamageRange; subRadiusUnits: number })[];
+  /** radiusUnits: the area at this level (the top-level radiusUnits is the base). */
+  levels: (DamageRange & { sub: DamageRange; subRadiusUnits: number; radiusUnits: number })[];
 }
 
 export interface ZoneDef extends SkillCommon {
@@ -153,7 +154,8 @@ export interface ZoneDef extends SkillCommon {
   tickTicks: number;
   durationTicks: number;
   filter: HitFilter;
-  levels: DamageRange[];
+  /** radiusUnits: the area at this level (the top-level radiusUnits is the base). */
+  levels: (DamageRange & { radiusUnits: number })[];
 }
 
 export interface MeleeDef extends SkillCommon {
@@ -286,6 +288,8 @@ export interface ResolveContext {
   /** Paladin melee weapon from the class JSON, a weapons.txt "name". */
   weapon: string | undefined;
   auraRangePerTile: number;
+  /** balance.json reach: how top-tier skills hit more per attack where skills.txt does not say. */
+  reach: import('./common.ts').Reach;
   /** balance.json skillOverrides for this skill, if any. */
   filterOverride: Partial<HitFilter> | undefined;
 }

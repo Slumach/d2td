@@ -13,22 +13,7 @@ import { d2FramesToTicks, idiv, isqrt } from '../fixed.ts';
 import { TRIG_SCALE, TRIG_STEPS, cos64, homeToward, sin64, spawnMissile, targetOf } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
 import type { Element, Missile, Monster, Sim } from '../state.ts';
-import {
-  auraUnits,
-  calcAt,
-  common,
-  damageAt,
-  elementalType,
-  etype,
-  fields,
-  filterFrom,
-  lengthAt,
-  missileLifetime,
-  missileOf,
-  missileSpeed,
-  perLevel,
-  tenthsToUnits,
-} from './common.ts';
+import { areaPct, auraUnits, calcAt, calcGrows, common, damageAt, elementalType, etype, fields, filterFrom, lengthAt, missileLifetime, missileOf, missileSpeed, perLevel, tenthsToUnits } from './common.ts';
 import type { ArchetypeModule, SplashDef } from './types.ts';
 
 interface SplashJson {
@@ -56,11 +41,12 @@ function element(skill: SplashDef): Element {
 /** Damages everything within the radius of `center`, scaled by distance. */
 function explode(sim: Sim, skill: SplashDef, missile: Missile, center: { x: number; y: number }, skip: number[] = []): Monster[] {
   const range = skill.levels[missile.level]!;
+  const radius = range.radiusUnits;
   const hit: Monster[] = [];
-  for (const m of aliveWithin(sim, center, skill.radiusUnits)) {
+  for (const m of aliveWithin(sim, center, radius)) {
     if (skip.includes(m.id)) continue;
     const d = isqrt(distSq(center, m));
-    const pct = skill.radiusUnits === 0 ? 100 : 100 - idiv((100 - skill.edgeDamagePct) * d, skill.radiusUnits);
+    const pct = radius === 0 ? 100 : 100 - idiv((100 - skill.edgeDamagePct) * d, radius);
     const amount = withBonus(rollInt(sim.state.rng, range.min, range.max), missile.damagePct);
     strike(sim, m, idiv(amount * pct, 100), element(skill), skill.filter, skill, missile.level, missile);
     // War Cry and Mind Blast stun what they hit; bosses shrug it off
@@ -90,12 +76,18 @@ export const splash: ArchetypeModule<SplashDef> = {
     const radius = f.radiusCalc
       ? auraUnits(calcAt(ctx.skillRow, f.radiusCalc, json.skillLevels?.[0] ?? 1), ctx.auraRangePerTile)
       : tenthsToUnits(f.radiusTenths ?? 0);
+    const base = f.delivery === 'nova' ? tenthsToUnits(json.rangeTenths ?? 0) : radius;
+    // The area at a level: the table's own when it grows, else the reach rule's
+    const radiusAt = (level: number) =>
+      f.delivery !== 'nova' && f.radiusCalc && calcGrows(ctx.skillRow, f.radiusCalc)
+        ? auraUnits(calcAt(ctx.skillRow, f.radiusCalc, level), ctx.auraRangePerTile)
+        : Math.trunc((base * areaPct(ctx.reach, level)) / 100);
     return {
       ...common(json, ctx, true),
       archetype: 'splash',
       delivery: f.delivery,
       randomTarget: f.randomTarget === true,
-      radiusUnits: f.delivery === 'nova' ? tenthsToUnits(json.rangeTenths ?? 0) : radius,
+      radiusUnits: base,
       edgeDamagePct: f.edgeDamagePct ?? 100,
       missileSpeed: missileSpeed(missile),
       missileLifetime: missileLifetime(missile),
@@ -110,6 +102,7 @@ export const splash: ArchetypeModule<SplashDef> = {
         sub: sub ? damageAt(sub, level, 'missile') : { min: 0, max: 0 },
         subRadiusUnits:
           sub && f.subMissile ? auraUnits(calcAt(ctx.skillRow, f.subMissile.radiusCalc, level), ctx.auraRangePerTile) : 0,
+        radiusUnits: radiusAt(level),
       })),
     };
   },
@@ -117,14 +110,15 @@ export const splash: ArchetypeModule<SplashDef> = {
   act(sim, tower, skill, lvl, buff) {
     const hurtable = (m: Monster) => canHurt(sim, m, element(skill), skill.filter);
     if (skill.delivery === 'nova') {
-      if (!sim.state.monsters.some((m) => m.hp > 0 && within(tower, m, skill.radiusUnits) && hurtable(m))) return false;
+      const ring = skill.levels[lvl]!.radiusUnits;
+      if (!sim.state.monsters.some((m) => m.hp > 0 && within(tower, m, ring) && hurtable(m))) return false;
       // The ring expands at missile speed; it lives until it reaches the edge
       const speed = Math.max(1, skill.missileSpeed);
-      const ticks = Math.max(1, idiv(skill.radiusUnits + speed - 1, speed));
+      const ticks = Math.max(1, idiv(ring + speed - 1, speed));
       spawnMissile(sim, tower, skill.id, lvl, buff, { ticksLeft: ticks });
       return true;
     }
-    const reach = skill.rangeUnits + skill.radiusUnits;
+    const reach = skill.rangeUnits + skill.levels[lvl]!.radiusUnits;
     let target: Monster | undefined;
     if (skill.randomTarget) {
       const pool = sim.state.monsters.filter((m) => m.hp > 0 && within(tower, m, reach) && hurtable(m));
@@ -166,7 +160,7 @@ export const splash: ArchetypeModule<SplashDef> = {
 
     if (skill.delivery === 'nova') {
       // The ring's radius grows each tick; it hits each monster it passes once
-      const radius = Math.min(skill.radiusUnits, skill.missileSpeed * missile.age);
+      const radius = Math.min(skill.levels[missile.level]!.radiusUnits, skill.missileSpeed * missile.age);
       for (const m of aliveWithin(sim, missile, radius)) {
         if (missile.hits.includes(m.id)) continue;
         missile.hits.push(m.id);

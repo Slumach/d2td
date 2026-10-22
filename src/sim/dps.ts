@@ -73,6 +73,36 @@ export function standardDps(skill: SkillDef, lvl: number, ignoreDelay = false): 
   }
 }
 
+/**
+ * One hit of a skill on one plain target (1/256 HP): a missile, a bolt's strike, a splash's
+ * blast, one tick of a zone, one swing. What decides whether a monster dies to it, where
+ * standardDps decides how fast. 0 for skills that do not hit by themselves.
+ */
+export function singleHit(skill: SkillDef, lvl: number): number {
+  switch (skill.archetype) {
+    case 'projectile': {
+      const l = skill.levels[lvl]!;
+      const weapon = skill.weapon ? idiv(idiv(avg(skill.weapon) * skill.weaponPct, 100) * (100 + l.damagePct), 100) : 0;
+      return idiv((avg(l) + weapon) * plainPct(skill.filter), 100);
+    }
+    case 'pierce':
+    case 'zone':
+    case 'control':
+      return idiv(avg(skill.levels[lvl]!) * plainPct(skill.filter), 100);
+    case 'splash':
+      return idiv(avg(skill.levels[lvl]!) * plainPct(skill.filter), 100);
+    case 'melee': {
+      const l = skill.levels[lvl]!;
+      const weapon = avg(skill.weapon);
+      let hit = idiv(weapon * (100 + l.damagePct), 100);
+      for (const pct of Object.values(l.elementalPct)) hit += idiv(weapon * (pct ?? 0), 100);
+      return hit;
+    }
+    default:
+      return 0;
+  }
+}
+
 /** True for skills whose worth is what they do to others: buff, debuff and control auras, and curses. */
 export function isAura(skill: SkillDef): boolean {
   return (

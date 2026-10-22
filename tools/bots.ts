@@ -204,7 +204,7 @@ function computeParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boole
     }
     case 'splash': {
       const l = skill.levels[lvl]!;
-      const targets = skill.delivery === 'orbit' ? 3 : skill.delivery === 'nova' ? CROWD : 1 + skill.radiusUnits / 1000;
+      const targets = skill.delivery === 'orbit' ? 3 : skill.delivery === 'nova' ? CROWD : 1 + l.radiusUnits / 1000;
       direct(avg(l), targets, skill.filter);
       if (skill.subFilter && l.subRadiusUnits > 0) add(skill.subElement, (hit(avg(l.sub), skill.subFilter) * 2) / interval);
       break;

@@ -243,9 +243,12 @@ describe('monsters', () => {
     const champion = addMonster(sim, 'zombie1', 0, { rank: 'champion' });
     const unique = addMonster(sim, 'zombie1', 0, { rank: 'unique', mods: ['extraFast', 'stoneSkin'] });
     const def = sim.data.monsters['zombie1']!;
-    expect(normal.maxHp).toBeLessThanOrEqual(def.maxHp);
-    expect(champion.maxHp).toBeGreaterThanOrEqual(def.minHp * (100 + sim.data.rules.championHpPct) / 100 - 1);
-    expect(unique.maxHp).toBeGreaterThanOrEqual(def.minHp * (100 + sim.data.rules.uniqueHpPct) / 100 - 1);
+    // On top of the stage's place on the HP curve, which every rank shares
+    const w = sim.data.waves[0]!;
+    const stage = (sim.data.rules.stageHpPct[`${w.difficulty}-${w.act}`] ?? 100) / 100;
+    expect(normal.maxHp).toBeLessThanOrEqual(def.maxHp * stage + 1);
+    expect(champion.maxHp).toBeGreaterThanOrEqual(((def.minHp * (100 + sim.data.rules.championHpPct)) / 100) * stage - 2);
+    expect(unique.maxHp).toBeGreaterThanOrEqual(((def.minHp * (100 + sim.data.rules.uniqueHpPct)) / 100) * stage - 2);
     expect(speedOf(sim, unique)).toBeGreaterThan(speedOf(sim, normal));
   });
 });

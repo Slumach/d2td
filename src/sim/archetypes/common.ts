@@ -236,6 +236,34 @@ function levelsOf(json: SkillJson): number[] {
   return json.skillLevels;
 }
 
+/**
+ * What a skill's own table does not grow (a Blizzard's area, a Fire Bolt's one bolt, Double
+ * Swing's two swings, a sentry's shots) grows past skills.txt level reach.fromLevel, the most
+ * a T1 or T2 skill reaches: so only T3 skills and the levels evolutions and legends add hit
+ * more per attack (balance.json reach). Where skills.txt grows it, the table's number stands.
+ */
+export interface Reach {
+  fromLevel: number;
+  areaPctPerLevel: number;
+  areaMaxPct: number;
+  levelsPerTarget: number;
+}
+
+/** Percent of its own area a skill covers at a skills.txt level. */
+export function areaPct(reach: Reach, level: number): number {
+  return Math.min(reach.areaMaxPct, 100 + reach.areaPctPerLevel * Math.max(0, level - reach.fromLevel));
+}
+
+/** Extra arrows, bolts, jumps, swings or shots at a skills.txt level. */
+export function extraTargets(reach: Reach, level: number): number {
+  return Math.trunc(Math.max(0, level - reach.fromLevel) / reach.levelsPerTarget);
+}
+
+/** True when a calc column gives more at a high level than at level 1: the table grows it. */
+export function calcGrows(row: TableRow, column: string): boolean {
+  return calcAt(row, column, 60) > calcAt(row, column, 1);
+}
+
 export function perLevel<T>(json: SkillJson, fn: (skillLevel: number) => T): T[] {
   return levelsOf(json).map(fn);
 }

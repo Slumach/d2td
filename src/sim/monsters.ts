@@ -27,7 +27,11 @@ export function createMonster(sim: Sim, def: string, wave: number, rank: Rank, m
   // HP is the monster's own at its level (monlvl), with its rank's bonus: no per-wave curve
   // An endless wave scales its monsters' HP and damage on top (WaveDef hpPct, damagePct)
   const waveDef = sim.data.waves[wave];
-  const waveHp = waveDef?.hpPct ?? 100;
+  // and the stage's place on the HP curve (rules.stageHpPct): every rank, bosses keep their ramp on top
+  // (an endless wave stands on the curve's last stage, Hell Act 5, its own ramp on top)
+  const stageKey = waveDef ? (waveDef.tier !== undefined ? '2-5' : `${waveDef.difficulty}-${waveDef.act}`) : '';
+  const stage = rules.stageHpPct[stageKey] ?? 100;
+  const waveHp = idiv((waveDef?.hpPct ?? 100) * stage, 100);
   const maxHp = hp ?? Math.max(256, idiv(idiv(rollInt(s.rng, d.minHp, d.maxHp) * (100 + rankHpPct(sim, rank, wave)), 100) * waveHp, 100));
   let damagePct = rank === 'champion' || rank === 'unique' ? rules.championDamagePct : 0;
   for (const mod of mods) damagePct += rules.mods[mod].damagePct;

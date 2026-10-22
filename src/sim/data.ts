@@ -4,7 +4,7 @@
 
 import { ARCHETYPES } from './archetypes/index.ts';
 import type { HitFilter, SkillDef, SkillJson } from './archetypes/types.ts';
-import { auraMultiplier, isAura, pairValue, standardDps, withDamageBonus, withTierBonus } from './dps.ts';
+import { auraMultiplier, isAura, pairValue, singleHit, standardDps, withDamageBonus, withTierBonus } from './dps.ts';
 import { VELOCITY_TO_UNITS_PER_TICK, UNITS_PER_TILE, compoundPct, d2FramesToTicks, idiv } from './fixed.ts';
 import { DIFFICULTIES, DIFFICULTY_NAMES, levelVariantId, variantId, type DifficultyName } from './difficulty.ts';
 import { ELEMENTS, MONSTER_MODS, type Element, type MonsterMod, type Rank } from './state.ts';
@@ -140,14 +140,25 @@ export interface BalanceJson {
   /** The run is lost when the weight of everything alive on the ring reaches aliveLimit; weights by rank. */
   aliveLimit: number;
   aliveWeight: Record<Rank, number>;
-  /** Every tower costs this to build, however many the player owns. */
+  /** The first tower's price. */
   buildCost: number;
+  /** Each tower a player owns raises the next build's price by this percent (110: a floor against going wide). */
+  buildCostGrowthPct: number;
   /**
    * An act boss's HP is this percent of its monstats HP, climbing in a straight line by wave
    * number from `first` on the run's first boss wave to `last` on its last campaign boss
    * wave: early bosses are easier than the tables, late ones harder.
    */
   bossHpPct: { first: number; last: number };
+  /**
+   * Monster HP by stage, against the towers of the stage: at each act of each difficulty a
+   * regular monster takes about hitsToKill single hits (dps.ts singleHit) from the median
+   * tower of the tier and level the stage is tuned for (by difficulty, one per act; tier 4
+   * is the evolved towers, and a level past 5 their bought levels), so the curve climbs act
+   * by act as the towers do. Bosses keep bossHpPct on top. Computed at load time from the
+   * tables (rules.stageHpPct); npm run hpcurve prints it.
+   */
+  hpCurve: { hitsToKill: number; tiers: Record<string, number[]>; levels: Record<string, number[]> };
   /**
    * Past Hell Baal the run goes on forever. Every `tierWaves` waves is a Tier (Tier 1 is
    * waves 76 to 85). Waves 1 to 9 of a Tier walk Hell's regular waves in campaign order,
@@ -203,6 +214,8 @@ export interface BalanceJson {
    * Trapped Soul, Velocity 0): on the ring everything walks, at the slowest walkers' pace.
    */
   stationaryVelocity: number;
+  /** How top-tier skills hit more per attack where skills.txt has no growth (archetypes/common.ts Reach). */
+  reach: import('./archetypes/common.ts').Reach;
   auraRangePerTile: number;
   /** D2 hardcodes how much a chilled monster slows: a design value. */
   chillPct: number;
@@ -407,6 +420,7 @@ export interface WaveDef {
 export interface Economy {
   startingGold: number;
   buildCost: number;
+  buildCostGrowthPct: number;
   /** levelCosts[tier - 1][n] is the gold to go from level n + 1 to n + 2 in that tier. */
   levelCosts: number[][];
   /** tierCosts[0] reaches T2, tierCosts[1] reaches T3. */
@@ -462,6 +476,8 @@ export interface Rules {
   championDamagePct: number;
   /** A boss's HP percent at each boss wave, by the wave's index in the run (see BalanceJson bossHpPct). */
   bossHpPct: Record<number, number>;
+  /** Every monster's HP percent by stage, "difficulty-act" (see BalanceJson hpCurve). */
+  stageHpPct: Record<string, number>;
   /** Per mod: its speed and damage, and its resistances by difficulty. */
   mods: Record<MonsterMod, { speedPct: number; damagePct: number; resist: ModResist[] }>;
 }
@@ -905,6 +921,76 @@ export function endlessWave(balance: BalanceJson, monsters: MonstersJson, defOf:
 }
 
 /** Each boss wave's boss HP percent: a straight line by wave index from the first boss wave to the last. */
+/** The stage curve's working: each stage's tier, the median hit, the median regular monster's HP and the percent. */
+export interface StageHp {
+  stage: string;
+  difficulty: number;
+  act: number;
+  tier: number;
+  level: number;
+  hit: number;
+  hp: number;
+  pct: number;
+}
+
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length === 0 ? 0 : s[idiv(s.length - 1, 2)]!;
+}
+
+/** The monster HP curve by stage (BalanceJson hpCurve), and the working behind it. */
+export function stageHpPctFrom(
+  balance: BalanceJson,
+  campaign: WaveDef[],
+  monsters: Record<string, MonsterDef>,
+  classes: ClassJson[],
+  skills: Record<string, SkillDef>,
+  evolutions: EvolutionDef[],
+  variant: (id: string, plus: number, bonus: number) => SkillDef,
+): { pct: Record<string, number>; stages: StageHp[] } {
+  const { hitsToKill, tiers, levels } = balance.hpCurve;
+  // The hits a stage's towers land: every class line's skills of the tier at the level; tier 4
+  // is the evolved towers' attacks, recipe bonus included, their bought levels past 5 added
+  const hitsOf = (tier: number, level: number): number[] => {
+    if (tier >= 4) {
+      const plus = Math.max(0, level - MAX_TOWER_LEVEL) * balance.evolvedLevels.skillLevelsPerLevel;
+      return evolutions.map((r) => singleHit(variant(r.attack.skill, plus, r.bonus), MAX_TOWER_LEVEL - 1)).filter((h) => h > 0);
+    }
+    // A line's level past 5 is its bought skills.txt levels (lineLevels)
+    const plus = Math.max(0, level - MAX_TOWER_LEVEL) * (balance.lineLevels.skillLevelsPerLevel[tier - 1] ?? 0);
+    return classes.flatMap((c) => Object.values(c.lines).flatMap((l) => l.tiers[tier - 1] ?? [])).flatMap((id) => {
+      const s = plus > 0 ? variant(id, plus, 1000) : skills[id];
+      return s ? [singleHit(s, Math.min(level, MAX_TOWER_LEVEL) - 1)] : [];
+    }).filter((h) => h > 0);
+  };
+  const pct: Record<string, number> = {};
+  const stages: StageHp[] = [];
+  for (let d = 0; d < DIFFICULTIES.length; d++) {
+    for (let act = 1; act <= 5; act++) {
+      const tier = tiers[DIFFICULTIES[d]!]?.[act - 1];
+      const level = levels[DIFFICULTIES[d]!]?.[act - 1];
+      // Tier 0: the stage keeps the tables' HP (Normal Act 1, before a player owns a second tower)
+      if (tier === undefined || level === undefined || tier === 0) continue;
+      const hps: number[] = [];
+      for (const w of campaign) {
+        if (w.difficulty !== d || w.act !== act) continue;
+        for (const g of w.groups) {
+          if (g.rank !== 'normal') continue;
+          const m = monsters[g.monster];
+          if (m) for (let i = 0; i < g.count; i++) hps.push(idiv(m.minHp + m.maxHp, 2));
+        }
+      }
+      const hit = median(hitsOf(tier, level));
+      const hp = median(hps);
+      if (hit <= 0 || hp <= 0) continue;
+      const stage = `${d}-${act}`;
+      pct[stage] = Math.max(1, Math.round((100 * hitsToKill * hit) / hp));
+      stages.push({ stage, difficulty: d, act, tier, level, hit, hp, pct: pct[stage]! });
+    }
+  }
+  return { pct, stages };
+}
+
 export function bossHpPctFrom(balance: BalanceJson, waves: WaveDef[]): Record<number, number> {
   const bosses = waves.map((w, i) => (w.final ? i : -1)).filter((i) => i >= 0);
   const first = bosses[0] ?? 0;
@@ -935,6 +1021,7 @@ export function economyFrom(balance: BalanceJson): Economy {
   return {
     startingGold: balance.startingGold,
     buildCost: balance.buildCost,
+    buildCostGrowthPct: balance.buildCostGrowthPct,
     levelCosts: balance.levelCostBase.map((base) => steps.map((permille) => idiv(base * permille, 1000))),
     tierCosts: balance.tierCosts,
     evolveCost: balance.evolveCost,
@@ -978,6 +1065,7 @@ export function rulesFrom(tables: Tables, balance: BalanceJson): Rules {
     uniqueHpPct: monumodConstant(tables, 'Unique HP % Bonus'),
     championDamagePct: monumodConstant(tables, 'Champion Damage % Bonus'),
     bossHpPct: {},
+    stageHpPct: {},
     mods,
   };
 }
@@ -999,6 +1087,7 @@ export function resolveSkill(
       skillRow: findRow(tables.skills, 'skill', json.skill),
       weapon,
       auraRangePerTile: design.balance.auraRangePerTile,
+      reach: design.balance.reach,
       filterOverride: design.balance.skillOverrides[json.id],
     },
   );
@@ -1208,7 +1297,12 @@ export function buildGameData(
   const levels = actFloorFrom(tables, design.balance.actFloorPercentile);
   const campaign = campaignWaves(design.balance, m, defOf, levels);
   const waves = campaign.slice(0, waveCount);
-  const rules = { ...rulesFrom(tables, design.balance), bossHpPct: bossHpPctFrom(design.balance, waves) };
+  const rules = {
+    ...rulesFrom(tables, design.balance),
+    bossHpPct: bossHpPctFrom(design.balance, waves),
+    // Filled in once skill variants exist, below
+    stageHpPct: {} as Record<string, number>,
+  };
   // The run goes on past Hell Baal: endless waves are built as the run reaches them
   const extendWaves =
     waveCount === Infinity
@@ -1235,6 +1329,8 @@ export function buildGameData(
     skills[key] = { ...def, id: key };
     return key;
   };
+  // The HP curve reads the evolved towers' attacks at their bought levels
+  rules.stageHpPct = stageHpPctFrom(design.balance, campaign, monsters, design.classes, skills, evolutions, (id, plus, bonus) => skills[skillVariant(id, plus, undefined, bonus)]!).pct;
   const skillIds: Record<string, string> = {};
   for (const r of tables.skills) {
     const name = str(r, 'skill');

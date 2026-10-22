@@ -9,20 +9,7 @@ import { homeToward, spawnMissile, targetOf } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
 import type { Element } from '../state.ts';
 import { int } from '../tables.ts';
-import {
-  auraStats,
-  auraUnits,
-  calcAt,
-  common,
-  damageAt,
-  elementalType,
-  fields,
-  filterFrom,
-  missileLifetime,
-  missileOf,
-  missileSpeed,
-  perLevel,
-} from './common.ts';
+import { areaPct, auraStats, auraUnits, calcAt, calcGrows, common, damageAt, elementalType, fields, filterFrom, missileLifetime, missileOf, missileSpeed, perLevel } from './common.ts';
 import type { ArchetypeModule, ControlDef } from './types.ts';
 
 interface ControlJson {
@@ -57,7 +44,12 @@ export const control: ArchetypeModule<ControlDef> = {
         filter: filterFrom(undefined, ctx.filterOverride),
         levels: perLevel(json, (level) => ({
           ...damageAt(ctx.skillRow, level, 'skill'),
-          radiusUnits: auraUnits(calcAt(ctx.skillRow, f.radiusCalc ?? 'aurarangecalc', level), ctx.auraRangePerTile),
+          // Hurricane's area: the table's when it grows, else the reach rule's
+          radiusUnits: Math.trunc(
+            (auraUnits(calcAt(ctx.skillRow, f.radiusCalc ?? 'aurarangecalc', level), ctx.auraRangePerTile) *
+              (calcGrows(ctx.skillRow, f.radiusCalc ?? 'aurarangecalc') ? 100 : areaPct(ctx.reach, level))) /
+              100,
+          ),
           slowPct: Math.max(0, -(auraStats(ctx.skillRow, level)['velocitypercent'] ?? 0)),
         })),
       };

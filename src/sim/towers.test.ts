@@ -249,7 +249,7 @@ describe('evolution', () => {
     expect(sellValue(sim, evolved)).toBe(Math.trunc((evolved.spent * 60) / 100));
   });
 
-  it('charges the same flat price for every build, however many towers the player owns', () => {
+  it('raises each build by buildCostGrowthPct for every tower the player owns', () => {
     const sim = testSim();
     const e = sim.data.economy;
     sim.state.gold[0] = 1_000_000;
@@ -258,7 +258,8 @@ describe('evolution', () => {
       prices.push(buildCostFor(sim, 0));
       step(sim, [{ type: 'build', x, y, cls: 'paladin', skill: 'holy-bolt' }]);
     }
-    expect(prices).toEqual([e.buildCost, e.buildCost, e.buildCost]);
+    const second = Math.trunc((e.buildCost * e.buildCostGrowthPct) / 100);
+    expect(prices).toEqual([e.buildCost, second, Math.trunc((second * e.buildCostGrowthPct) / 100)]);
     expect(sim.state.towers.map((t) => t.spent)).toEqual(prices);
   });
 });

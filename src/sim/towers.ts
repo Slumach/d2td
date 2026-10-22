@@ -173,11 +173,16 @@ function removeTower(sim: Sim, id: number): void {
 }
 
 /**
- * What `player`'s next tower costs: buildCost, the same for every tower however many they
- * own. Power and price sit in the top tiers instead (Oct 23).
+ * What `player`'s next tower costs: buildCost, raised by buildCostGrowthPct for each tower
+ * they own (a legend counts once). A floor under going wide: with overkill fixed, many low
+ * towers still beat a few high ones at a flat price (Oct 23).
  */
-export function buildCostFor(sim: Sim, _player: number): number {
-  return sim.data.economy.buildCost;
+export function buildCostFor(sim: Sim, player: number): number {
+  const e = sim.data.economy;
+  const owned = sim.state.towers.filter((t) => t.owner === player && t.legendOf === undefined).length;
+  let cost = e.buildCost;
+  for (let i = 0; i < owned; i++) cost = idiv(cost * e.buildCostGrowthPct, 100);
+  return cost;
 }
 
 export function build(sim: Sim, player: number, x: number, y: number, cls: string, skill?: string): void {

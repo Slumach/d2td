@@ -224,7 +224,7 @@ First run on real content (Oct 22, all five acts, before the Stage A economy reb
 
 | Action | Gold |
 | --- | --- |
-| Build a class tower | 600, the same for every tower (Oct 23). Until then each tower owned raised the next build's price, 220% for the first five and 130% after: 150, 330, 726, 1597, 3513, 7729, ... |
+| Build a class tower | 600 for the first, then each tower owned raises the next by 110% (0.3.7: 600, 660, 726, 798, 878, ...; a legend counts once). 0.3.4 to 0.3.6 charged a flat 600; before that each tower raised it 220% for the first five and 130% after. |
 | T1 skill pick | free |
 | Skill level +1 | Geometric from a base of 60 at T1, 240 at T2, 600 at T3 (300 before Oct 23), 220% a level |
 | Upgrade to T2 | 400 |
@@ -247,6 +247,41 @@ Towers as each boss wave starts (median of seeds 1 and 2; MIXED3 seed 1):
 | NECRO | 2 | 6 | 8 | 11 | 14 | 17 | | | | | | | | | | | | | | |
 | MIXED3 | 1 | 9 | 17 | 21 | 25 | 32 | 36 | 54 | 68 | 77 | 89 | 97 | 106 | 116 | 129 | 174 | 192 | 224 | 338 | |
  The bots buy wide, not tall: with no rising price a fresh tower is always on the menu, and until late Hell one T3 hit already kills a normal monster, so more towers (more hits, more of the path covered) kill faster than bigger hits whatever the damage per gold says. MIXED3 holds 106 towers at Hell Act 3's boss, mostly T1. Held to 12 towers (BOT_MAX_TOWERS=12) the same bots die earlier: TWOLINE 108 and 109, PALADIN 119 and 119, MIXED3 55 and 91. So at these prices a few high towers do not beat many low ones; a price alone cannot do it while a T3 hit overkills, and the game is much easier than before (the bots go about twice as far). The levers left are the player's to choose: a per-tower price that rises again (gently), a cap on towers, or top tiers whose hits reach more monsters at once (area, pierce, chains).
+
+**Overkill, not prices (Oct 23, 0.3.7).** The rework above showed the trouble: a T3 hit killed a normal monster outright until late Hell, so more towers (more hits) beat bigger ones. Two changes answer it, and the flat prices stay.
+
+Monster HP by stage (balance.json hpCurve, computed at load time in data.ts stageHpPctFrom; npm run hpcurve prints it). Each act of each difficulty is tuned for the tower a player holds as it begins: a tier's timing target is when it is first bought, so the act after its target is the first tuned for it. Normal Act 1 keeps the tables' HP (its waves come before a second tower); Normal Act 2 a T1 at level 5; Normal Acts 3 to 5 T2 at levels 1, 3 and 5; Nightmare Act 1 T2 at level 5; Nightmare Acts 2 to 5 T3 at levels 1 to 4; Hell Acts 1 to 3 T3 at levels 5 to 7 (levels past 5 are the line's bought skill levels); Hell Acts 4 and 5 the evolved towers at levels 5 and 6. The stage's regular monsters (the median of its waves' normal monsters' HP from the tables) are scaled so the median single hit of that tier's towers (dps.ts singleHit: one missile, bolt, blast, zone tick or swing on a plain target) takes 2.5 hits to kill one. Every rank of the stage takes the same percent, so champions, uniques and bosses keep their own extra on top (bossHpPct's ramp for bosses); endless waves stand on Hell Act 5's percent with their own ramp on top. Two cuts came before it: tuned to the level a stage ends at (Normal Act 1 to a level-3 T1, six times its table HP against a player's one level-1 tower) every bot died in Normal Act 1 or 2; tuned to the tier's target stage itself, Nightmare Act 1 asked for T3 before most bots had it (3.45 times its table HP) and MIXED3 died in Normal Act 2 once the build floor came in. The curve:
+
+| Stage | Tower | Median hit | Regular HP, tables | HP % | Regular HP now |
+| --- | --- | --- | --- | --- | --- |
+| Normal Act 1 | (tables) | | 7 | 100 | 7 |
+| Normal Act 2 | T1 L5 | 27 | 63 | 108 | 68 |
+| Normal Act 3 | T2 L1 | 35 | 72 | 122 | 88 |
+| Normal Act 4 | T2 L3 | 79 | 193 | 102 | 196 |
+| Normal Act 5 | T2 L5 | 185 | 303 | 152 | 461 |
+| Nightmare Act 1 | T2 L5 | 185 | 502 | 92 | 461 |
+| Nightmare Act 2 | T3 L1 | 692 | 956 | 181 | 1,730 |
+| Nightmare Act 3 | T3 L2 | 712 | 881 | 202 | 1,780 |
+| Nightmare Act 4 | T3 L3 | 797 | 744 | 268 | 1,994 |
+| Nightmare Act 5 | T3 L4 | 974 | 1,856 | 131 | 2,431 |
+| Hell Act 1 | T3 L5 | 1,051 | 2,674 | 98 | 2,621 |
+| Hell Act 2 | T3 L6 | 1,213 | 3,158 | 96 | 3,031 |
+| Hell Act 3 | T3 L7 | 1,332 | 4,721 | 71 | 3,352 |
+| Hell Act 4 | T4 L5 | 4,205 | 10,069 | 104 | 10,472 |
+| Hell Act 5 | T4 L6 | 4,971 | 2,408 | 516 | 12,423 |
+
+Top tiers hit more per attack (balance.json reach, archetypes/common.ts). Where skills.txt grows a skill's reach with its level, the table's number stands, and the tier ladders already carry T3 skills to level 40: Multiple Shot's arrows (min(ln12, 24)), Strafe's targets (up to 10), Zeal's hits (up to 5), Chain Lightning's jumps (ln34 / 5), Charged Bolt, Teeth and Firestorm's missiles, Holy Freeze's and the auras' radii. Where the table has no growth (a Blizzard's, Meteor's, Fire Ball's or Volcano's area, a Nova's ring, Hurricane's reach, a single bolt, Double Swing's, Frenzy's and Vengeance's swings, the sentries' traps and shots), it grows past skills.txt level 24, the most a T1 or T2 skill reaches: area 2% more a level (up to double), and a target more every 10 levels (an arrow, bolt, jump, swing or trap; two more shots a trap). Only T3 skills and the levels evolutions and legends buy reach past 24, so the top tiers alone hit more per attack: at T3 level 5 Blizzard covers 1.2 tiles where it covered 0.9, Meteor 1.0 where 0.8, Death Sentry sets 6 traps of 7 shots where 5 of 5; an evolved tower's every bought level adds 5 skill levels, 10% area and half a target. Vengeance, Berserk and Whirlwind, which needed a flat bonus to reach the T3 floor, now reach it with more swings instead (Vengeance's bonus halved, Berserk's and Whirlwind's gone).
+
+Does upgrading beat spamming? (npm run report, seeds 1 and 2; the bots as they choose against the same bots held to 12 towers, BOT_MAX_TOWERS=12.) With the curve and the reach growth but flat prices, spam still won: the free Paladin reached wave 103 against 63 held to 12, TWOLINE drew (106 and 110 against 107), and the free bots built 100 towers by Hell Act 3, mostly T1. So, as decided, a 110% per-tower build price is the floor (balance.json buildCostGrowthPct; each tower owned raises the next build 10%, a legend counting once). With it the free bots stop at 25 to 33 towers, mostly T2 and T3, and upgrading draws with going wide:
+
+| Bot | Free: died on | Towers at Hell Act 3 / at the end | Held to 12: died on |
+| --- | --- | --- | --- |
+| TWOLINE | 108, 108 | 23 / 29 | 107, 105 |
+| PALADIN | 107, 107 | 24 / 29 | 107, 108 |
+| NECRO | 69, 22 | 24 / 24 | 75, 22 |
+| MIXED3 | 84, 108 | 23 / 33 | 55, 60 |
+
+Towers as each boss wave starts (free bots, median of seeds 1 and 2): TWOLINE 2, 3, 7, 8, 11 through Normal, 14, 14, 15, 17, 19 through Nightmare, 20, 21, 23, 24, 25 through Hell, 27 to 29 in endless; PALADIN 2, 3, 6, 8, 9 / 12, 13, 16, 18, 20 / 21, 23, 24, 25, 26 / 27 to 29; NECRO 2, 4, 7, 8, 11 / 14, 15, 19, 21, 23 / 24, 24, 24, 24; MIXED3 1, 5, 8, 10, 15 / 15, 15, 16, 16, 17 / 18, 21, 23, 23, 25 / 27 to 33. Tier timing: T2 in Normal Act 2 (NECRO Act 3), T3 from Normal Act 5 (PALADIN) to Nightmare Act 3 (TWOLINE), MIXED3 on target in Nightmare Act 1; no free bot evolves (target Hell Act 3, still missed; held to 12, TWOLINE's Hammerdin comes in Hell Act 4). Against 0.3.2 the bots still go further (MIXED3 84 and 108 against 54; TWOLINE 108 against 60 and 63), and against 0.3.6 they go less far (TWOLINE 108 against 132). MIXED3 does better wide than held to 12: its mix of elements needs towers of each against Hell's immunities. NECRO's seed 2 dies in Normal Act 5 either way.
 
 The bots gained two lookaheads for the new prices: a tower two tiers below the top values the T3 path at 40% (the T2 between can look no better than another tower), and an adjacent pair whose lines can still make a recipe, or a new tower beside one it could evolve with, is valued as the evolved tower at 40% over all the gold left to pay.
 

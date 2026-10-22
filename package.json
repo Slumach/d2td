@@ -19,6 +19,7 @@
     "loot": "tsx tools/loot.ts",
     "dps": "tsx tools/dpsreport.ts",
     "legends": "tsx tools/legends.ts",
+    "hpcurve": "tsx tools/hpcurve.ts",
     "balance": "tsx tools/balance.ts",
     "ladders": "tsx tools/ladders.ts",
     "build:app": "tsc --noEmit && tsc --noEmit -p electron && vite build && vite build -c vite.electron.config.ts",

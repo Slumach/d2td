@@ -141,18 +141,19 @@ describe('data', () => {
     for (const wave of [5, 6, 30, 55]) expect(modsOn(1, wave)).toEqual(modsOn(99, wave));
   });
 
-  it('takes monster HP from its level through monlvl, with no wave curve', () => {
+  it('takes monster HP from its level through monlvl, scaled by its stage on the HP curve', () => {
     const data = fixtureGameData();
     const sim = createSim(data, 1);
     const wave = data.waves.find((w) => w.difficulty === 0 && w.act === 1)!;
     const def = data.monsters[wave.groups[0]!.monster]!;
-    // A spawned monster rolls within its own HP: nothing scales it by wave
+    // A spawned monster rolls within its own HP, times its stage's percent (rules.stageHpPct)
     step(sim, [{ type: 'callWave' }]);
     sim.state.spawns = sim.state.spawns.slice(0, 1).map((sp) => ({ ...sp, tick: sim.state.tick }));
     step(sim, []);
     const m = sim.state.monsters[0]!;
-    expect(m.maxHp).toBeGreaterThanOrEqual(def.minHp);
-    expect(m.maxHp).toBeLessThanOrEqual(def.maxHp);
+    const stage = data.rules.stageHpPct['0-1'] ?? 100;
+    expect(m.maxHp).toBeGreaterThanOrEqual(Math.max(256, Math.trunc((def.minHp * stage) / 100) - 1));
+    expect(m.maxHp).toBeLessThanOrEqual(Math.max(256, Math.ceil((def.maxHp * stage) / 100)));
     expect(m.level).toBe(def.level);
   });
 

@@ -5,19 +5,7 @@ import { aliveWithin, canHurt, findTarget, strike, withBonus } from '../combat.t
 import { spawnMissile } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
 import type { Element } from '../state.ts';
-import {
-  auraUnits,
-  calcAt,
-  common,
-  damageAt,
-  elementalType,
-  fields,
-  filterFrom,
-  missileLifetime,
-  missileOf,
-  perLevel,
-  tenthsToUnits,
-} from './common.ts';
+import { areaPct, auraUnits, calcAt, calcGrows, common, damageAt, elementalType, fields, filterFrom, missileLifetime, missileOf, perLevel, tenthsToUnits } from './common.ts';
 import type { ArchetypeModule, ZoneDef } from './types.ts';
 
 interface ZoneJson {
@@ -43,7 +31,18 @@ export const zone: ArchetypeModule<ZoneDef> = {
       tickTicks: Math.max(1, f.tickTicks),
       durationTicks: missileLifetime(missile),
       filter: filterFrom(missile, ctx.filterOverride),
-      levels: perLevel(json, (level) => damageAt(ctx.skillRow, level, 'skill')),
+      // The area at a level: the table's own when it grows, else the reach rule's
+      levels: perLevel(json, (level) => ({
+        ...damageAt(ctx.skillRow, level, 'skill'),
+        radiusUnits:
+          f.radiusCalc && calcGrows(ctx.skillRow, f.radiusCalc)
+            ? auraUnits(calcAt(ctx.skillRow, f.radiusCalc, level), ctx.auraRangePerTile)
+            : Math.trunc(
+                ((f.radiusCalc ? auraUnits(calcAt(ctx.skillRow, f.radiusCalc, json.skillLevels?.[0] ?? 1), ctx.auraRangePerTile) : tenthsToUnits(f.radiusTenths ?? 0)) *
+                  areaPct(ctx.reach, level)) /
+                  100,
+              ),
+      })),
     };
   },
 
@@ -59,7 +58,7 @@ export const zone: ArchetypeModule<ZoneDef> = {
     if (--missile.ticksLeft < 0) return false;
     if (++missile.value % skill.tickTicks !== 0) return true;
     const range = skill.levels[missile.level]!;
-    for (const m of aliveWithin(sim, missile, skill.radiusUnits)) {
+    for (const m of aliveWithin(sim, missile, range.radiusUnits)) {
       const amount = withBonus(rollInt(sim.state.rng, range.min, range.max), missile.damagePct);
       strike(sim, m, amount, skill.damageType as Element, skill.filter, skill, missile.level);
     }

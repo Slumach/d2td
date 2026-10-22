@@ -23,7 +23,7 @@ import { ahead, nearestPathDist, positionAt, wrap } from '../map.ts';
 import { rollInt } from '../rng.ts';
 import type { Corpse, Element, Monster, Sim, Summon, Tower } from '../state.ts';
 import { findRow, int, str } from '../tables.ts';
-import { calcAt, calcExpr, common, damageAt, elementalAtLevel, etype, fields, filterFrom, lengthAt, perLevel, physicalAtLevel, tenthsToUnits } from './common.ts';
+import { calcAt, calcExpr, common, damageAt, elementalAtLevel, etype, extraTargets, fields, filterFrom, lengthAt, perLevel, physicalAtLevel, tenthsToUnits } from './common.ts';
 import type { ArchetypeModule, SummonDef } from './types.ts';
 
 interface SummonJson {
@@ -101,8 +101,9 @@ export const summon: ArchetypeModule<SummonDef> = {
         const boltLevel = Math.max(1, f.boltLevelCalc ? calcAt(ctx.skillRow, f.boltLevelCalc, level) : level);
         const hpPct = f.hpPctCalc ? calcAt(ctx.skillRow, f.hpPctCalc, level) : kind === 'revive' ? 100 : 0;
         return {
-          count: Math.max(0, calcAt(ctx.skillRow, f.countCalc, level)),
-          shots: f.shotsCalc ? Math.max(1, calcExpr(ctx.skillRow, f.shotsCalc, level)) : 0,
+          // A trap set grows past the table's fixed count and shots (Death Sentry's five)
+          count: Math.max(0, calcAt(ctx.skillRow, f.countCalc, level)) + (kind === 'trap' ? extraTargets(ctx.reach, level) : 0),
+          shots: f.shotsCalc ? Math.max(1, calcExpr(ctx.skillRow, f.shotsCalc, level)) + 2 * extraTargets(ctx.reach, level) : 0,
           hp: stats ? withBonus(Math.max(1, int(stats, 'minHP')) * 256, hpPct) : 0,
           min: dmg('A1MinD'),
           max: dmg('A1MaxD'),

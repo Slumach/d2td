@@ -3,7 +3,6 @@
   "skill": "Berserk",
   "archetype": "melee",
   "damageType": "mag",
-  "tierBonus": 1104,
   "rangeTenths": 15,
   "rateTicks": 20,
   "melee": {

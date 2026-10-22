@@ -1247,7 +1247,7 @@ export class GameScene extends Phaser.Scene {
         if (art.fall) this.fx.fall(art.fall, { x: px, y: py }, m.ticksLeft * TICK_MS, () => undefined);
         if (art.ring && skill.archetype === 'splash') {
           // The nova's ring: missiles thrown outward to its edge over its life
-          const r = ellipseOf(skill.radiusUnits);
+          const r = ellipseOf(skill.levels[m.level]?.radiusUnits ?? skill.radiusUnits);
           for (let i = 0; i < 16; i++) {
             const a = (i / 16) * Math.PI * 2;
             this.fx.shoot(art.ring, { x: px, y: py - 20 }, { x: px + (Math.cos(a) * r.w) / 2, y: py - 20 + (Math.sin(a) * r.h) / 2 }, m.ticksLeft * TICK_MS, Math.round((i / 16) * 64 + 16) % 64);
@@ -1258,7 +1258,7 @@ export class GameScene extends Phaser.Scene {
       view.age++;
       if (art.zone && skill.archetype === 'zone' && view.age % 2 === 0) {
         // Shards falling at random spots inside the zone
-        const r = ellipseOf(skill.radiusUnits);
+        const r = ellipseOf(skill.levels[m.level]?.radiusUnits ?? skill.radiusUnits);
         const a = Math.random() * Math.PI * 2;
         const d = Math.sqrt(Math.random());
         this.effect(art.zone, px + (Math.cos(a) * d * r.w) / 2, py + (Math.sin(a) * d * r.h) / 2);
@@ -1505,7 +1505,7 @@ export class GameScene extends Phaser.Scene {
       const skill = this.sim.data.skills[m.skill];
       if (skill?.archetype !== 'zone') continue;
       const c = project(m.x, m.y);
-      const r = ellipseOf(skill.radiusUnits);
+      const r = ellipseOf(skill.levels[m.level]?.radiusUnits ?? skill.radiusUnits);
       g.fillStyle(0x80c0ff, 0.12).fillEllipse(c.x, c.y, r.w, r.h);
     }
 
