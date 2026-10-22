@@ -468,6 +468,17 @@ export class GameScene extends Phaser.Scene {
     return `Evolve: ${parts.join('; ')}`;
   }
 
+  /** A mode's animation facing `facing`, or its one stored direction when D2 drew it in one (Diablo's and Baal's deaths), or none. */
+  private modeKey(texture: string, mode: string, facing: string): string | undefined {
+    const want = animKey(texture, mode, facing);
+    if (this.anims.exists(want)) return want;
+    for (const dir of ['sw', 's', 'w', 'n', 'e', 'nw', 'ne', 'se']) {
+      const key = animKey(texture, mode, dir);
+      if (this.anims.exists(key)) return key;
+    }
+    return undefined;
+  }
+
   /** Alone, the monsters' one spawn is marked on the ground until the first wave: the place to build near. */
   private markSpawn(): void {
     const sp = positionAt(this.sim.map, this.sim.map.arcs[0]!.spawn);
@@ -879,9 +890,11 @@ export class GameScene extends Phaser.Scene {
       this.sounds.gold();
       view.sprite.clearTint().setDepth(DEPTH.corpses);
       view.sprite.anims.resume();
-      view.sprite.play(animKey(view.texture, 'DT', view.facing));
+      // D2's death (a boss's long one: Diablo's and Baal's have one direction only)
+      const dying = this.modeKey(view.texture, 'DT', view.facing);
+      if (dying) view.sprite.play(dying);
       // Then the body on the ground (D2's DD mode), held until the corpse goes
-      const dead = animKey(view.texture, 'DD', view.facing);
+      const dead = this.modeKey(view.texture, 'DD', view.facing) ?? '';
       view.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
         if (view.sprite.active && this.anims.exists(dead)) view.sprite.play(dead);
       });
@@ -906,8 +919,11 @@ export class GameScene extends Phaser.Scene {
     for (const c of s.corpses) this.corpseSeen.set(c.id, { x: c.x, y: c.y, ticksLeft: c.ticksLeft });
     for (const [id, sprite] of this.corpses) {
       if (!corpseIds.has(id)) {
-        sprite.destroy();
         this.corpses.delete(id);
+        // A death still playing (Baal's runs past the corpse's ten seconds) finishes first
+        if (sprite.active && sprite.anims.isPlaying && sprite.anims.currentAnim?.key.includes('|DT|')) {
+          sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => sprite.destroy());
+        } else sprite.destroy();
       }
     }
     // Towers riding Enchant's fire, and every rider of a unit that is gone
@@ -1216,7 +1232,7 @@ export class GameScene extends Phaser.Scene {
       if (seen.has(id)) continue;
       this.summons.delete(id);
       // A fallen summon plays its death where it has one
-      const death = animKey(view.texture, 'DT', view.facing);
+      const death = this.modeKey(view.texture, 'DT', view.facing) ?? '';
       if (!this.anims.exists(death)) {
         view.sprite.destroy();
         continue;
