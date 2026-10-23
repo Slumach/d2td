@@ -1,3 +1,12 @@
+0.3.15
+
+- Decoy and Shadow Master show: they are drawn as the Amazon and the Assassin, as in D2. Lightning and Death Sentry traps animate instead of standing frozen.
+- More of D2's sounds: the War Cries, Bash, Concentrate, Berserk, Arctic Blast, Fire Blast and Tiger Strike play theirs, and Double Swing, Frenzy and Vengeance swing their weapon audibly.
+- Concentrate, Arctic Blast, Tiger Strike and Decoy play their D2 cast effects.
+- Tower panels say what every tower does: Pierce's pass-through chance, Shout's defence for summons, what each curse does (Battle Cry's damage cut, Cloak of Shadows' blind), and what each summon tower raises (ravens, dire wolves, grizzlies, traps on the path). Skill names are the game's (Decoy, Fissure, Fire Blast, Phoenix Strike).
+- Poison skills show their real damage per second: a dose does not stack, and the panel used to count every throw's whole dose at once.
+- Setup extracts a few more sounds and effects on the first start after the update.
+
 0.3.14
 
 - Tier-up choices say where each branch leads: picking Concentration or Holy Freeze shows that both lead on to Fanaticism or Conviction, and which evolutions each one is part of (Concentration makes a Hammerdin with a Blessed Hammer tower). The T3 choice shows its evolutions too.

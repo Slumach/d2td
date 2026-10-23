@@ -600,6 +600,38 @@ The Amazon plays like the three older classes. The Barbarian is the miss: a mele
 
 Not built this evening: the four classes' evolutions are two-tower like the others (three-tower evolutions were unbuilt then; since Oct 23 the T5 tier is the legends, three T4 evolutions made one); the traps stand on the tower rather than where a player would place them; the Barbarian's cries carry no defence cut; Phoenix Strike has only its fire charge.
 
+### The newer classes, played (0.3.15)
+
+Every class has a bot in npm run loot and npm run report: PALADIN, SORC, NECRO, AMAZON, BARB, DRUID, ASSASSIN, and MIXED7, which builds from all seven classes' lines (MIXED3 stays the reference bot the targets were set on). Eight seeds, median (lowest to highest); the single-class rule applies (a death from Hell Act 3, wave 62, on is not a miss):
+
+| Bot | none | nm | hell | bis |
+| --- | --- | --- | --- | --- |
+| PALADIN | 64.5 (58 to 71) | 69.5 (59 to 70) | 71 (61 to 74) | 154.5 (143 to 188) |
+| SORC | 52 (52 to 52) | 52 (52 to 53) | 52 (52 to 52) | 85 (78 to 85) |
+| NECRO | 52 (44 to 52) | 52 (43 to 52) | 48 (44 to 52) | 100.5 (85 to 120) |
+| AMAZON | 60 (60 to 60) | 60 (60 to 63) | 60 (60 to 60) | 108 (107 to 108) |
+| BARB | 51.5 (36 to 52) | 55 (53 to 58) | 155 (141 to 187) | 268 (268 to 268, the cap) |
+| DRUID | 52 (52 to 52) | 52 (52 to 52) | 52 (52 to 52) | 74 (74 to 75) |
+| ASSASSIN | 70.5 (70 to 88) | 72 (63 to 78) | 71 (70 to 99) | 98 (61 to 143) |
+| MIXED3 | 63 (53 to 69) | 69 (53 to 69) | 101 (99 to 131) | 199 (143 to 268) |
+| MIXED7 | 60 (60 to 68) | 59 (58 to 59) | 59 (59 to 60) | 188.5 (187 to 240) |
+
+(TWOLINE 72.5, 71.5, 74.5 and 85; LOOTBUILD 63, 74, 121 and 188.) The Amazon's ring is mostly Lightning Fury, which measures 3,808 single-target DPS at T2 (Holy Bolt 207 at T1, Fire Bolt 53): Hell Act 2's Rock Dwellers, Tainted and Horror Mages are lightning-immune and Hell Andariel physical, magic and poison immune, so it stops on wave 60 whatever it wears. MIXED7 latches onto Lightning Fury for the same reason and stops in the same place, worse than MIXED3 with Hell loot. The Barbarian with Hell or best-in-slot loot is crushing blow on Whirlwind again (see LOOTBUILD, 0.3.14): every best-in-slot seed reaches the harness's cap. The Druid stops on wave 52 (Hell Act 1) on every set short of best-in-slot gear, as SORC does; not traced.
+
+Play audit, every line's T1 to T3 and evolution built in the browser (dev build, headless Chrome) and read back from the scene:
+
+- Hero figures and attack frames: all present for every line, tier and evolved look of all seven classes.
+- Missiles and overlays: every one sprites.json names is extracted. The skills with no art entry are the melee swings, the summons, the Amazon's passives and Find Item, none of which have a missile or overlay in D2 either.
+- Fixed: Shadow Master drew nothing and Decoy only its death. D2 draws both as a copy of the player and their monster files are stubs in D2R, so they are drawn as the Assassin's and the Amazon's T3 figure, tinted (sprites.json summonHeroes).
+- Fixed: Lightning and Death Sentry traps stood frozen on a death frame. They are drawn in one facing, and the summon code asked for an eight-facing animation; it now takes the facing there is. Traps sit on the path.
+- Fixed, sound: the extraction read skills.txt's stsound only. It now falls back to stsoundclass (the War Cries, Bash, Concentrate, Berserk), dosound (Fire Blast) and prgsound (Arctic Blast, Tiger Strike), and a melee skill with none swings its line's weapon (sounds.txt weapon_<wclass>_large, the class from weapons.txt: Double Swing, Frenzy, Vengeance). Left silent, as in D2: Critical Strike, Pierce and Cloak of Shadows; Magic Arrow and Phoenix Strike sound through their missiles.
+- Fixed, cast overlays from skills.txt: Concentrate (srvoverlay), Arctic Blast and Tiger Strike (prgoverlay), Decoy (sumoverlay).
+- Fixed, panel text: Pierce and Shout said nothing about their aura; curses now say what they do (Battle Cry's damage cut, Cloak of Shadows' blind); every summon tower said "skeletons" (ravens, dire wolves, grizzlies, decoys, shadow masters, and traps on the path with their shots); titles used D2's internal names (Eruption, Summon Fenris, Fire Trauma, Royal Strike, Dopplezon); and a poison skill showed every throw's whole dose as instant damage (a T1 Poison Javelin read 4,709 DPS where one target takes 62, since a new dose replaces the old).
+- Find Item: its aura ring shows like every aura's, bright on the selected tower, and its panel gives the gold bonus.
+- Not fixed, reported: Firestorm deals 2 DPS at T1 level 5. Its trail's damage in skills.txt is per frame and is dealt once a hit; that is a damage change, left for a decision.
+
+Legends, each built through the tower panel's own Evolve buttons (three evolutions, then the legend's button, which appears only then): all seven ascend, draw as their NPC or monster (Tyrael, Akara, The Summoner, Kashya, Talic, Natalya, and the Druid's Grizzly as the Spirit of Scosglen), carry the name in the panel's title, and keep two riders. npm run legends: every legend's damage alone is 2.50x its three evolutions. Tyrael (3.39x), Talic (3.53x) and Natalya (2.61x) measure more in full because a legend's reach (50 levels against an evolution's 25) adds swings and hits (Zeal 7 to 10, Vengeance 5 to 7); with the reach held to an evolution's they land at 2.50x like the rest. The tool now prints both.
+
 ## Overnight decisions
 
 Calls made without asking, each the option closest to Diablo II's own rules.
