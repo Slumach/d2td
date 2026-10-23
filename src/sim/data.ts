@@ -662,12 +662,18 @@ function displayName(tables: Tables, key: string): string {
 const RAISE_TICKS = 20;
 
 /**
- * monlvl.txt's row for a level; past its last row (110) every number climbs on in a straight
- * line from the last two rows, which is how the endless Tiers keep scaling.
+ * monlvl.txt's row for a level; past its last real row (109) every number climbs on in a
+ * straight line from the last two, which is how the endless Tiers keep scaling. Before 0.3.12
+ * the line ran from 109 to the placeholder at 110, so every column grew 30 to 40 times too fast
+ * above level 110 (Hell HP 3,293% a level instead of 87%).
  */
 function monlvlRow(tables: Tables, level: number): TableRow {
   const rows = tables.monlvl;
-  const top = rows.reduce((n, r) => Math.max(n, int(r, 'Level')), 0);
+  let top = rows.reduce((n, r) => Math.max(n, int(r, 'Level')), 0);
+  // monlvl.txt's last row (level 110) is a placeholder, every column a round cap (HP 10000, AC
+  // 2100), not a step on the curve: the curve goes on from the row before it
+  const step = (l: number) => int(findRow(rows, 'Level', l), 'HP(H)') - int(findRow(rows, 'Level', l - 1), 'HP(H)');
+  if (top > 2 && step(top) > 10 * Math.max(1, step(top - 1))) top--;
   if (level <= top) return findRow(rows, 'Level', level);
   const last = findRow(rows, 'Level', top);
   const prev = findRow(rows, 'Level', top - 1);
