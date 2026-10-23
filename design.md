@@ -330,7 +330,7 @@ npm run loot at 0.3.13 (two seeds; magic, rare and set items converting at doubl
 | hell (96 to 135) | 71, 72 | 69, 70 | 52, 52 | 54, 100 (one seed) | 57, 265 |
 | bis (175 to 225) | 77, 85 | 188, 143 | 101, 126 | 269, 188 (one seed) | 188, 189 |
 
-MIXED3 with items no longer dies before its naked runs; on each item set one seed meets the target and the other falls at Hell Act 1's wall (waves 52 to 55, the first Hell stage at 2400%), which the naked runs also meet. The PALADIN bot's nm runs fell from 69 and 70 to 59 and 61 with the bare plan (its Zeal opening was the gear it rated highest).
+MIXED3 with items no longer dies before its naked runs; on each item set one seed meets the target and the other falls at Hell Act 1's wall (waves 52 to 55, the first Hell stage at 2400%), which the naked runs also meet. The PALADIN bot's nm runs fell from 69 and 70 to 59 and 61 with the bare plan; not traced yet.
 
 Wave 125's step (Tier 5's boss, Baal): 12.2x the wave before in 0.3.10, now 18.9x. Part of the old figure was the level error above (Baal at 135 against monsters at 134, both on the placeholder's slope). What is left is the tables: Baal's Hell HP column in monstats.txt is 6336 against Diablo's 1577 (4.0x), and wave 124 is a light wave (21 Bone Mages and Bone Ash's pack); the stage (Hell Act 5's) and the endless ramp are the same on both waves, no pack is fitted on 125, and its boss ramp is every endless boss's (bossHpPct.last). It stays.
 

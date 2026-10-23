@@ -194,11 +194,16 @@ describe('the item stats that act on monsters', () => {
   it("swings a worn weapon with the tier's bonus, as the class weapon it replaces", () => {
     const sim = testSim();
     // Sacrifice is T1 (no bonus): its weapon is the class weapon as the table has it
-    const raw = sim.data.skills['sacrifice']!.weapon!;
+    const melee = (id: string) => {
+      const skill = sim.data.skills[id]!;
+      if (skill.archetype !== 'melee') throw new Error(`${id} should be melee`);
+      return skill;
+    };
+    const raw = melee('sacrifice').weapon;
     const plain = { min: raw.min / 256, max: raw.max / 256 };
-    const t3 = sim.data.skills['vengeance']!;
-    expect(t3.weapon!.max).toBeGreaterThan(raw.max);
-    expect(sim.data.skills[sim.data.skillVariant('vengeance', 0, plain)]!.weapon).toEqual(t3.weapon);
+    const t3 = melee('vengeance');
+    expect(t3.weapon.max).toBeGreaterThan(raw.max);
+    expect(melee(sim.data.skillVariant('vengeance', 0, plain)).weapon).toEqual(t3.weapon);
   });
 
   it('refuses missile weapons on every tower: nothing here shoots a bow', () => {
