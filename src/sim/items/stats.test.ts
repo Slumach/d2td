@@ -191,6 +191,16 @@ describe('the item stats that act on monsters', () => {
     expect(gearOf(sim, melee).attackSpeedPct).toBe(2);
   });
 
+  it("swings a worn weapon with the tier's bonus, as the class weapon it replaces", () => {
+    const sim = testSim();
+    // Sacrifice is T1 (no bonus): its weapon is the class weapon as the table has it
+    const raw = sim.data.skills['sacrifice']!.weapon!;
+    const plain = { min: raw.min / 256, max: raw.max / 256 };
+    const t3 = sim.data.skills['vengeance']!;
+    expect(t3.weapon!.max).toBeGreaterThan(raw.max);
+    expect(sim.data.skills[sim.data.skillVariant('vengeance', 0, plain)]!.weapon).toEqual(t3.weapon);
+  });
+
   it('refuses missile weapons on every tower: nothing here shoots a bow', () => {
     const sim = testSim();
     expect(canWear(sim.data.items, item('tbw', []), 'weapon', 'paladin', {})).toBe(false);
