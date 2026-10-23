@@ -1,3 +1,9 @@
+0.3.13
+
+- Magic, rare and set items count double for the stats a tower converts (resistances, life, mana, attack rating and the rest), so a good rare or a set piece holds its own beside a unique. Uniques and runewords are unchanged.
+- Life and defence on a tower with no summons that block now add a little damage instead of nothing.
+- Fixed: a melee tower wearing a weapon lost its tier's damage bonus. A T3 Vengeance with a found sword swung it at a third of its strength.
+
 0.3.12
 
 - Hell is much harder: its monsters have many times the HP they had, so towers without good items stop in Hell's first two acts. Normal and Nightmare are unchanged.
