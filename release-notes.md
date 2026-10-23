@@ -1,3 +1,11 @@
+0.3.11
+
+- Every item stat now does something on a tower. Resistances add that element's damage, life and defences make your summons hold monsters longer, mana and mana regeneration speed up casting, attack rating adds damage against champions and uniques, knockback and flee slow, blind can stun, and when-struck casts trigger on hit. Tooltips show the tower effect first, with D2's wording after it.
+- Plain items stay a small bonus, magic a little more, and rares, set items, uniques and runewords carry the real power.
+- Waves come every 30 seconds instead of 45.
+- Waves spawn in the middle of each side of the ring instead of beside a corner.
+- Zombies walk faster: halfway from their shamble to their run.
+
 0.3.10
 
 - Waves come back to full strength: every wave spawns with the monster HP the game's tables give it. 0.3.9's smoothing had cut whole runs of waves after any small one.
