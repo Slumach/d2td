@@ -1,3 +1,9 @@
+0.3.14
+
+- Tier-up choices say where each branch leads: picking Concentration or Holy Freeze shows that both lead on to Fanaticism or Conviction, and which evolutions each one is part of (Concentration makes a Hammerdin with a Blessed Hammer tower). The T3 choice shows its evolutions too.
+- The evolve hint no longer suggests a recipe the tower has branched away from (a Holy Freeze tower is never offered the Hammerdin).
+- Tier-up buttons read "T2: Concentration" and fit their buttons.
+
 0.3.13
 
 - Magic, rare and set items count double for the stats a tower converts (resistances, life, mana, attack rating and the rest), so a good rare or a set piece holds its own beside a unique. Uniques and runewords are unchanged.
