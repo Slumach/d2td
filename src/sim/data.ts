@@ -140,10 +140,8 @@ export interface BalanceJson {
   /** The run is lost when the weight of everything alive on the ring reaches aliveLimit; weights by rank. */
   aliveLimit: number;
   aliveWeight: Record<Rank, number>;
-  /** The first tower's price. */
+  /** Every tower costs this to build, however many the player owns. */
   buildCost: number;
-  /** Each tower a player owns raises the next build's price by this percent (110: a floor against going wide). */
-  buildCostGrowthPct: number;
   /**
    * An act boss's HP is this percent of its monstats HP, climbing in a straight line by wave
    * number from `first` on the run's first boss wave to `last` on its last campaign boss
@@ -425,7 +423,6 @@ export interface WaveDef {
 export interface Economy {
   startingGold: number;
   buildCost: number;
-  buildCostGrowthPct: number;
   /** levelCosts[tier - 1][n] is the gold to go from level n + 1 to n + 2 in that tier. */
   levelCosts: number[][];
   /** tierCosts[0] reaches T2, tierCosts[1] reaches T3. */
@@ -1029,7 +1026,6 @@ export function economyFrom(balance: BalanceJson): Economy {
   return {
     startingGold: balance.startingGold,
     buildCost: balance.buildCost,
-    buildCostGrowthPct: balance.buildCostGrowthPct,
     levelCosts: balance.levelCostBase.map((base) => steps.map((permille) => idiv(base * permille, 1000))),
     tierCosts: balance.tierCosts,
     evolveCost: balance.evolveCost,

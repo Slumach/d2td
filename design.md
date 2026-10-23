@@ -226,7 +226,7 @@ First run on real content (Oct 22, all five acts, before the Stage A economy reb
 
 | Action | Gold |
 | --- | --- |
-| Build a class tower | 600 for the first, then each tower owned raises the next by 115% (0.3.8: 600, 690, 793, 912, 1049, ...; 110% in 0.3.7; a legend counts once). 0.3.4 to 0.3.6 charged a flat 600; before that each tower raised it 220% for the first five and 130% after. |
+| Build a class tower | 600, the same for every tower (flat again since the per-tower floor was removed after 0.3.8; 0.3.7 and 0.3.8 raised each build 110% and 115% a tower owned, a floor added before evolutions gained reach). 0.3.4 to 0.3.6 charged a flat 600; before that each tower raised it 220% for the first five and 130% after. |
 | T1 skill pick | free |
 | Skill level +1 | Geometric from a base of 60 at T1, 240 at T2, 600 at T3 (300 before Oct 23), 220% a level |
 | Upgrade to T2 | 400 |
@@ -305,6 +305,8 @@ Single-target damage (npm run single, tools/singletarget.ts: a tower beside one 
 Saturation-proof measures (npm run report): the last wave all of whose monsters were killed with none going once round the ring (on a ring nothing leaves, so a lap is the leak), and the monster HP killed in all. They show what the death wave hides behind the Council's wall, at the 115% floor, evolving against held to T3: TWOLINE 192M and 184M HP killed against 137M and 137M, last clean wave 103 against 98; PALADIN 199M and 201M against 145M and 145M, 107 against 102; NECRO 132M and 153M against 43M and 9M, 98 and 102 against 82 and 71. Evolving kills about 40% more HP for the two Paladin bots and stays clean five waves longer; both then die at the same wall.
 
 MIXED3 focus: it now keeps its two best lines from the end of Normal and builds only those (tools/bots.ts focusAfterWave 25): the line that killed the most HP, and the recipe partner the power model rates highest (ranked by the model alone it chose the summoning line again). It does worse than building everything: died on 75 and 68 (114 and 74 without focus, BOT_NO_FOCUS=1), never evolving, 9.4M and 4.8M HP killed against 303M and 7.8M. Two lines of one class leave Hell's immunities uncovered, which is the reason MIXED3 builds every class.
+
+**Flat prices again (after 0.3.8).** The per-tower floor (115% a tower owned) was added before evolutions gained reach, and is gone: every tower costs 600. Evolving against held to T3 at flat prices (npm run report, seeds 1 and 2): TWOLINE 142M and 133M HP killed against 142M and 140M, last clean wave 104 and 98 both ways; PALADIN 193M and 178M against 151M and 150M, clean 104 and 103 against 104 and 104; NECRO 0.7M and 0.4M against 11.8M and 0.4M (died on 39 and 34 against 76 and 34); MIXED3 8.3M and 4.0M against 3.2M and 4.0M, clean 68 and 58 against 57 and 58. Going wide ties or beats evolving for TWOLINE and NECRO on HP killed and clean waves, and evolving wins for PALADIN and MIXED3. No per-tower price is to come back without a decision.
 
 The bots gained two lookaheads for the new prices: a tower two tiers below the top values the T3 path at 40% (the T2 between can look no better than another tower), and an adjacent pair whose lines can still make a recipe, or a new tower beside one it could evolve with, is valued as the evolved tower at 40% over all the gold left to pay.
 
