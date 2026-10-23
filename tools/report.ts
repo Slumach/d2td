@@ -92,6 +92,12 @@ export interface RingRun {
   /** Towers standing at the end, by spot, and how many of them touch the path. */
   towers: Record<Spot, number>;
   touching: number;
+  /**
+   * Saturation-proof measures: the last wave whose monsters were all killed with none of them
+   * going once round the ring (a leak, on a ring nothing leaves), and the HP of every monster killed.
+   */
+  lastClean: number;
+  hpKilled: number;
 }
 
 export function playRing(data: GameData, strategy: Strategy, seed: number): RingRun {
@@ -102,6 +108,9 @@ export function playRing(data: GameData, strategy: Strategy, seed: number): Ring
   const atBoss: RingRun['atBoss'] = {};
   let income = 0;
   let prevGold = data.economy.startingGold;
+  let hpKilled = 0;
+  // Waves with a monster that went once round the ring: on a ring nothing leaves, so a lap is the leak
+  const lapped = new Set<number>();
   let last: Sim | undefined;
   const r = runBot(data, strategy, seed, (sim) => {
     last = sim;
@@ -111,6 +120,8 @@ export function playRing(data: GameData, strategy: Strategy, seed: number): Ring
     if (gold > prevGold) income += gold - prevGold;
     prevGold = gold;
     // s.wave is the number of waves started; a new one just went out
+    for (const p of sim.paid) hpKilled += p.hp / 256;
+    for (const m of s.monsters) if (m.hp > 0 && !m.cow && m.walked >= sim.map.length) lapped.add(m.wave);
     while (atStart.length < s.wave) {
       atStart.push(s.alive);
       peak.push(s.alive);
@@ -127,7 +138,10 @@ export function playRing(data: GameData, strategy: Strategy, seed: number): Ring
     towers[spot]++;
     if (distance <= 1) touching++;
   }
-  return { strategy, seed, won: r.won, stalled: last?.state.status === 'playing', wave: r.wave, atStart, peak, perSecond, tiersOn: r.tiersOn, evolvedOn: r.evolvedOn, incomeAtStart, atBoss, towers, touching };
+  // The last wave all of whose monsters died with none of them going once round the ring
+  let lastClean = 0;
+  for (let i = 0; i < (last?.state.waves.length ?? 0); i++) if (last!.state.waves[i]!.remaining === 0 && !lapped.has(i)) lastClean = i + 1;
+  return { strategy, seed, won: r.won, stalled: last?.state.status === 'playing', wave: r.wave, atStart, peak, perSecond, tiersOn: r.tiersOn, evolvedOn: r.evolvedOn, incomeAtStart, atBoss, towers, touching, lastClean, hpKilled: Math.round(hpKilled) };
 }
 
 /** One run in a child process (a big tower-spam run takes minutes), its result as JSON on stdout. */
@@ -208,6 +222,12 @@ async function main(): Promise<void> {
     const mine = runs.filter((r) => r.strategy === strategy);
     const ends = mine.map((r) => (r.won ? 'cleared' : `${r.stalled ? 'stalled at' : 'died on'} w${r.wave} ${stage(r.wave)}`));
     console.log(`  ${strategy.padEnd(8)} ${ends.join('  |  ')}`);
+  }
+  console.log('');
+  console.log('Last wave with no leak (all its monsters killed, none going once round the ring), and HP killed in all, by seed');
+  for (const strategy of bots) {
+    const mine = runs.filter((r) => r.strategy === strategy);
+    console.log(`  ${strategy.padEnd(8)} ${mine.map((r) => `w${r.lastClean}, ${(r.hpKilled / 1e6).toFixed(1)}M HP`).join('  |  ')}`);
   }
 
   console.log('');

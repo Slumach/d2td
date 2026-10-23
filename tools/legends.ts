@@ -33,7 +33,7 @@ function run(sim: Sim, ...commands: Command[]): void {
 }
 
 /** Builds a tower on a tile and climbs its line until it has `skill` at `minTier` or above. */
-function raise(sim: Sim, x: number, y: number, skill: string, minTier: number): Tower | undefined {
+export function raise(sim: Sim, x: number, y: number, skill: string, minTier: number): Tower | undefined {
   for (const cls of Object.values(sim.data.classes)) {
     for (const line of Object.values(cls.lines)) {
       const at = line.tiers.findIndex((opts) => opts.includes(skill));

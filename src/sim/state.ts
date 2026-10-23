@@ -385,4 +385,8 @@ export interface PaidKill {
   y: number;
   gold: number;
   player: number;
+  /** The monster's full HP (1/256 HP), for the harness's HP-killed count. */
+  hp: number;
+  /** The tower that made the kill (0 for none), for the harness's kills by line. */
+  tower: number;
 }
