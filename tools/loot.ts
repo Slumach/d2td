@@ -13,6 +13,9 @@
 // (Hell's immunities are built to stop one class); it misses only when it dies before
 // Hell Act 3 and short of the set's target.
 //
+// A bot is judged on the median of its seeds (eight by default), and the line shows the
+// spread from the lowest seed to the highest beside it.
+//
 //   npm run loot
 //   npm run loot -- --bots PALADIN,NECRO --seeds 1,2 --sets nm,bis --jobs 6
 //   LOOTBUILD builds around the loot it is handed (tools/outfit.ts lootBuilds); LOOT_DEBUG=1 prints its lines
@@ -32,7 +35,7 @@ import { loadTables } from './lib/load-tables.ts';
 const { values: args } = parseArgs({
   options: {
     bots: { type: 'string', default: 'TWOLINE,PALADIN,NECRO,MIXED3,LOOTBUILD' },
-    seeds: { type: 'string', default: '1,2' },
+    seeds: { type: 'string', default: '1,2,3,4,5,6,7,8' },
     sets: { type: 'string', default: LOOT_SETS.join(',') },
     jobs: { type: 'string', default: String(Math.max(1, availableParallelism() - 1)) },
     set: { type: 'string', multiple: true, default: [] },
@@ -127,12 +130,13 @@ async function main(): Promise<void> {
     console.log(`${set} (target for MIXED3: ${t.text}, waves ${t.lo} to ${t.hi}; other bots may die from Hell Act 3, wave ${hellAct3}, on)`);
     for (const bot of bots) {
       const rs = results.filter((r) => r.set === set && r.bot === bot).sort((a, b) => a.seed - b.seed);
-      const cells = rs.map((r) => {
-        const inTarget = r.wave >= t.lo && r.wave <= t.hi;
-        const miss = bot === REFERENCE_BOT ? !inTarget : r.wave < t.lo && r.wave < hellAct3;
-        return `${r.wave} ${r.label} (${r.towers} towers, ${r.worn} items)${miss ? ' MISS' : ''}`;
-      });
-      console.log(`  ${bot.padEnd(8)} ${cells.join('; ')}`);
+      const waves = rs.map((r) => r.wave).sort((a, b) => a - b);
+      const mid = waves.length >> 1;
+      const median = waves.length % 2 ? waves[mid]! : (waves[mid - 1]! + waves[mid]!) / 2;
+      const inTarget = median >= t.lo && median <= t.hi;
+      const miss = bot === REFERENCE_BOT ? !inTarget : median < t.lo && median < hellAct3;
+      console.log(`  ${bot.padEnd(9)} median ${median} (${waves[0]} to ${waves.at(-1)})${miss ? ' MISS' : ''}`);
+      console.log(`            ${rs.map((r) => `s${r.seed} ${r.wave} ${r.label} (${r.towers}t ${r.worn}i)`).join('; ')}`);
     }
   }
 }
