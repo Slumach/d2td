@@ -102,10 +102,12 @@ export function gearScore(sim: Sim, tower: Tower, gear: Gear): number {
   const dps = standardDps(active.skill, active.lvl);
   const plus = plusLevels(sim, g, active.skill) + g.auras.reduce((n, a) => n + a.level, 0);
   // A tie-break so gold and magic find fill a slot nothing else wants
-  const extra = g.goldFindPct + g.magicFindPct + g.defense / 50 + g.castOnHit.reduce((n, c) => n + c.chancePct * c.level, 0) / 10;
+  const extra = g.goldFindPct + g.magicFindPct + g.defense / 50 + g.castOnHit.reduce((n, c) => n + c.chancePct * c.level, 0) / 10 + g.durabilityPct + g.slowPct + g.stunChancePct;
   if (dps <= 0) return (plus * 100 + buff.attackSpeedPct) * 1000 + extra;
   const adds = Object.values(g.adds).reduce((n, [a, b]) => n + (a + b) * 128, 0);
-  const cut = g.resistDown[active.skill.damageType as Element] ?? 0;
+  // The resistance cut, the converted element damage (resistances), and a quarter of the
+  // damage on champions and uniques (about their share of a wave's HP)
+  const cut = (g.resistDown[active.skill.damageType as Element] ?? 0) + (g.elementDamagePct[active.skill.damageType as Element] ?? 0) + g.eliteDamagePct / 4;
   const pierce = active.skill.archetype === 'projectile' || active.skill.archetype === 'pierce' ? g.piercePct : 0;
   return Math.trunc(((dps + (active.skill.archetype === 'melee' ? adds : 0)) * (100 + buff.attackSpeedPct + pierce) * (100 + buff.damagePct + cut)) / 10_000) + extra;
 }
