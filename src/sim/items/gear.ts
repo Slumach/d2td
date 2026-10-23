@@ -22,17 +22,23 @@
 //   the armour slot itself (balance.json              1 to 3% damage, attack speed or cast rate by the
 //     implicitGear)                                   base's tier, so every slot is worth filling
 //   magic find, gold find                          on the tower's kills, stacking additively as in D2
-//   defence (armorclass, enhanced defence),        durability: how often monsters miss the tower's
-//     block                                        blocking summons, by D2's chance to hit
-//   resistances, life, mana, leech, stats,         nothing
-//     attack rating, knockback, flee, blind
+//   defence (armorclass, enhanced defence),        how often monsters miss the tower's blocking
+//     block                                        summons, by D2's chance to hit
+//   every other stat (balance.json                 converted, per 100 points: resistances to that
+//     itemConversions)                             element's damage, life and defences to durability
+//                                                   (how long its summons hold), mana to cast rate,
+//                                                   attack rating to damage on champions and uniques,
+//                                                   knockback and flee to slow, blind to a stun chance,
+//                                                   strength to damage; when-struck, kill, death and
+//                                                   level-up casts cast on hit (balance.json itemProcs)
 //
 // Weapons also carry their base damage: a melee tower swings its worn weapon instead of its
 // class weapon, enhanced damage on it as in D2.
 
-import type { ImplicitGear } from '../data.ts';
+import type { ImplicitGear, ItemConversions } from '../data.ts';
 import type { Element } from '../state.ts';
 import { CLASS_CODES, SLOTS, type ItemBase, type ItemData, type Slot } from './data.ts';
+import { idiv } from '../fixed.ts';
 import { itemStats, propertyStats, type Item, type StatRoll } from './item.ts';
 
 export type Gear = Partial<Record<Slot, Item>>;
@@ -82,6 +88,17 @@ export interface TowerGear {
   goldFindPct: number;
   defense: number;
   blockPct: number;
+  /** Converted stats (balance.json itemConversions): */
+  /** +% on how long the tower's summons hold a monster, and on their life. */
+  durabilityPct: number;
+  /** +% damage on the tower's hits of an element, every tower (the resistances). */
+  elementDamagePct: Partial<Record<Element, number>>;
+  /** +% damage against champions and uniques (attack rating). */
+  eliteDamagePct: number;
+  /** +% damage on every tower's hits (strength). */
+  allDamagePct: number;
+  /** Chance a hit stuns for itemStunTicks (blind); never bosses. */
+  stunChancePct: number;
   /**
    * The worn weapon's damage for melee towers, whole HP: its base damage (ethereal +50%)
    * plus the gear's flat +min and +max damage. Enhanced damage is damagePct, on top.
@@ -120,7 +137,18 @@ export const NO_GEAR: TowerGear = {
   goldFindPct: 0,
   defense: 0,
   blockPct: 0,
+  durabilityPct: 0,
+  elementDamagePct: {},
+  eliteDamagePct: 0,
+  allDamagePct: 0,
+  stunChancePct: 0,
 };
+
+/**
+ * Stats the item model reads itself rather than the tower: ethereal and sockets (item.ts), the
+ * min half of enhanced damage (one roll with the max), and set items' visual states.
+ */
+export const ITEM_MECHANICS = ['ethereal', 'item_numsockets', 'item_mindamage_percent', 'state'];
 
 /** The -% to enemy resistance stats, by element. */
 const PIERCE_STATS: Record<string, Element> = {
@@ -170,8 +198,8 @@ export function gearStats(data: ItemData, gear: Gear): StatRoll[] {
 }
 
 /** The tower effects of the gear a tower of class `towerClass` wears (see the table above). */
-export function towerGear(data: ItemData, gear: Gear, towerClass: string, implicit: ImplicitGear = {}): TowerGear {
-  const g: TowerGear = { ...NO_GEAR, adds: {}, plusSkill: {}, plusTab: {}, castOnHit: [], resistDown: {}, skillDamagePct: {}, auras: [] };
+export function towerGear(data: ItemData, gear: Gear, towerClass: string, implicit: ImplicitGear = {}, conversions: ItemConversions = {}, procs: Record<string, number> = {}): TowerGear {
+  const g: TowerGear = { ...NO_GEAR, adds: {}, plusSkill: {}, plusTab: {}, castOnHit: [], resistDown: {}, skillDamagePct: {}, auras: [], elementDamagePct: {} };
   const stats = gearStats(data, gear);
   const sum = (stat: string) => stats.filter((s) => s.stat === stat).reduce((n, s) => n + s.value, 0);
   const myClass = CLASS_INDEX[CLASS_CODES[towerClass] ?? ''] ?? -1;
@@ -181,7 +209,8 @@ export function towerGear(data: ItemData, gear: Gear, towerClass: string, implic
     g.adds[e] = [a + min, b + Math.max(min, max)];
   };
   g.damagePct = sum('item_maxdamage_percent');
-  add('phys', sum('mindamage') + sum('secondary_mindamage') + sum('item_mindamage'), sum('maxdamage') + sum('secondary_maxdamage') + sum('item_maxdamage'));
+  // item_normaldamage is D2's "+X damage": on both ends of the hit
+  add('phys', sum('mindamage') + sum('secondary_mindamage') + sum('item_mindamage') + sum('item_normaldamage'), sum('maxdamage') + sum('secondary_maxdamage') + sum('item_maxdamage') + sum('item_normaldamage'));
   add('fire', sum('firemindam'), sum('firemaxdam'));
   add('cold', sum('coldmindam'), sum('coldmaxdam'));
   add('ltng', sum('lightmindam'), sum('lightmaxdam'));
@@ -199,6 +228,9 @@ export function towerGear(data: ItemData, gear: Gear, towerClass: string, implic
     if (s.stat === 'item_elemskill' && s.param === '1') g.fireSkills += s.value;
     if ((s.stat === 'item_singleskill' || s.stat === 'item_nonclassskill') && s.param) g.plusSkill[s.param] = (g.plusSkill[s.param] ?? 0) + s.value;
     if ((s.stat === 'item_skillonhit' || s.stat === 'item_skillonattack') && s.param) g.castOnHit.push({ skill: s.param, chancePct: s.value, level: s.level ?? 1 });
+    // Towers are never struck, never die and never level: those casts come on hit instead, at a share of their chance
+    const share = procs[s.stat];
+    if (share !== undefined && s.param) g.castOnHit.push({ skill: s.param, chancePct: Math.max(1, idiv(s.value * share, 100)), level: s.level ?? 1 });
     // Two items with the same aura: the higher level, as in D2
     if (s.stat === 'item_aura' && s.param) {
       const has = g.auras.find((a) => a.skill === s.param);
@@ -251,6 +283,7 @@ export function towerGear(data: ItemData, gear: Gear, towerClass: string, implic
     if (base.block > 0) g.blockPct = Math.min(75, g.blockPct + base.block);
   }
   g.defense = defense;
+  convert(g, stats, conversions);
   // Every armour slot carries a small built-in bonus by its base's tier, so nothing worn is nothing
   for (const s of SLOTS) {
     const item = gear[s];
@@ -263,4 +296,62 @@ export function towerGear(data: ItemData, gear: Gear, towerClass: string, implic
     else g.castSpeedPct += pct;
   }
   return g;
+}
+
+/**
+ * A converted stat's tower effect, in hundredths of a percent: its value times its rate
+ * (balance.json itemConversions, percent per 100 points). Undefined for a stat read directly.
+ */
+export function convertedHundredths(conversions: ItemConversions, stat: string, value: number): { effect: ItemConversions[string][0]; hundredths: number } | undefined {
+  const rule = conversions[stat];
+  return rule && { effect: rule[0], hundredths: value * rule[1] };
+}
+
+/**
+ * The stats a tower has no direct use for, as tower effects: each effect sums its stats'
+ * values times their rates and rounds down once, so many small rolls still count.
+ */
+function convert(g: TowerGear, stats: readonly StatRoll[], conversions: ItemConversions): void {
+  const total = new Map<ItemConversions[string][0], number>();
+  for (const s of stats) {
+    const c = convertedHundredths(conversions, s.stat, s.value);
+    if (c) total.set(c.effect, (total.get(c.effect) ?? 0) + c.hundredths);
+  }
+  for (const [effect, hundredths] of total) {
+    const pct = Math.trunc(hundredths / 100);
+    if (pct === 0) continue;
+    switch (effect) {
+      case 'durability':
+        g.durabilityPct += pct;
+        break;
+      case 'rate':
+        // Cast rate for a caster, swing rate for a melee tower: each reads only its own
+        g.castSpeedPct += pct;
+        g.attackSpeedPct += pct;
+        break;
+      case 'damage':
+        g.allDamagePct += pct;
+        break;
+      case 'elite':
+        g.eliteDamagePct += pct;
+        break;
+      case 'slow':
+        g.slowPct = Math.min(50, g.slowPct + pct);
+        break;
+      case 'stun':
+        g.stunChancePct = Math.min(100, g.stunChancePct + pct);
+        break;
+      case 'goldFind':
+        g.goldFindPct += pct;
+        break;
+      case 'openWounds':
+        g.openWoundsPct = Math.min(100, g.openWoundsPct + pct);
+        break;
+      case 'allElements':
+        for (const e of ['fire', 'cold', 'ltng', 'pois', 'mag'] as const) g.elementDamagePct[e] = (g.elementDamagePct[e] ?? 0) + pct;
+        break;
+      default:
+        g.elementDamagePct[effect] = (g.elementDamagePct[effect] ?? 0) + pct;
+    }
+  }
 }

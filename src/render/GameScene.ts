@@ -933,6 +933,12 @@ export class GameScene extends Phaser.Scene {
         return scene.keeper!;
       },
       skillName: (p) => names[p] ?? p,
+      get conversions() {
+        return scene.sim.data.itemConversions;
+      },
+      get procs() {
+        return scene.sim.data.itemProcs;
+      },
       sound: (n) => scene.sounds.item(n),
       toast: (t) => scene.toast(t),
       others: () => (scene.driver?.online ? scene.driver.players.filter((p) => p.slot !== scene.driver!.me) : []),

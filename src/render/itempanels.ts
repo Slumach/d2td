@@ -7,6 +7,7 @@
 // items and runewords ask first). Every change the game must agree on is a command; stash
 // moves wait for the sim to show them (keeper.ts). Tooltips are D2R's (itemtext.ts).
 
+import type { ItemConversions } from '../sim/data.ts';
 import Phaser from 'phaser';
 
 import { HD_SCALE } from '../launcher/frontend.ts';
@@ -80,6 +81,9 @@ export interface ItemPanelHost {
   issue(c: Command): void;
   keeper: Keeper;
   skillName(param: string): string;
+  /** The stat conversions the tooltips show as tower effects (itemtext.ts). */
+  readonly conversions?: ItemConversions;
+  readonly procs?: Record<string, number>;
   /** An item sound by table name (pick up and put down use the item's usesound). */
   sound(name: string | undefined): void;
   /** A one-line message on screen. */

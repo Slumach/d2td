@@ -93,11 +93,19 @@ export function filtered(sim: Sim, monster: Monster, amount: number, filter: Hit
   return idiv(amount * pct, 100);
 }
 
-/** Final damage of one hit: filter, then resistance. 100% or more resistance is immunity. */
+/**
+ * Final damage of one hit: filter, then resistance (100% or more is immunity), then the acting
+ * tower's converted gear: +% of the hit's element (the resistances) and +% against champions
+ * and uniques (attack rating).
+ */
 export function damageAgainst(sim: Sim, monster: Monster, amount: number, element: Element, filter: HitFilter): number {
   const resist = effectiveResist(sim, monster, element);
   if (resist >= 100) return 0;
-  return idiv(filtered(sim, monster, amount, filter) * (100 - resist), 100);
+  const dealt = idiv(filtered(sim, monster, amount, filter) * (100 - resist), 100);
+  const gear = actorGear(sim);
+  if (gear === NO_GEAR) return dealt;
+  const elite = monster.rank === 'champion' || monster.rank === 'unique' ? gear.eliteDamagePct : 0;
+  return idiv(dealt * Math.max(0, 100 + (gear.elementDamagePct[element] ?? 0) + elite), 100);
 }
 
 /** True if a hit of this element and filter can hurt the monster at all. */
@@ -121,7 +129,27 @@ export function dealDamage(
   }
   monster.hp -= dealt;
   if (monster.hp <= 0) killMonster(sim, monster);
+  else if (dealt > 0) gearOnHit(sim, monster);
   return dealt;
+}
+
+/** How long an item's slow holds after a hit: D2 keeps it while the hits keep coming; two seconds here. */
+export const ITEM_SLOW_TICKS = 40;
+
+/**
+ * Every tower's hit that hurts carries its gear's slow (slow target, knockback, flee) and its
+ * blind's chance to stun for itemStunTicks; bosses are slowed but never stunned.
+ */
+function gearOnHit(sim: Sim, monster: Monster): void {
+  const gear = actorGear(sim);
+  if (gear === NO_GEAR) return;
+  if (gear.slowPct > 0) {
+    monster.slowPct = Math.max(monster.slowPct, gear.slowPct);
+    monster.slowTicks = Math.max(monster.slowTicks, ITEM_SLOW_TICKS);
+  }
+  if (gear.stunChancePct > 0 && monster.rank !== 'boss' && rollInt(sim.state.rng, 0, 99) < gear.stunChancePct) {
+    monster.stunTicks = Math.max(monster.stunTicks, sim.data.itemStunTicks);
+  }
 }
 
 /** Enchant's fire, as a tower's buff or a missile's snapshot of it. */

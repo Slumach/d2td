@@ -1,8 +1,11 @@
 // npm run items: what the item model reads from the extracted tables, and a few rolls, as a sanity check.
 import { loadTables } from './lib/load-tables.ts';
 import { buildItemData } from '../src/sim/items/data.ts';
-import { rollItem, itemName, itemStats } from '../src/sim/items/item.ts';
-import { towerGear } from '../src/sim/items/gear.ts';
+import { rollItem, itemName, itemStats, propertyStats } from '../src/sim/items/item.ts';
+import { ITEM_MECHANICS, towerGear } from '../src/sim/items/gear.ts';
+import { readFileSync } from 'node:fs';
+import { DESIGN } from '../src/data/design.ts';
+import type { PropRoll } from '../src/sim/items/data.ts';
 import { createRng } from '../src/sim/rng.ts';
 
 const d = buildItemData(loadTables());
@@ -26,3 +29,22 @@ const enigma = d.runewords.find((r) => r.name === 'Enigma');
 console.log('enigma', JSON.stringify(enigma));
 const soj = rollItem(d, createRng(1), { uid: 'soj', code: 'rin', ilvl: 90, quality: 'unique' });
 console.log(itemName(d, soj), JSON.stringify(towerGear(d, { ring1: soj }, 'paladin')));
+
+// No dead stats: every stat an affix, unique, set item, set bonus, runeword, gem or rune can
+// give is read by the gear (gear.ts by name), converted (balance.json itemConversions), cast
+// on hit (itemProcs) or one of the item model's own (ITEM_MECHANICS)
+const seen = new Map<string, string>();
+const scan = (src: string, props: PropRoll[]) => {
+  for (const p of props) for (const st of propertyStats(d, p, undefined, 90)) if (!seen.has(st.stat)) seen.set(st.stat, src);
+};
+for (const u of d.uniques) scan(u.name, u.props);
+for (const s of d.setItems) { scan(s.name, s.props); s.partial.forEach((p) => scan(s.name, p)); }
+for (const s of Object.values(d.sets)) { s.partial.forEach((p) => scan(s.name, p)); scan(s.name, s.full); }
+for (const r of d.runewords) scan(r.name, r.props);
+for (const a of [...d.prefixes, ...d.suffixes]) scan(a.name, a.props);
+for (const g of Object.values(d.gems)) for (const props of [g.weapon, g.helm, g.shield]) scan(g.code, props);
+const gearSource = readFileSync(new URL('../src/sim/items/gear.ts', import.meta.url), 'utf8');
+const { itemConversions, itemProcs } = DESIGN.balance;
+const dead = [...seen].filter(([stat]) => !gearSource.includes(`'${stat}'`) && !gearSource.includes(`  ${stat}:`) && !(stat in itemConversions) && !(stat in itemProcs) && !ITEM_MECHANICS.includes(stat));
+console.log(`stats the items give: ${seen.size}; dead (nothing on a tower): ${dead.length ? dead.map(([s, src]) => `${s} (${src})`).join(', ') : 'none'}`);
+if (dead.length) process.exitCode = 1;

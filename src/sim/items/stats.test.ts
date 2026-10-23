@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { activeSkill } from '../auras.ts';
-import { effectiveResist } from '../combat.ts';
+import { damageAgainst, dealDamage, effectiveResist } from '../combat.ts';
+import { filterFrom } from '../archetypes/common.ts';
 import { step } from '../sim.ts';
 import type { Tower } from '../state.ts';
 import { addMonster, freeze, placeTower, testSim, ticks } from '../testkit.ts';
@@ -9,6 +10,7 @@ import { canWear, type Item, type StatRoll } from './item.ts';
 import { gearOf, OPEN_WOUNDS_TICKS, openWoundsDamage, withGear } from './tower.ts';
 
 const BESIDE = 3000;
+const ALL_FILTER = filterFrom(undefined);
 let uid = 0;
 const item = (code: string, stats: StatRoll[], ilvl = 30): Item => ({ uid: `s${uid++}`, code, quality: 'magic', ilvl, sockets: 0, socketed: [], stats });
 const wear = (tower: Tower, gear: Tower['gear']) => {
@@ -204,4 +206,53 @@ describe('the item stats that act on monsters', () => {
     step(sim, []);
     expect(sim.state.missiles[0]?.damagePct).toBe(25);
   });
+
+  it('converts every stat a tower has no direct use for into a tower effect, at its rate per 100 points', () => {
+    const sim = testSim();
+    const tower = placeTower(sim, 6, 4, 'sacrifice');
+    const rates = sim.data.itemConversions;
+    wear(tower, {
+      ring1: item('rin', [
+        { stat: 'fireresist', value: 40 },
+        { stat: 'maxhp', value: 80 },
+        { stat: 'maxmana', value: 100 },
+        { stat: 'tohit', value: 200 },
+        { stat: 'item_knockback', value: 1 },
+        { stat: 'item_stupidity', value: 20 },
+        { stat: 'strength', value: 20 },
+        { stat: 'item_skillongethit', param: 'Frost Nova', value: 20, level: 3 },
+      ]),
+    });
+    const g = gearOf(sim, tower);
+    const at = (stat: string, value: number) => Math.trunc((value * rates[stat]![1]) / 100);
+    expect(g.elementDamagePct.fire).toBe(at('fireresist', 40));
+    expect(g.durabilityPct).toBe(at('maxhp', 80));
+    expect(g.castSpeedPct).toBe(at('maxmana', 100));
+    expect(g.attackSpeedPct).toBe(at('maxmana', 100));
+    expect(g.eliteDamagePct).toBe(at('tohit', 200));
+    expect(g.slowPct).toBe(at('item_knockback', 1));
+    expect(g.stunChancePct).toBe(at('item_stupidity', 20));
+    expect(g.allDamagePct).toBe(at('strength', 20));
+    // A cast when struck comes on hit, at its share of the chance
+    expect(g.castOnHit).toEqual([{ skill: 'Frost Nova', chancePct: Math.trunc((20 * sim.data.itemProcs['item_skillongethit']!) / 100), level: 3 }]);
+  });
+
+  it("puts the converted element and elite damage on the acting tower's hits, and its slow and stun on every hit that hurts", () => {
+    const sim = testSim();
+    const tower = placeTower(sim, 6, 4, 'sacrifice');
+    wear(tower, { ring1: item('rin', [{ stat: 'fireresist', value: 100 }, { stat: 'tohit', value: 400 }, { stat: 'item_knockback', value: 1 }, { stat: 'item_stupidity', value: 200 }]) });
+    const g = gearOf(sim, tower);
+    const zombie = addMonster(sim, 'zombie1', 0, { hp: 1_000_000 });
+    const champion = addMonster(sim, 'zombie1', 0, { hp: 1_000_000 });
+    champion.rank = 'champion';
+    const plain = damageAgainst(sim, zombie, 25_600, 'fire', ALL_FILTER);
+    sim.actorTower = tower.id;
+    expect(damageAgainst(sim, zombie, 25_600, 'fire', ALL_FILTER)).toBe(Math.trunc((plain * (100 + g.elementDamagePct.fire!)) / 100));
+    expect(damageAgainst(sim, champion, 25_600, 'fire', ALL_FILTER)).toBe(Math.trunc((plain * (100 + g.elementDamagePct.fire! + g.eliteDamagePct)) / 100));
+    // Blind at 100%: every hit that hurts stuns, and knockback slows
+    dealDamage(sim, zombie, 2_560, 'phys', ALL_FILTER);
+    expect(zombie.stunTicks).toBe(sim.data.itemStunTicks);
+    expect(zombie.slowPct).toBe(g.slowPct);
+  });
 });
+

@@ -184,7 +184,7 @@ export function updateMonsters(sim: Sim): void {
       m.blockedBy = blocker.id;
       m.blockedTicks = 0;
     }
-    if (blocker && m.blockedTicks >= rules.blockBreakTicks) {
+    if (blocker && m.blockedTicks >= holdTicks(sim, blocker)) {
       // Held long enough: it breaks through and shoves the summon aside, which survives
       m.brokeThrough = [...m.brokeThrough.filter((id) => s.summons.some((u) => u.id === id)), blocker.id];
       m.blockedBy = 0;
@@ -223,6 +223,13 @@ export function decayCorpses(sim: Sim): void {
   const s = sim.state;
   for (const c of s.corpses) c.ticksLeft--;
   s.corpses = s.corpses.filter((c) => c.ticksLeft > 0);
+}
+
+/** How long a summon holds a monster before it breaks through: blockBreakTicks, and its tower's durability on top. */
+function holdTicks(sim: Sim, unit: Summon): number {
+  const tower = sim.state.towers.find((t) => t.id === unit.towerId);
+  const durability = tower?.gear ? gearOf(sim, tower).durabilityPct : 0;
+  return idiv(sim.data.rules.blockBreakTicks * Math.max(0, 100 + durability), 100);
 }
 
 /**

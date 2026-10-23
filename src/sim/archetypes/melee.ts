@@ -103,8 +103,8 @@ export const melee: ArchetypeModule<MeleeDef> = {
 /**
  * A melee tower's gear on a hit: its added elemental damage, then crushing blow (a quarter
  * of the monster's life before the hit, an eighth for uniques and bosses, less its physical
- * resistance, nothing on a physical immune), open wounds, slow and freeze, and its chance
- * to cast skills. Bosses are slowed, never frozen.
+ * resistance, nothing on a physical immune), open wounds and freeze, and its chance to cast
+ * skills (slow and stun ride on every tower's hit, combat.ts). Bosses are never frozen.
  */
 function onHit(sim: Sim, tower: Tower, target: Monster, gear: TowerGear, hpBefore: number): void {
   for (const e of ELEMENTS) {
@@ -125,12 +125,6 @@ function onHit(sim: Sim, tower: Tower, target: Monster, gear: TowerGear, hpBefor
   }
   if (target.hp <= 0) return;
   if (gear.openWoundsPct > 0 && rollInt(sim.state.rng, 0, 99) < gear.openWoundsPct) bleed(sim, target, openWoundsDamage(gear.openWoundsLevel), OPEN_WOUNDS_TICKS);
-  if (gear.slowPct > 0) {
-    target.slowPct = Math.max(target.slowPct, gear.slowPct);
-    target.slowTicks = Math.max(target.slowTicks, SLOW_TICKS);
-  }
   if (gear.freezeTicks > 0 && target.rank !== 'boss') target.freezeTicks = Math.max(target.freezeTicks, gear.freezeTicks);
 }
 
-/** How long an item's slow target holds after a hit: D2 keeps it while the hits keep coming; two seconds here. */
-const SLOW_TICKS = 40;

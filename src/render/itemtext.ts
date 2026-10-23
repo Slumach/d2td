@@ -5,7 +5,9 @@
 // lists every runeword that uses it, in rune order: green when this player holds every rune
 // it takes, and otherwise the runes still missing in grey.
 
+import type { ItemConversions } from '../sim/data.ts';
 import type { ItemData } from '../sim/items/data.ts';
+import { convertedHundredths } from '../sim/items/gear.ts';
 import { CLASS_CODES, maxSocketsAt } from '../sim/items/data.ts';
 import { itemName, itemStats, propertyStats, type Item, type StatRoll } from '../sim/items/item.ts';
 
@@ -65,6 +67,40 @@ const ONLY_KEYS: Record<string, string> = { ama: 'AmaOnly', sor: 'SorOnly', nec:
 export interface TextContext {
   /** A skill's name from an item stat's param (a skills.txt name or Id). */
   skillName: (param: string) => string;
+  /** The game's conversions of stats a tower has no direct use for (balance.json itemConversions, itemProcs). */
+  conversions?: ItemConversions;
+  procs?: Record<string, number>;
+}
+
+const ELEMENT_NAMES: Record<string, string> = { fire: 'Fire', cold: 'Cold', ltng: 'Lightning', pois: 'Poison', mag: 'Magic' };
+
+/** A converted stat's tower effect, in words: what the line shows, D2's own wording after it. */
+export function effectText(effect: string, hundredths: number): string {
+  const pct = hundredths / 100;
+  const n = Number.isInteger(pct) ? String(pct) : pct.toFixed(1);
+  const signed = pct >= 0 ? `+${n}` : n;
+  switch (effect) {
+    case 'durability':
+      return `${signed}% Durability`;
+    case 'rate':
+      return `${signed}% Cast Rate`;
+    case 'damage':
+      return `${signed}% Damage`;
+    case 'elite':
+      return `${signed}% Damage to Champions and Uniques`;
+    case 'slow':
+      return `Slows Target by ${n}%`;
+    case 'stun':
+      return `${n}% Chance to Stun`;
+    case 'goldFind':
+      return `${n}% Extra Gold from Monsters`;
+    case 'openWounds':
+      return `${n}% Chance of Open Wounds`;
+    case 'allElements':
+      return `${signed}% Damage of Every Element`;
+    default:
+      return `${signed}% ${ELEMENT_NAMES[effect] ?? effect} Damage`;
+  }
 }
 
 /** The blue property lines for a set of stats, merged and ordered as D2R shows them. */
@@ -123,7 +159,9 @@ export function statLines(data: ItemData, stats: readonly StatRoll[], ctx: TextC
   const res = ['fireresist', 'lightresist', 'coldresist', 'poisonresist'].map((r) => merged.get(`${r}||`)?.value);
   if (res.every((v) => v !== undefined && v === res[0])) {
     for (const r of ['fireresist', 'lightresist', 'coldresist', 'poisonresist']) take(r);
-    push(prio('fireresist'), sprintf(s['strModAllResistances'] ?? 'All Resistances %+d', res[0]!));
+    const d2 = sprintf(s['strModAllResistances'] ?? 'All Resistances %+d', res[0]!);
+    const c = ctx.conversions && convertedHundredths(ctx.conversions, 'fireresist', res[0]!);
+    push(prio('fireresist'), c && c.hundredths !== 0 ? `${effectText('allElements', c.hundredths).replace('Every Element', 'Fire, Cold, Lightning and Poison')} (${d2})` : d2);
   }
 
   for (const st of merged.values()) {
@@ -132,6 +170,22 @@ export function statLines(data: ItemData, stats: readonly StatRoll[], ctx: TextC
     const fmt = (st.value < 0 ? s[d.neg] : s[d.pos]) ?? s[d.pos] ?? '';
     if (!fmt) continue;
     const cls = Number(st.param);
+    // A stat a tower converts: its tower effect, D2's wording after it
+    const c = ctx.conversions && convertedHundredths(ctx.conversions, st.stat, st.value);
+    if (c) {
+      push(d.priority, `${effectText(c.effect, c.hundredths)} (${sprintf(fmt, st.value).trim()})`);
+      continue;
+    }
+    // A cast a tower is never in a position for (when struck, on kill, on death, on level up) comes on hit
+    const share = ctx.procs?.[st.stat];
+    if (share !== undefined) {
+      const onHit = data.statDescs['item_skillonhit'];
+      const hitFmt = onHit && (s[onHit.pos] ?? '');
+      if (hitFmt) {
+        push(d.priority, sprintf(hitFmt, Math.max(1, Math.trunc((st.value * share) / 100)), st.level ?? 1, ctx.skillName(st.param ?? '')));
+        continue;
+      }
+    }
     switch (d.func) {
       case 13:
         push(d.priority, sprintf((s['ModStr3a'] ?? '%+d to Amazon Skill Levels').replace('Amazon', CLASS_NAMES[cls] ?? 'Class'), st.value));

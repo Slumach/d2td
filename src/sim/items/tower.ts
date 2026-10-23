@@ -18,7 +18,7 @@ export function gearOf(sim: Sim, tower: Tower): TowerGear {
   if (!worn) return NO_GEAR;
   const hit = cache.get(worn);
   if (hit && hit.cls === tower.cls) return hit.gear;
-  const gear = towerGear(sim.data.items, worn, tower.cls, sim.data.implicitGear);
+  const gear = towerGear(sim.data.items, worn, tower.cls, sim.data.implicitGear, sim.data.itemConversions, sim.data.itemProcs);
   cache.set(worn, { cls: tower.cls, gear });
   return gear;
 }
@@ -127,14 +127,14 @@ export function withGear(buff: TowerBuff, gear: TowerGear, skill: SkillDef): Tow
   if (skill.archetype === 'melee') {
     return {
       ...buff,
-      damagePct: buff.damagePct + gear.damagePct + gear.implicitDamagePct,
+      damagePct: buff.damagePct + gear.damagePct + gear.implicitDamagePct + gear.allDamagePct,
       attackSpeedPct: buff.attackSpeedPct + effectiveSpeed(gear.attackSpeedPct),
       gear,
     };
   }
   return {
     ...buff,
-    damagePct: buff.damagePct + (gear.skillDamagePct[skill.damageType as Element] ?? 0) + gear.implicitDamagePct,
+    damagePct: buff.damagePct + (gear.skillDamagePct[skill.damageType as Element] ?? 0) + gear.implicitDamagePct + gear.allDamagePct,
     attackSpeedPct: buff.attackSpeedPct + effectiveSpeed(gear.castSpeedPct),
   };
 }

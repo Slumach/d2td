@@ -178,6 +178,12 @@ export interface BalanceJson {
   vendorCap: VendorCap;
   /** Every armour slot's small built-in tower bonus by base tier (normal, exceptional, elite); src/sim/items/gear.ts. */
   implicitGear: ImplicitGear;
+  /** Every D2 stat the gear does not read directly, as a tower effect at a percent per 100 points (gear.ts). */
+  itemConversions: ItemConversions;
+  /** Chance-to-cast triggers a tower has no use for (when struck, on kill, on death, on level up), cast on hit at this percent of their chance. */
+  itemProcs: Record<string, number>;
+  /** How long a blind's stun holds. */
+  itemStunTicks: number;
   cow: CowRules;
   /** Cost of the first level-up at T1, T2, T3. */
   levelCostBase: number[];
@@ -531,6 +537,12 @@ export interface GameData {
   /** The most a vendor pays for one item, by stage (balance.json vendorCap; src/sim/items/price.ts). */
   vendorCap: VendorCap;
   implicitGear: ImplicitGear;
+  /** Every D2 stat the gear does not read directly, as a tower effect at a percent per 100 points (gear.ts). */
+  itemConversions: ItemConversions;
+  /** Chance-to-cast triggers a tower has no use for (when struck, on kill, on death, on level up), cast on hit at this percent of their chance. */
+  itemProcs: Record<string, number>;
+  /** How long a blind's stun holds. */
+  itemStunTicks: number;
   /** skills.txt skill name to its Id, for items that name a skill by number. */
   skillIds: Record<string, string>;
   /**
@@ -554,6 +566,11 @@ export interface GameData {
    */
   itemSkill: (name: string, level: number) => string | undefined;
 }
+
+/** A converted stat's tower effect: an element's damage, or one of the rest (see gear.ts). */
+export type ConversionEffect = 'durability' | 'rate' | 'damage' | 'elite' | 'slow' | 'stun' | 'goldFind' | 'openWounds' | 'allElements' | 'fire' | 'cold' | 'ltng' | 'pois' | 'mag';
+/** By D2 stat: its effect and the percent of it per 100 points of the stat. */
+export type ItemConversions = Record<string, [ConversionEffect, number]>;
 
 /** An armour slot's implicit bonus: which tower stat, and the percent at each base tier. */
 export type ImplicitGear = Partial<Record<string, { stat: 'damage' | 'attackSpeed' | 'castRate'; pct: [number, number, number] }>>;
@@ -1483,6 +1500,9 @@ export function buildGameData(
     drops: design.balance.drops,
     vendorCap: design.balance.vendorCap,
     implicitGear: design.balance.implicitGear,
+    itemConversions: design.balance.itemConversions,
+    itemProcs: design.balance.itemProcs,
+    itemStunTicks: design.balance.itemStunTicks,
     cow: { ...m.cow, ...design.balance.cow },
     monsterVariant: (id: string, difficulty: number, level?: number) => defOf(id, difficulty, level).id,
     skillIds,

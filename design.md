@@ -14,7 +14,7 @@ Non-commercial fan project. The game ships zero Blizzard assets and reads them f
 - Map: a ring (Oct 2026, Green TD style). Monsters spawn on it and keep lapping until killed; nothing leaves, so there are no lives. Towers go on any open tile off the path. No mazing.
 - Evolution: two adjacent prerequisite towers are consumed into one evolved tower. One tile is freed.
 - Launch classes: Paladin, Sorceress, Necromancer. Amazon, Barbarian, Druid and Assassin come after the loop is fun.
-- Tower structure: 3 lines per class, 3 tiers per line, T4 evolutions from two towers. T5 evolutions from three towers later.
+- Tower structure: 3 lines per class, 3 tiers per line, T4 evolutions from two towers, T5 the legends: three T4 evolutions of a class made one (see T5 legends below).
 - Skills are data on ten archetypes (see Skill archetypes). No bespoke code per skill.
 - Numbers: skills.txt and monstats.txt values are the baseline, tuned from there.
 - Difficulty comes from D2's own systems: resistances, immunities and monster mods. Act bosses close acts. No flying enemies.
@@ -96,7 +96,7 @@ A tower shows its line and tier the way D2 shows gear. The line is the weapon: Z
 | Avenger | Vengeance (T3) + Conviction (T3) | Tri-element melee on resistance-shredded targets; the physical-immune answer. |
 | Templar | Fist of the Heavens (T3) + Conviction (T3) | FoH with no cooldown; the boss killer. |
 | Smiter (later) | Smite + Fanaticism | Needs Holy Shield to exist; bonus damage and stun against bosses. |
-| Auradin (T5, later) | Holy Fire + Holy Shock + Conviction | Three towers; needs the aura line to branch first. |
+| Auradin (later, not a T5) | Holy Fire + Holy Shock + Conviction | Three towers; needs the aura line to branch first. T5 is the legend (Tyrael); this would be another three-tower evolution beside it. |
 
 ## Sorceress and Necromancer
 
@@ -114,7 +114,7 @@ Both follow the Paladin pattern, with evolutions that cross lines (built in M6).
 | Meteorb | Meteor (T3) + Frozen Orb (T3) |
 | Blizzballer | Blizzard (T3) + Fire Ball (T2+) |
 | Light Sorc | Chain Lightning (T3) + Thunder Storm (T3) |
-| Enchantress (T5, later) | Enchant + any two melee towers, including other classes |
+| Enchantress (later, not a T5) | Enchant + any two melee towers, including other classes |
 
 | Necromancer line | T1 | T2 | T3 | Role on the map |
 | --- | --- | --- | --- | --- |
@@ -300,7 +300,7 @@ Evolving wins for every bot: clearly for NECRO (15 and 34 waves) and MIXED3 (6 a
 
 **Evolution balance, second pass (0.3.8 harness).** The wall at wave 110: both Paladin-line bots died on exactly wave 110 on both seeds, evolving or not. The waves (scratch log of 107 to 110, HP as spawned with the stage curve and endless ramp): 107 is 30 Horror Mages (241k to 351k HP, lightning immune; 8.9M HP in all); 108 is 30 Zakarumites (fire immune) with two Council Members and Geleb Flamefinger (fire and lightning immune; 28.2M); 109 is endless Tier 4's walk through Travincal, the High Council: five uniques (Toorc Icefist, Ismail Vilehand, Bremm Sparkfist, Wyand Voidbringer, Maffer Dragonhand) at 4.4M to 7.8M HP each with fire, cold and lightning immunities between them and 50 to 99% physical resistance, six Council Members, 33 Sextons and Zakarumites (57.3M, twice wave 108); 110 is 45 Undead Stygian Dolls (poison immune, 75% cold; 23.8M). No wave in it is a boss wave. The runs end on 110 because the Council is still alive when the Dolls come: the wall is wave 109.
 
-Single-target damage (npm run single, tools/singletarget.ts: a tower beside one frozen dummy with no resistances, in the sim, reach off): Zeal (a T2 here) 245 DPS, Zealdin 3,481 (14.2x), Tyrael 229,274; Chain Lightning 556, Light Sorc 2,723 (4.9x), Akara 103,160; Blizzard 7,989, Blizzballer 29,089 (3.6x), Akara 102,361; Bone Spirit 835, Bonemancer 3,348 (4.0x), The Summoner 19,878; Bone Spear (a T2) 216, in no recipe. Every evolution is at least twice its source tower on one target (the 4x pair calibration), so the "sum of the consumed towers" floor was not needed and nothing changed. The design's separate T5 (three-tower evolutions) is still unbuilt; the legend is the tier-5 tower.
+Single-target damage (npm run single, tools/singletarget.ts: a tower beside one frozen dummy with no resistances, in the sim, reach off): Zeal (a T2 here) 245 DPS, Zealdin 3,481 (14.2x), Tyrael 229,274; Chain Lightning 556, Light Sorc 2,723 (4.9x), Akara 103,160; Blizzard 7,989, Blizzballer 29,089 (3.6x), Akara 102,361; Bone Spirit 835, Bonemancer 3,348 (4.0x), The Summoner 19,878; Bone Spear (a T2) 216, in no recipe. Every evolution is at least twice its source tower on one target (the 4x pair calibration), so the "sum of the consumed towers" floor was not needed and nothing changed. The legends are the T5 tier (the design's three-tower evolutions became them): each is three T4 evolutions of a class made one.
 
 Saturation-proof measures (npm run report): the last wave all of whose monsters were killed with none going once round the ring (on a ring nothing leaves, so a lap is the leak), and the monster HP killed in all. They show what the death wave hides behind the Council's wall, at the 115% floor, evolving against held to T3: TWOLINE 192M and 184M HP killed against 137M and 137M, last clean wave 103 against 98; PALADIN 199M and 201M against 145M and 145M, 107 against 102; NECRO 132M and 153M against 43M and 9M, 98 and 102 against 82 and 71. Evolving kills about 40% more HP for the two Paladin bots and stays clean five waves longer; both then die at the same wall.
 
@@ -389,7 +389,7 @@ Harness (npm run report, seeds 1 and 2, the ordinary bots TWOLINE, PALADIN, NECR
 - Death: NECRO and MIXED3 die in Hell Act 2 (target Hell Act 1 or 2: met). TWOLINE stalls on Hell Baal, unable to kill him; with Stage B's endless waves a stall is a death in the first endless Tier. PALADIN clears Hell: its scripted Hammerdin carries it, at 50 to 90 alive weight through Hell. Missed for that bot.
 - Bosses as the point of failure: missed. Deaths come in the waves around the bosses, because a boss wave puts only the boss and its pack on the ring and the alive count eases while it walks. Making boss waves carry an escort stream is the next lever.
 - Tier timing: first T2 on waves 9 to 12 (Normal Act 2 to 3, met), first T3 on waves 21 to 33 (median about 24, late Normal; target Nightmare Act 1, close), first evolution on waves 45 to 52 (late Nightmare to Hell Act 1; target Hell Act 3, early). T5 does not exist yet: the design's three-tower evolutions are still to be built, so its timing is not measured.
-- Unspent gold: the bots hold 10k to 60k at Hell's boss waves, saving for the next tower or the evolution, both now very dear. With T3 the top tier and T5 not built there is little else to buy; the item stages add the sinks.
+- Unspent gold: the bots hold 10k to 60k at Hell's boss waves, saving for the next tower or the evolution, both now very dear. With T3 the top tier and T5 not built there is little else to buy; the item stages add the sinks. (Since Oct 23 T5 is built: the legends.)
 
 ### Stage B: endless Tiers past Hell Baal (Oct 22)
 
@@ -427,13 +427,25 @@ Stat mapping (src/sim/items/gear.ts and tower.ts), D2's values throughout:
 | An aura (item_aura: Infinity's Conviction, Beast's Fanaticism, Pride's Concentration, Doom's Holy Freeze, Last Wish's Might) | the tower projects the aura at the item's level, D2's own numbers at that level, from its own tile; the same aura from its own skill or another tower counts once (strongest). Two items with the same aura: the higher level. Auras no tower has (Holy Shock, Holy Fire, Sanctuary, Thorns, Meditation, Redemption, Defiance, Vigor) do nothing; Holy Freeze from an item slows but does not pulse. |
 | Slain Monsters Rest in Peace | the tower's kills leave no corpse (nothing to explode or revive) |
 | The armour slot itself | every helm, body armour, shield, pair of gloves, boots and belt carries a small built-in bonus by its base tier, normal, exceptional, elite (balance.json implicitGear): helm and boots 1, 2, 3% faster cast rate; shield and gloves 1, 2, 3% attack speed; body armour and belt 1, 2, 3% damage (on spells too). Ours, not D2's, so that nothing equippable is pointless. |
-| Slow target, freeze target | melee: slows for two seconds; freezes (never bosses) |
+| Slow target, freeze target | slow: every tower's hit that hurts slows for two seconds (it was melee only before 0.3.11); freeze: melee, never bosses |
 | Gold find | the killing tower's bounty, added: 100% gold find doubles it |
 | Magic find | the killing tower's drops (Stage D) |
 | Defence, enhanced defence, block | durability: monsters hit the tower's summons by D2's chance to hit (their attack rating against the defence, 5% to 95%) and then the summon blocks by the block chance. Monsters never attack towers. |
-| Resistances, life, mana, leech, attributes, attack rating, light radius, knockback, hit blinds, hit causes flee, chance to cast when struck | nothing (towers are never hit, never miss and have no life) |
+| Each resistance, max resistance and absorb (fire, cold, lightning, poison, magic); explosive and magic arrow; Fade | that element's +% damage on every hit the tower deals, spells, melee and summons (resistance 25% of its value, so +40% Fire Resist is +10% fire damage; max resistance 100%; absorb 50%; Fade +10% of every element) |
+| Life, +% life, vitality, replenish life, life leech, heal after kill, damage reduced, magic damage reduced, defence vs melee and missiles, faster hit recovery, faster block, cannot be frozen, half freeze duration, poison length reduced, stamina, attacker takes damage, durability and its repair | durability: the tower's summons hold a monster that much longer before it breaks through (blockBreakTicks), and have that much more life (+life 25% of its value, so +80 life is +20%; +% life 100%; vitality 50%; leech 200%) |
+| Mana, +% mana, energy, mana regeneration, mana leech, mana after kill, damage to mana, faster run/walk, throwing stack and its replenish, charges not consumed | cast rate: faster cast rate on a caster, attack speed on a melee tower, each at D2's diminishing rate (+mana 10% of its value, so +100 mana is +10%; regeneration 50%; energy 20%) |
+| Attack rating, +% attack rating, dexterity, attack rating against demons and undead, ignore target's defence, -defence and -% defence per hit, light radius | +% damage against champions and uniques, every tower (attack rating 5% of its value, so +200 is +10%; +% attack rating 10%; dexterity 25%; ignore target's defence +10%; light radius +1% a point) |
+| Knockback, hit causes monster to flee, prevent monster heal | slow, with slow target (knockback 10%, flee a fifth of its value, prevent heal 10%; at most 50% together) |
+| Hit blinds target | a chance to stun for 0.3 seconds (balance.json itemStunTicks) on every hit that hurts, half its value in percent; never bosses |
+| Strength, reanimate | +% damage on every tower's hits (strength 25% of its value; reanimate's chance in full) |
+| Experience gained, reduced vendor prices, requirements | extra gold from the tower's kills (experience 5x, prices in full, -% requirements a quarter of it) |
+| Extra blood | open wounds chance, twice its value |
+| Chance to cast when struck, on kill, on death, on level up | cast on hit instead, as chance to cast on striking: at the full chance when struck, half on kill, and 5% of it (so 5%) on death or level up (balance.json itemProcs) |
+| Ethereal, sockets, the min half of enhanced damage, set states | the item model's own: ethereal adds base damage or defence, sockets hold gems, runes and jewels, enhanced damage rolls once for min and max, and a set's state is its look (gear.ts ITEM_MECHANICS) |
 
-Not yet built: the worn weapon does not change the tower's weapon layer (the class composites are extracted with one weapon each); Enigma's Teleport charges do not move a tower.
+No stat is dead (0.3.11): every stat an affix, unique, set item, set bonus, runeword, gem or rune can give, 133 in all, is read by the gear, converted (balance.json itemConversions, a tower effect and its percent per 100 points of the stat), cast on hit (itemProcs) or one of the item model's own; npm run items fails if one is not. The rates keep D2's own affix tiers doing the weighting: a converted stat's tooltip line shows its tower effect first and D2's wording after it in brackets (+10% Fire Damage (Fire Resist +40%)). Measured on item level 85 rolls (converted percent on an item, mean and 90th percentile): normal 0 (its slot's 1 to 3% implicit only), magic 3.9 and 10, rare 11.3 and 22, set items 15.6 and 34 before their set bonuses, uniques 25.2 and 51, runewords 27.3 and 66.
+
+The worn weapon and shield change the tower's weapon and shield layers (Oct 23, render/assets.ts heroGearOf). Not yet built: Enigma's Teleport charges do not move a tower.
 
 ### Stage D: drops (Oct 22)
 
@@ -529,7 +541,7 @@ Harness (npm run loot -- --bots AMAZON,BARB,DRUID,ASSASSIN, itemless and best in
 
 The Amazon plays like the three older classes. The Barbarian is the miss: a melee-only class whose towers touch one path tile each kills too slowly for its income to grow (four Frenzy towers by wave 20, 2,300 gold banked, the ring full on wave 21); the Paladin's melee line only works beside his ranged lines. Its levers are melee reach, or an early ranged pick in the war cry line (War Cry at T1). The Druid and Assassin reach Nightmare Act 5 itemless: their lines are mostly single-target or short-reach at T1 (Firestorm's streams, Fire Blast's small burst, the Shadow line's blind and stun doing no damage), and the bots build little else; in best-in-slot gear they clear Hell (Druid) and reach Tier 3 (Assassin). The 22 is the bots' knife-edge again.
 
-Not built this evening: the four classes' evolutions are two-tower like the others (T5 three-tower evolutions remain unbuilt for every class); the traps stand on the tower rather than where a player would place them; the Barbarian's cries carry no defence cut; Phoenix Strike has only its fire charge.
+Not built this evening: the four classes' evolutions are two-tower like the others (three-tower evolutions were unbuilt then; since Oct 23 the T5 tier is the legends, three T4 evolutions made one); the traps stand on the tower rather than where a player would place them; the Barbarian's cries carry no defence cut; Phoenix Strike has only its fire charge.
 
 ## Overnight decisions
 

@@ -15,7 +15,7 @@
 // A Skeletal Mage shoots one of its skill's missiles (fire, cold, lightning or poison,
 // picked when it is raised) at the missile level of its summon skill calc.
 
-import { aliveWithin, damageAgainst, dealDamage, distSq, findTarget, poison, withBonus } from '../combat.ts';
+import { actorGear, aliveWithin, damageAgainst, dealDamage, distSq, findTarget, poison, withBonus } from '../combat.ts';
 import { geared } from '../items/tower.ts';
 import { archetypeOf } from './registry.ts';
 import { UNITS_PER_TILE, d2FramesToTicks, idiv, isqrt } from '../fixed.ts';
@@ -133,7 +133,7 @@ export const summon: ArchetypeModule<SummonDef> = {
       if (!corpse) return false;
       s.corpses = s.corpses.filter((c) => c.id !== corpse.id);
       const def = sim.data.monsters[corpse.def]!;
-      const hp = Math.max(256, idiv(corpse.maxHp * level.hpPct, 100));
+      const hp = durable(sim, Math.max(256, idiv(corpse.maxHp * level.hpPct, 100)));
       s.summons.push({
         ...unit,
         id: s.nextId++,
@@ -190,8 +190,8 @@ export const summon: ArchetypeModule<SummonDef> = {
       dist: spot.dist,
       x: spot.x,
       y: spot.y,
-      hp: level.hp,
-      maxHp: level.hp,
+      hp: durable(sim, level.hp),
+      maxHp: durable(sim, level.hp),
       minDamage: bolt ? bolt.min : level.min,
       maxDamage: bolt ? bolt.max : level.max,
       element: bolt ? bolt.element : 'phys',
@@ -306,4 +306,9 @@ export function blockerAhead(sim: Sim, monster: Pick<Monster, 'dist' | 'rank' | 
     }
   }
   return best;
+}
+
+/** A summon's life with its tower's durability on it (the acting tower's gear: life and defences, gear.ts). */
+function durable(sim: Sim, hp: number): number {
+  return idiv(hp * Math.max(1, 100 + actorGear(sim).durabilityPct), 100);
 }
