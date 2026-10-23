@@ -106,13 +106,19 @@ export function checkLegend(data: GameData, cls: string): LegendCheck {
 
 function main(): void {
   const data = buildGameData(loadTables(), DESIGN);
+  // The same legends with a legend's reach held to an evolution's: what is left is the damage
+  // multiplier alone (legend.dpsPct). The full ratio adds the reach step, more swings and hits.
+  const balance = structuredClone(DESIGN.balance);
+  balance.legend.reachLevels = data.economy.evolutionReach.levels;
+  const sameReach = buildGameData(loadTables(), { ...DESIGN, balance });
+  const x = (a: number, b: number) => (b > 0 ? `${(a / b).toFixed(2)}x` : '(no dps)');
   console.log('T5 legends: three evolutions built through the commands, then ascended');
-  console.log('  class        legend                from                                          reachable   parents dps   legend dps   ratio');
+  console.log('  class        legend                from                                          reachable   parents dps   legend dps   ratio   damage alone');
   for (const cls of Object.keys(data.classes)) {
     const r = checkLegend(data, cls);
-    const ratio = r.parentsDps > 0 ? `${(r.legendDps / r.parentsDps).toFixed(2)}x` : '(no dps)';
+    const d = checkLegend(sameReach, cls);
     console.log(
-      `  ${r.cls.padEnd(12)} ${r.legend.padEnd(21)} ${r.recipes.join(', ').padEnd(45)} ${(r.reachable ? 'yes' : `no: ${r.why}`).padEnd(11)} ${String(r.parentsDps).padStart(11)} ${String(r.legendDps).padStart(12)} ${ratio.padStart(7)}`,
+      `  ${r.cls.padEnd(12)} ${r.legend.padEnd(21)} ${r.recipes.join(', ').padEnd(45)} ${(r.reachable ? 'yes' : `no: ${r.why}`).padEnd(11)} ${String(r.parentsDps).padStart(11)} ${String(r.legendDps).padStart(12)} ${x(r.legendDps, r.parentsDps).padStart(7)} ${x(d.legendDps, d.parentsDps).padStart(14)}`,
     );
   }
 }
