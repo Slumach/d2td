@@ -219,6 +219,11 @@ export interface BalanceJson {
    * Trapped Soul, Velocity 0): on the ring everything walks, at the slowest walkers' pace.
    */
   stationaryVelocity: number;
+  /**
+   * Monster types (monstats MonType) that walk the ring faster than their Velocity, by this
+   * percent of the way to their monstats Run speed: zombies, whose walk is the game's slowest.
+   */
+  runningMonTypes: Record<string, number>;
   /** How top-tier skills hit more per attack where skills.txt has no growth (archetypes/common.ts Reach). */
   reach: import('./archetypes/common.ts').Reach;
   auraRangePerTile: number;
@@ -666,7 +671,19 @@ const midway = (row: TableRow, min: string, max: string) => idiv(int(row, min) +
  * superunique: its class's stats with its own name, mods and pack; its unique rank adds the
  * unique HP bonus when it spawns).
  */
-export function monsterDef(tables: Tables, design: MonstersJson, id: string, auraRangePerTile: number, difficulty = 0, atLevel?: number, stationaryVelocity = 3): MonsterDef {
+/**
+ * A monster's speed on the ring, in units per tick: its monstats Velocity (a stationary monster
+ * walks at stationaryVelocity), or for a running type that percent of the way to its Run speed.
+ */
+function walkSpeed(row: TableRow, running: Record<string, number>, stationaryVelocity: number): number {
+  const walk = int(row, 'Velocity') || stationaryVelocity;
+  const run = int(row, 'Run');
+  const pct = running[str(row, 'MonType')];
+  const gain = pct === undefined || run <= walk ? 0 : idiv((run - walk) * VELOCITY_TO_UNITS_PER_TICK * pct, 100);
+  return walk * VELOCITY_TO_UNITS_PER_TICK + gain;
+}
+
+export function monsterDef(tables: Tables, design: MonstersJson, id: string, auraRangePerTile: number, difficulty = 0, atLevel?: number, stationaryVelocity = 3, runningMonTypes: Record<string, number> = {}): MonsterDef {
   const boss = [...design.superuniques, ...design.bosses].find((b) => b.id === id);
   const su = boss?.superunique ? findRow(tables.superuniques, 'Superunique', boss.superunique) : undefined;
   if (boss && su && str(su, 'Class') !== boss.class) throw new Error(`${id}: superuniques.txt class is ${str(su, 'Class')}, not ${boss.class}`);
@@ -728,7 +745,7 @@ export function monsterDef(tables: Tables, design: MonstersJson, id: string, aur
     maxHp: hpOf(maxCol!, 'maxHP'),
     minDamage: pct(col('A1MinD'), lvlCol('DM')),
     maxDamage: pct(col('A1MaxD'), lvlCol('DM')),
-    speed: (int(row, 'Velocity') || stationaryVelocity) * VELOCITY_TO_UNITS_PER_TICK,
+    speed: walkSpeed(row, runningMonTypes, stationaryVelocity),
     resist,
     undead: int(row, 'lUndead') === 1 || int(row, 'hUndead') === 1,
     demon: int(row, 'demon') === 1,
@@ -1375,7 +1392,7 @@ export function buildGameData(
   const monsters: Record<string, MonsterDef> = {};
   const defOf: DefOf = (id, difficulty, level) => {
     const key = level === undefined ? variantId(id, difficulty) : levelVariantId(id, difficulty, level);
-    return (monsters[key] ??= monsterDef(tables, m, id, design.balance.auraRangePerTile, difficulty, level, design.balance.stationaryVelocity));
+    return (monsters[key] ??= monsterDef(tables, m, id, design.balance.auraRangePerTile, difficulty, level, design.balance.stationaryVelocity, design.balance.runningMonTypes));
   };
   // Every monster of the roster at its own level on every difficulty (tests and tools look them up)
   const everyone = [

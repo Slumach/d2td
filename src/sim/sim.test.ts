@@ -215,13 +215,13 @@ describe('data', () => {
     // Nightmare Act 3, wave 4: Fetish Shamans with their Fetishes (the fixture's PartyMin-PartyMax 2-4, so 3), then Endugu's pack
     const wave = data.waves.find((w) => w.difficulty === 1 && w.act === 3 && w.actWave === 4)!;
     expect(wave.groups.map((g) => [baseMonsterId(g.monster), g.count, g.rank])).toEqual([
-      ['fetishshaman2', 22, 'normal'],
+      ['fetishshaman2', 15, 'normal'],
       ['fetish2', 3, 'normal'],
       ['fetish4', 2, 'normal'],
       ['endugu', 1, 'unique'],
       // The act's champion pack: this is its last wave before Mephisto
       ['fetishshaman2', 3, 'champion'],
-      ['fetishshaman2', 23, 'normal'],
+      ['fetishshaman2', 15, 'normal'],
     ]);
   });
 

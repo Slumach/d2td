@@ -39,6 +39,7 @@
   "auraRangePerTile": 8,
   "reach": { "fromLevel": 24, "areaPctPerLevel": 2, "areaMaxPct": 200, "levelsPerTarget": 10 },
   "stationaryVelocity": 3,
+  "runningMonTypes": { "zombie": 50 },
   "chillPct": 50,
   "staticFloorPct": [0, 33, 50],
   "corpseLifetimeTicks": 200,
@@ -46,8 +47,8 @@
   "blockRangeTenths": 6,
   "blockBreakTicks": 120,
   "waves": {
-    "intervalTicks": 900,
-    "streamTicks": 900,
+    "intervalTicks": 600,
+    "streamTicks": 600,
     "championPackSize": 3,
     "swarm": { "spacingTicks": 20 },
     "tank": { "spacingTicks": 30 }
