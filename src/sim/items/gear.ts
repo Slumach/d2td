@@ -26,11 +26,14 @@
 //     block                                        summons, by D2's chance to hit
 //   every other stat (balance.json                 converted, per 100 points: resistances to that
 //     itemConversions)                             element's damage, life and defences to durability
-//                                                   (how long its summons hold), mana to cast rate,
+//                                                   (how long its summons hold; damage on a tower with
+//                                                   none, items/tower.ts), mana to cast rate,
 //                                                   attack rating to damage on champions and uniques,
 //                                                   knockback and flee to slow, blind to a stun chance,
 //                                                   strength to damage; when-struck, kill, death and
-//                                                   level-up casts cast on hit (balance.json itemProcs)
+//                                                   level-up casts cast on hit (balance.json itemProcs);
+//                                                   magic, rare and set items convert at a higher rate
+//                                                   (balance.json itemQualityPct)
 //
 // Weapons also carry their base damage: a melee tower swings its worn weapon instead of its
 // class weapon, enhanced damage on it as in D2.
@@ -39,7 +42,7 @@ import type { ImplicitGear, ItemConversions } from '../data.ts';
 import type { Element } from '../state.ts';
 import { CLASS_CODES, SLOTS, type ItemBase, type ItemData, type Slot } from './data.ts';
 import { idiv } from '../fixed.ts';
-import { itemStats, propertyStats, type Item, type StatRoll } from './item.ts';
+import { itemStats, propertyStats, type Item, type Quality, type StatRoll } from './item.ts';
 
 export type Gear = Partial<Record<Slot, Item>>;
 
@@ -174,8 +177,14 @@ const framesToTicks = (frames: number) => Math.trunc((frames * 20) / 25);
 
 /** Every stat the gear gives, set bonuses included. */
 export function gearStats(data: ItemData, gear: Gear): StatRoll[] {
+  return gearSources(data, gear).flatMap((g) => g.stats);
+}
+
+/** The gear's stats by the quality that gives them: each item's own (sockets included), and set bonuses as set. */
+function gearSources(data: ItemData, gear: Gear): { quality: Quality; stats: StatRoll[] }[] {
   const worn = SLOTS.map((s) => gear[s]).filter((i): i is Item => i !== undefined);
-  const out: StatRoll[] = worn.flatMap((i) => itemStats(data, i));
+  const out = worn.map((i) => ({ quality: i.quality, stats: itemStats(data, i) }));
+  const bonus: StatRoll[] = [];
   // Set bonuses: each set piece's own partial bonus for the count worn, and the set's
   const bySet = new Map<string, Item[]>();
   for (const i of worn) {
@@ -186,21 +195,31 @@ export function gearStats(data: ItemData, gear: Gear): StatRoll[] {
     const n = pieces.length;
     for (const piece of pieces) {
       const def = data.setItems.find((s) => s.id === piece.setItem)!;
-      for (let k = 2; k <= n; k++) for (const p of def.partial[k - 2] ?? []) out.push(...propertyStats(data, p, undefined, piece.ilvl));
+      for (let k = 2; k <= n; k++) for (const p of def.partial[k - 2] ?? []) bonus.push(...propertyStats(data, p, undefined, piece.ilvl));
     }
     const set = data.sets[setId];
     if (!set) continue;
     const clvl = Math.max(...pieces.map((p) => p.ilvl));
-    for (let k = 2; k <= n; k++) for (const p of set.partial[k - 2] ?? []) out.push(...propertyStats(data, p, undefined, clvl));
-    if (n >= set.items.length && set.items.length > 0) for (const p of set.full) out.push(...propertyStats(data, p, undefined, clvl));
+    for (let k = 2; k <= n; k++) for (const p of set.partial[k - 2] ?? []) bonus.push(...propertyStats(data, p, undefined, clvl));
+    if (n >= set.items.length && set.items.length > 0) for (const p of set.full) bonus.push(...propertyStats(data, p, undefined, clvl));
   }
+  if (bonus.length > 0) out.push({ quality: 'set', stats: bonus });
   return out;
 }
 
 /** The tower effects of the gear a tower of class `towerClass` wears (see the table above). */
-export function towerGear(data: ItemData, gear: Gear, towerClass: string, implicit: ImplicitGear = {}, conversions: ItemConversions = {}, procs: Record<string, number> = {}): TowerGear {
+export function towerGear(
+  data: ItemData,
+  gear: Gear,
+  towerClass: string,
+  implicit: ImplicitGear = {},
+  conversions: ItemConversions = {},
+  procs: Record<string, number> = {},
+  qualityPct: Partial<Record<string, number>> = {},
+): TowerGear {
   const g: TowerGear = { ...NO_GEAR, adds: {}, plusSkill: {}, plusTab: {}, castOnHit: [], resistDown: {}, skillDamagePct: {}, auras: [], elementDamagePct: {} };
-  const stats = gearStats(data, gear);
+  const sources = gearSources(data, gear);
+  const stats = sources.flatMap((x) => x.stats);
   const sum = (stat: string) => stats.filter((s) => s.stat === stat).reduce((n, s) => n + s.value, 0);
   const myClass = CLASS_INDEX[CLASS_CODES[towerClass] ?? ''] ?? -1;
   const add = (e: Element, min: number, max: number) => {
@@ -283,7 +302,7 @@ export function towerGear(data: ItemData, gear: Gear, towerClass: string, implic
     if (base.block > 0) g.blockPct = Math.min(75, g.blockPct + base.block);
   }
   g.defense = defense;
-  convert(g, stats, conversions);
+  convert(g, sources, conversions, qualityPct);
   // Every armour slot carries a small built-in bonus by its base's tier, so nothing worn is nothing
   for (const s of SLOTS) {
     const item = gear[s];
@@ -300,22 +319,25 @@ export function towerGear(data: ItemData, gear: Gear, towerClass: string, implic
 
 /**
  * A converted stat's tower effect, in hundredths of a percent: its value times its rate
- * (balance.json itemConversions, percent per 100 points). Undefined for a stat read directly.
+ * (balance.json itemConversions, percent per 100 points) and its item quality's percent
+ * (itemQualityPct). Undefined for a stat read directly.
  */
-export function convertedHundredths(conversions: ItemConversions, stat: string, value: number): { effect: ItemConversions[string][0]; hundredths: number } | undefined {
+export function convertedHundredths(conversions: ItemConversions, stat: string, value: number, qualityPct = 100): { effect: ItemConversions[string][0]; hundredths: number } | undefined {
   const rule = conversions[stat];
-  return rule && { effect: rule[0], hundredths: value * rule[1] };
+  return rule && { effect: rule[0], hundredths: idiv(value * rule[1] * qualityPct, 100) };
 }
 
 /**
  * The stats a tower has no direct use for, as tower effects: each effect sums its stats'
  * values times their rates and rounds down once, so many small rolls still count.
  */
-function convert(g: TowerGear, stats: readonly StatRoll[], conversions: ItemConversions): void {
+function convert(g: TowerGear, sources: readonly { quality: Quality; stats: readonly StatRoll[] }[], conversions: ItemConversions, qualityPct: Partial<Record<string, number>>): void {
   const total = new Map<ItemConversions[string][0], number>();
-  for (const s of stats) {
-    const c = convertedHundredths(conversions, s.stat, s.value);
-    if (c) total.set(c.effect, (total.get(c.effect) ?? 0) + c.hundredths);
+  for (const { quality, stats } of sources) {
+    for (const s of stats) {
+      const c = convertedHundredths(conversions, s.stat, s.value, qualityPct[quality] ?? 100);
+      if (c) total.set(c.effect, (total.get(c.effect) ?? 0) + c.hundredths);
+    }
   }
   for (const [effect, hundredths] of total) {
     const pct = Math.trunc(hundredths / 100);

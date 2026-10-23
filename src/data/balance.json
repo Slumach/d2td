@@ -90,6 +90,8 @@
   },
   "itemProcs": {"item_skillongethit": 100, "item_skillonkill": 50, "item_skillondeath": 5, "item_skillonlevelup": 5},
   "itemStunTicks": 6,
+  "itemQualityPct": {"magic": 200, "rare": 200, "set": 200},
+  "itemDurabilityDamagePct": 25,
   "implicitGear": {
     "helm": { "stat": "castRate", "pct": [1, 2, 3] },
     "armor": { "stat": "damage", "pct": [1, 2, 3] },

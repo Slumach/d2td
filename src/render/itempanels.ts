@@ -84,6 +84,7 @@ export interface ItemPanelHost {
   /** The stat conversions the tooltips show as tower effects (itemtext.ts). */
   readonly conversions?: ItemConversions;
   readonly procs?: Record<string, number>;
+  readonly qualityPct?: Partial<Record<string, number>>;
   /** An item sound by table name (pick up and put down use the item's usesound). */
   sound(name: string | undefined): void;
   /** A one-line message on screen. */

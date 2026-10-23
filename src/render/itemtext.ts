@@ -70,6 +70,10 @@ export interface TextContext {
   /** The game's conversions of stats a tower has no direct use for (balance.json itemConversions, itemProcs). */
   conversions?: ItemConversions;
   procs?: Record<string, number>;
+  /** The conversion rate by item quality, percent (balance.json itemQualityPct). */
+  qualityPct?: Partial<Record<string, number>>;
+  /** The rate the stats being shown convert at: their item's quality's (itemLines sets it). */
+  ratePct?: number;
 }
 
 const ELEMENT_NAMES: Record<string, string> = { fire: 'Fire', cold: 'Cold', ltng: 'Lightning', pois: 'Poison', mag: 'Magic' };
@@ -160,7 +164,7 @@ export function statLines(data: ItemData, stats: readonly StatRoll[], ctx: TextC
   if (res.every((v) => v !== undefined && v === res[0])) {
     for (const r of ['fireresist', 'lightresist', 'coldresist', 'poisonresist']) take(r);
     const d2 = sprintf(s['strModAllResistances'] ?? 'All Resistances %+d', res[0]!);
-    const c = ctx.conversions && convertedHundredths(ctx.conversions, 'fireresist', res[0]!);
+    const c = ctx.conversions && convertedHundredths(ctx.conversions, 'fireresist', res[0]!, ctx.ratePct);
     push(prio('fireresist'), c && c.hundredths !== 0 ? `${effectText('allElements', c.hundredths).replace('Every Element', 'Fire, Cold, Lightning and Poison')} (${d2})` : d2);
   }
 
@@ -171,7 +175,7 @@ export function statLines(data: ItemData, stats: readonly StatRoll[], ctx: TextC
     if (!fmt) continue;
     const cls = Number(st.param);
     // A stat a tower converts: its tower effect, D2's wording after it
-    const c = ctx.conversions && convertedHundredths(ctx.conversions, st.stat, st.value);
+    const c = ctx.conversions && convertedHundredths(ctx.conversions, st.stat, st.value, ctx.ratePct);
     if (c) {
       push(d.priority, `${effectText(c.effect, c.hundredths)} (${sprintf(fmt, st.value).trim()})`);
       continue;
@@ -270,8 +274,9 @@ export function itemLines(data: ItemData, item: Item, o: ItemTextOptions): Line[
     add('Right-click to open a portal to the Secret Cow Level', TIP.white);
   }
 
-  // The item's own properties with what fills its sockets folded in, as D2R shows them
-  lines.push(...statLines(data, own, o));
+  // The item's own properties with what fills its sockets folded in, as D2R shows them,
+  // converted at the item's quality's rate (the set bonuses at the set rate, as gear.ts)
+  lines.push(...statLines(data, own, { ...o, ratePct: o.qualityPct?.[item.quality] ?? 100 }));
   if (item.ethereal && item.sockets > 0) add(sprintf(s['strItemModEtherealSocketed'] ?? 'Ethereal, Socketed (%i)', item.sockets), TIP.blue);
   else if (item.ethereal) add(s['strethereal'] ?? 'Ethereal', TIP.blue);
   else if (item.sockets > 0) add(sprintf(s['Socketable'] ?? 'Socketed (%i)', item.sockets), TIP.blue);
@@ -282,7 +287,7 @@ export function itemLines(data: ItemData, item: Item, o: ItemTextOptions): Line[
     setDef.partial.forEach((props, k) => {
       if (props.length === 0) return;
       const live = worn >= k + 2;
-      for (const l of statLines(data, props.flatMap((p) => propertyStats(data, p, undefined, item.ilvl)), o)) add(`${l.text} (${k + 2} Items)`, live ? TIP.green : TIP.grey);
+      for (const l of statLines(data, props.flatMap((p) => propertyStats(data, p, undefined, item.ilvl)), { ...o, ratePct: o.qualityPct?.['set'] ?? 100 })) add(`${l.text} (${k + 2} Items)`, live ? TIP.green : TIP.grey);
     });
     const set = data.sets[setDef.set];
     if (set) add(set.name, TIP.gold);

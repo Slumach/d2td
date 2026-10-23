@@ -189,6 +189,10 @@ export interface BalanceJson {
   itemProcs: Record<string, number>;
   /** How long a blind's stun holds. */
   itemStunTicks: number;
+  /** The conversion rates on an item of each quality, percent (100 when absent): magic, rare and set items convert at a higher rate. */
+  itemQualityPct: Partial<Record<string, number>>;
+  /** Durability on a tower with no blocking summons becomes damage at this percent of it. */
+  itemDurabilityDamagePct: number;
   cow: CowRules;
   /** Cost of the first level-up at T1, T2, T3. */
   levelCostBase: number[];
@@ -548,6 +552,10 @@ export interface GameData {
   itemProcs: Record<string, number>;
   /** How long a blind's stun holds. */
   itemStunTicks: number;
+  /** The conversion rates on an item of each quality, percent (100 when absent): magic, rare and set items convert at a higher rate. */
+  itemQualityPct: Partial<Record<string, number>>;
+  /** Durability on a tower with no blocking summons becomes damage at this percent of it. */
+  itemDurabilityDamagePct: number;
   /** skills.txt skill name to its Id, for items that name a skill by number. */
   skillIds: Record<string, string>;
   /**
@@ -1514,6 +1522,8 @@ export function buildGameData(
     itemConversions: design.balance.itemConversions,
     itemProcs: design.balance.itemProcs,
     itemStunTicks: design.balance.itemStunTicks,
+    itemQualityPct: design.balance.itemQualityPct,
+    itemDurabilityDamagePct: design.balance.itemDurabilityDamagePct,
     cow: { ...m.cow, ...design.balance.cow },
     monsterVariant: (id: string, difficulty: number, level?: number) => defOf(id, difficulty, level).id,
     skillIds,

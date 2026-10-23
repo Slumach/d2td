@@ -224,17 +224,41 @@ describe('the item stats that act on monsters', () => {
       ]),
     });
     const g = gearOf(sim, tower);
-    const at = (stat: string, value: number) => Math.trunc((value * rates[stat]![1]) / 100);
+    // A magic item converts at its quality's rate
+    const q = sim.data.itemQualityPct['magic'] ?? 100;
+    const at = (stat: string, value: number) => Math.trunc((value * rates[stat]![1] * q) / 10_000);
     expect(g.elementDamagePct.fire).toBe(at('fireresist', 40));
-    expect(g.durabilityPct).toBe(at('maxhp', 80));
     expect(g.castSpeedPct).toBe(at('maxmana', 100));
     expect(g.attackSpeedPct).toBe(at('maxmana', 100));
     expect(g.eliteDamagePct).toBe(at('tohit', 200));
     expect(g.slowPct).toBe(at('item_knockback', 1));
     expect(g.stunChancePct).toBe(at('item_stupidity', 20));
-    expect(g.allDamagePct).toBe(at('strength', 20));
+    // Sacrifice raises no summons: its durability is damage instead
+    expect(g.durabilityPct).toBe(0);
+    expect(g.allDamagePct).toBe(at('strength', 20) + Math.trunc((at('maxhp', 80) * sim.data.itemDurabilityDamagePct) / 100));
     // A cast when struck comes on hit, at its share of the chance
     expect(g.castOnHit).toEqual([{ skill: 'Frost Nova', chancePct: Math.trunc((20 * sim.data.itemProcs['item_skillongethit']!) / 100), level: 3 }]);
+  });
+
+  it('converts magic, rare and set items at their quality rate, uniques and runewords at the plain rate', () => {
+    const sim = testSim();
+    const rate = sim.data.itemConversions['fireresist']![1];
+    const fire = (quality: Item['quality']) => {
+      const tower = placeTower(sim, 6, 4, 'sacrifice');
+      wear(tower, { ring1: { ...item('rin', [{ stat: 'fireresist', value: 40 }]), quality } });
+      return gearOf(sim, tower).elementDamagePct.fire ?? 0;
+    };
+    for (const q of ['magic', 'rare', 'set', 'unique', 'runeword'] as const) expect(fire(q)).toBe(Math.trunc((40 * rate * (sim.data.itemQualityPct[q] ?? 100)) / 10_000));
+    expect(fire('rare')).toBe(2 * fire('unique'));
+  });
+
+  it('keeps durability on a tower whose summons block', () => {
+    const sim = testSim();
+    const tower = placeTower(sim, 6, 5, 'raise-skeleton');
+    wear(tower, { ring1: { ...item('rin', [{ stat: 'maxhp', value: 80 }]), quality: 'unique' } });
+    const g = gearOf(sim, tower);
+    expect(g.durabilityPct).toBe(Math.trunc((80 * sim.data.itemConversions['maxhp']![1]) / 100));
+    expect(g.allDamagePct).toBe(0);
   });
 
   it("puts the converted element and elite damage on the acting tower's hits, and its slow and stun on every hit that hurts", () => {

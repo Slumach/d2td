@@ -10,17 +10,32 @@ import { idiv } from '../fixed.ts';
 import type { Element, Sim, Tower } from '../state.ts';
 import { NO_GEAR, towerGear, type Gear, type TowerGear } from './gear.ts';
 
-const cache = new WeakMap<Gear, { cls: string; gear: TowerGear }>();
+const cache = new WeakMap<Gear, { cls: string; blocks: boolean; gear: TowerGear }>();
 
-/** The effects of what a tower wears. */
+/**
+ * The effects of what a tower wears. Durability is how long its summons hold; a tower with
+ * no summons that block takes it as damage instead (balance.json itemDurabilityDamagePct).
+ */
 export function gearOf(sim: Sim, tower: Tower): TowerGear {
   const worn = tower.gear;
   if (!worn) return NO_GEAR;
   const hit = cache.get(worn);
-  if (hit && hit.cls === tower.cls) return hit.gear;
-  const gear = towerGear(sim.data.items, worn, tower.cls, sim.data.implicitGear, sim.data.itemConversions, sim.data.itemProcs);
-  cache.set(worn, { cls: tower.cls, gear });
+  const blocks = raisesBlockers(sim, tower);
+  if (hit && hit.cls === tower.cls && hit.blocks === blocks) return hit.gear;
+  let gear = towerGear(sim.data.items, worn, tower.cls, sim.data.implicitGear, sim.data.itemConversions, sim.data.itemProcs, sim.data.itemQualityPct);
+  if (!blocks && gear.durabilityPct > 0) gear = { ...gear, durabilityPct: 0, allDamagePct: gear.allDamagePct + idiv(gear.durabilityPct * sim.data.itemDurabilityDamagePct, 100) };
+  cache.set(worn, { cls: tower.cls, blocks, gear });
   return gear;
+}
+
+/** Whether a skill the tower casts raises summons that block the path (melee summons and revives). */
+function raisesBlockers(sim: Sim, tower: Tower): boolean {
+  const recipe = tower.evolved ? sim.data.evolutions.find((e) => e.id === tower.evolved) : undefined;
+  const ids = recipe ? [recipe.attack.skill, recipe.partner.skill] : [tower.picks[tower.tier - 1]];
+  return ids.some((id) => {
+    const skill = id ? sim.data.skills[id] : undefined;
+    return skill?.archetype === 'summon' && (skill.kind === 'melee' || skill.kind === 'revive');
+  });
 }
 
 /** Skill levels the gear adds to a skill: +all and +class skills, +its tab, +the skill itself, +fire skills on fire skills. */
