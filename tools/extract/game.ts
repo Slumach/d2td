@@ -37,8 +37,10 @@ export const CHECKSUM_FILE = 'checksums.json';
  * 12: Act 3: its monsters and maps.
  * 13: Act 4: its monsters and maps.
  * 14: Act 5: its monsters and maps.
+ * 29: cast sounds from skills.txt's class, do and charge-up columns where a skill has no
+ *     stsound (the War Cries, Bash, Arctic Blast, Tiger Strike), and more cast overlays.
  */
-export const EXTRACT_VERSION = 28;
+export const EXTRACT_VERSION = 29;
 /** What verifyGame reports when the extraction is from an older version of the game. */
 export const OUTDATED = 'version';
 

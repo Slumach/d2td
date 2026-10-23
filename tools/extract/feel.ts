@@ -95,6 +95,26 @@ export function soundJob(source: DataSource): SpriteJob {
   const cowLevel = readTable(source, 'levels.txt').find((r) => r['LevelName'] === soundsJson.cow.level);
   const cowEnv = cowLevel ? readTable(source, 'soundenviron.txt').find((r) => String(r['Index']) === column(cowLevel, 'SoundEnv')) : undefined;
   const skillName = (id: string) => DESIGN.skills.find((s) => s.id === id)?.skill;
+  const weapons = readTable(source, 'weapons.txt');
+  /**
+   * A melee skill with no sound of its own (Double Swing, Frenzy) swings its line's weapon as D2
+   * does: sounds.txt's weapon_<wclass>_large_1 (or _small_1), the weapon class from weapons.txt.
+   */
+  const swingOf = (id: string): string[] => {
+    if (DESIGN.skills.find((s) => s.id === id)?.archetype !== 'melee') return [];
+    for (const c of DESIGN.classes) {
+      for (const [lineId, line] of Object.entries(c.lines)) {
+        if (!line.tiers.flat().includes(id)) continue;
+        const heroes = sprites.heroes as Record<string, { lines: Record<string, { weapon?: string }> }>;
+        const name = heroes[c.id]?.lines[lineId]?.weapon;
+        const wclass = column(weapons.find((w) => w['name'] === name) ?? {}, 'wclass').toLowerCase();
+        if (!wclass) return [];
+        const large = resolve(`weapon_${wclass}_large_1`);
+        return large.length > 0 ? large : resolve(`weapon_${wclass}_small_1`);
+      }
+    }
+    return [];
+  };
   const manifest: SoundManifest = {
     music: env ? (resolve(column(env, 'Song'), 'global/music/')[0] ?? null) : null,
     ambience: env ? (resolve(column(env, 'Day Ambience'))[0] ?? null) : null,
@@ -103,7 +123,11 @@ export function soundJob(source: DataSource): SpriteJob {
     cast: Object.fromEntries(
       DESIGN.skills.map(({ id }) => {
         const row = skills.find((r) => r['skill'] === skillName(id));
-        return [id, row ? resolve(column(row, 'stsound')) : []];
+        // stsound, else the class's own start sound (the War Cries, Bash's grunt), else the
+        // sound of its doing (Fire Blast's throw) or of its charge-up (Arctic Blast, Tiger Strike)
+        const name = row ? ['stsound', 'stsoundclass', 'dosound', 'prgsound'].map((c) => column(row, c)).find(Boolean) : undefined;
+        const own = name ? resolve(name) : [];
+        return [id, own.length > 0 ? own : swingOf(id)];
       }),
     ),
     travel: Object.fromEntries(artMissiles().map((m) => [m, resolve(column(missiles.find((r) => r['Missile'] === m) ?? {}, 'TravelSound'))])),
