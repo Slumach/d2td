@@ -1,3 +1,9 @@
+0.3.9
+
+- Build prices are flat again: every tower costs 600, however many you own.
+- Smoother waves: no wave carries more than 1.3 times the monster HP of the one before it, and no boss wave more than 2.5 times. Superunique packs shrink to fit. Travincal's Council is three strong in its waves, and the Durance's three come with Mephisto.
+- The early acts are easier than in 0.3.8 as a result.
+
 0.3.8
 
 - Evolutions reach further: an evolved tower fires more arrows, bolts and jumps, swings more often and covers more ground than its parents, and each evolved level adds more.
