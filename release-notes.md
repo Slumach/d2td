@@ -1,3 +1,9 @@
+0.3.12
+
+- Hell is much harder: its monsters have many times the HP they had, so towers without good items stop in Hell's first two acts. Normal and Nightmare are unchanged.
+- Fixed endless monsters above level 110, whose HP, damage and defence grew far too fast; endless now climbs a little faster each wave instead (4% a wave).
+- Baal's endless wave is still a big step: that is his own HP in the game's tables.
+
 0.3.11
 
 - Every item stat now does something on a tower. Resistances add that element's damage, life and defences make your summons hold monsters longer, mana and mana regeneration speed up casting, attack rating adds damage against champions and uniques, knockback and flee slow, blind can stun, and when-struck casts trigger on hit. Tooltips show the tower effect first, with D2's wording after it.
