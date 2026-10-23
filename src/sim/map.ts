@@ -30,7 +30,7 @@ export interface PathSegment {
 export interface Arc {
   /** Ring distance of the arc's first corner (the handoff into it). */
   start: number;
-  /** Ring distance where its monsters spawn: just after that corner. */
+  /** Ring distance where its monsters spawn: the middle of its side, halfway from its corner to the next. */
   spawn: number;
 }
 
@@ -127,7 +127,9 @@ export function createMap(): GameMap {
   const perArc = ring.arc.length;
   const arcs = Array.from({ length: ARC_COUNT }, (_, k) => {
     const s = startOf[k * perArc]!;
-    return { start: s, spawn: s + ring.spawnTiles * UNITS_PER_TILE };
+    // The side runs from this arc's corner to the next arc's, which is the first turned a quarter
+    const side = (size - 1 - 2 * ring.arc[0]![0]!) * UNITS_PER_TILE;
+    return { start: s, spawn: s + idiv(side, 2) };
   });
 
   const pathTiles = new Array<boolean>(size * size).fill(false);

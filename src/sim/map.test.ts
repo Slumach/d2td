@@ -25,7 +25,7 @@ describe('ring', () => {
     }
   });
 
-  it("has a U-bend whose pocket tile touches all three legs, and each arc's spawn just past its corner", () => {
+  it("has a U-bend whose pocket tile touches all three legs, and each arc's spawn in the middle of its side", () => {
     // Arc 0's U: legs down x = 30 and up x = 32, bottom along y = 7; the pocket is x = 31
     for (const y of [3, 4, 5, 6, 7]) {
       expect(isPathTile(map, 30, y)).toBe(true);
@@ -37,8 +37,9 @@ describe('ring', () => {
     expect([isPathTile(map, 30, 6), isPathTile(map, 32, 6), isPathTile(map, 31, 7)]).toEqual([true, true, true]);
     expect(isBlocked(map, pocket.x, pocket.y)).toBe(false);
     // Spawns sit one tile past each arc's first corner
-    for (const a of map.arcs) expect(a.spawn - a.start).toBe(1000);
-    expect(positionAt(map, map.arcs[0]!.spawn)).toEqual(tileCenter({ x: 4, y: 3 }));
+    // Halfway from the corner at (3, 3) to the next arc's at (38, 3): x 21, the grid's middle
+    for (const a of map.arcs) expect(a.spawn - a.start).toBe(17_500);
+    expect(positionAt(map, map.arcs[0]!.spawn)).toEqual({ x: 21_000, y: tileCenter({ x: 3, y: 3 }).y });
   });
 
   it('gives every tile to one arc, rotationally, and each arc its own handoff corner', () => {

@@ -227,8 +227,8 @@ export function earlySendBonus(sim: Sim): number {
 
 /**
  * The next wave enters the ring, and the timer restarts for the one after. On a shared
- * ring every player's arc spawns the whole wave at its spawn point; a single player owns
- * every arc, so their wave is dealt out over the four spawn points a group at a time.
+ * ring every player's arc spawns the whole wave at its spawn point, the middle of its side;
+ * alone, the whole wave comes from arc 0's (the top side's middle).
  */
 function startWave(sim: Sim): void {
   const s = sim.state;
@@ -240,7 +240,7 @@ function startWave(sim: Sim): void {
   for (let p = 0; p < sim.players; p++) {
     let offset = 1;
     waveDef.groups.forEach((group, g) => {
-      // Alone, everything comes from one corner of the ring (arc 0, the marked spawn); on a shared ring each player's arc
+      // Alone, everything comes from the middle of the top side (arc 0, the marked spawn); on a shared ring each player's arc
       const arc = sim.players === 1 ? 0 : p;
       const dist = sim.map.arcs[arc]!.spawn;
       offset += group.delayTicks ?? 0;
