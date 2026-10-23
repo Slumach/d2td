@@ -1,3 +1,9 @@
+0.3.10
+
+- Waves come back to full strength: every wave spawns with the monster HP the game's tables give it. 0.3.9's smoothing had cut whole runs of waves after any small one.
+- Only superunique and champion packs are trimmed, so a pack can add at most 30% to its wave (150% on a boss wave). Normal and Nightmare play as in 0.3.8.
+- Travincal's Council is still three strong in its waves, and the Durance's three still come with Mephisto.
+
 0.3.9
 
 - Build prices are flat again: every tower costs 600, however many you own.
