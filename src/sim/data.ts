@@ -150,11 +150,11 @@ export interface BalanceJson {
    */
   bossHpPct: { first: number; last: number };
   /**
-   * The schedule's smoothness: no regular wave's total HP (as spawned) above regularMaxPct of
-   * the wave before's, no boss wave's above bossMaxPct; a wave over its budget shrinks its
-   * superunique packs first (members and HP, down to packMinPct), then all its HP.
+   * The packs' budget: a wave's target HP is its own from the tables (its stream, or a boss
+   * with its minions); its superunique and champion packs scale their members and HP so the
+   * wave stays within regularMaxPct of its target (a boss wave bossMaxPct). Nothing else is cut.
    */
-  waveSmoothing: { regularMaxPct: number; bossMaxPct: number; packMinPct: number };
+  packBudget: { regularMaxPct: number; bossMaxPct: number };
   /**
    * Monster HP by stage, against the towers of the stage: at each act of each difficulty a
    * regular monster takes about hitsToKill single hits (dps.ts singleHit) from the median
@@ -403,7 +403,7 @@ export interface WaveGroup {
   mods: MonsterMod[];
   /** A named monster's pack (its id): the leader and its minions. */
   pack?: string;
-  /** Percent on its monsters' HP: a superunique pack fitted to its wave's HP budget (see smoothWave). */
+  /** Percent on its monsters' HP: a superunique or champion pack fitted to its wave's budget (see fitPacks). */
   hpPct?: number;
 }
 
@@ -427,8 +427,6 @@ export interface WaveDef {
   tier?: number;
   hpPct?: number;
   damagePct?: number;
-  /** Per mille on every monster's HP so the wave keeps to its budget over the wave before (see smoothWave). */
-  smoothPermille?: number;
 }
 
 export interface Economy {
@@ -1015,7 +1013,7 @@ export function stageHpPctFrom(
  */
 export function waveTotalHp(wave: WaveDef, index: number, rules: Pick<Rules, 'stageHpPct' | 'bossHpPct' | 'championHpPct' | 'uniqueHpPct'>, monsters: Record<string, MonsterDef>): number {
   const stage = rules.stageHpPct[wave.tier !== undefined ? '2-5' : `${wave.difficulty}-${wave.act}`] ?? 100;
-  const wavePct = idiv(idiv((wave.hpPct ?? 100) * stage, 100) * (wave.smoothPermille ?? 1000), 1000);
+  const wavePct = idiv((wave.hpPct ?? 100) * stage, 100);
   let total = 0;
   for (const g of wave.groups) {
     const d = monsters[g.monster];
@@ -1027,46 +1025,57 @@ export function waveTotalHp(wave: WaveDef, index: number, rules: Pick<Rules, 'st
   return total;
 }
 
+/** True for a group in a pack the budget scales: a superunique's pack (not a boss's), or a champion pack. */
+export function inPack(wave: WaveDef, g: WaveGroup): boolean {
+  if (g.rank === 'champion') return true;
+  if (g.rank === 'boss' || g.pack === undefined) return false;
+  return wave.groups.some((h) => h.pack === g.pack && h.rank === 'unique');
+}
+
+/** A wave's target HP: its own from the tables, everything but its superunique and champion packs. */
+export function waveTargetHp(wave: WaveDef, index: number, rules: Pick<Rules, 'stageHpPct' | 'bossHpPct' | 'championHpPct' | 'uniqueHpPct'>, monsters: Record<string, MonsterDef>): number {
+  return waveTotalHp({ ...wave, groups: wave.groups.filter((g) => !inPack(wave, g)) }, index, rules, monsters);
+}
+
 /**
- * Fits a wave to its budget over the wave before (`previous`, its total HP): a regular wave
- * to waveSmoothing.regularMaxPct of it, a boss wave to bossMaxPct. Over budget, its
- * superunique packs shrink first, members and leaders' HP alike, as far as packMinPct; then
- * the whole wave's HP (smoothPermille). Mutates the wave; returns its total after.
+ * Fits a wave's packs to its budget: its superunique and champion packs scale their members'
+ * count and every member's and leader's HP, by one percent, so the wave's total stays within
+ * packBudget.regularMaxPct of its target (bossMaxPct for a boss wave). The target itself, the
+ * stream or the boss, is never cut. Mutates the wave; returns its total after.
  */
-export function smoothWave(
+export function fitPacks(
   wave: WaveDef,
   index: number,
-  previous: number | undefined,
   balance: BalanceJson,
   rules: Pick<Rules, 'stageHpPct' | 'bossHpPct' | 'championHpPct' | 'uniqueHpPct'>,
   monsters: Record<string, MonsterDef>,
 ): number {
-  let total = waveTotalHp(wave, index, rules, monsters);
-  if (previous === undefined || previous <= 0) return total;
-  const { regularMaxPct, bossMaxPct, packMinPct } = balance.waveSmoothing;
-  const cap = idiv(previous * (wave.final ? bossMaxPct : regularMaxPct), 100);
-  if (total <= cap) return total;
-  // Superunique packs: a pack whose leader walks as a unique
-  const packs = new Set(wave.groups.filter((g) => g.pack && g.rank === 'unique').map((g) => g.pack!));
-  const inPack = (g: WaveGroup) => g.pack !== undefined && packs.has(g.pack) && g.rank !== 'boss';
-  const packHp = waveTotalHp({ ...wave, groups: wave.groups.filter(inPack) }, index, rules, monsters);
-  if (packHp > 0) {
-    const rest = total - packHp;
-    const pct = Math.max(packMinPct, Math.min(100, Math.floor(((cap - rest) * 100) / packHp)));
-    for (const g of wave.groups) {
-      if (!inPack(g)) continue;
-      // Leaders keep their place at less HP; members come fewer, and weaker
-      if (g.rank !== 'unique') g.count = Math.max(0, idiv(g.count * pct, 100));
-      g.hpPct = pct;
+  const total = waveTotalHp(wave, index, rules, monsters);
+  const target = waveTargetHp(wave, index, rules, monsters);
+  const cap = idiv(target * (wave.final ? balance.packBudget.bossMaxPct : balance.packBudget.regularMaxPct), 100);
+  const packHp = total - target;
+  if (total <= cap || packHp <= 0) return total;
+  const pct = Math.max(1, Math.min(100, Math.floor(((cap - target) * 100) / packHp)));
+  for (const g of wave.groups) {
+    if (!inPack(wave, g)) continue;
+    // A superunique leader keeps its place at less HP; members come fewer and weaker; a
+    // champion pack keeps at least one champion
+    if (g.rank === 'champion') g.count = Math.max(1, idiv(g.count * pct, 100));
+    else if (g.rank !== 'unique') g.count = idiv(g.count * pct, 100);
+    g.hpPct = pct;
+  }
+  wave.groups = wave.groups.filter((g) => g.count > 0);
+  // Rounding a champion pack up to one can leave it over: its HP comes down the rest of the way
+  let after = waveTotalHp(wave, index, rules, monsters);
+  if (after > cap) {
+    const left = waveTotalHp({ ...wave, groups: wave.groups.filter((g) => inPack(wave, g)) }, index, rules, monsters);
+    if (left > 0) {
+      const extra = Math.max(1, Math.floor(((cap - target) * 100) / left));
+      for (const g of wave.groups) if (inPack(wave, g)) g.hpPct = Math.max(1, idiv((g.hpPct ?? 100) * extra, 100));
+      after = waveTotalHp(wave, index, rules, monsters);
     }
-    wave.groups = wave.groups.filter((g) => g.count > 0);
-    total = waveTotalHp(wave, index, rules, monsters);
   }
-  if (total > cap) {
-    wave.smoothPermille = Math.max(1, Math.floor((cap * 1000) / total));
-    total = waveTotalHp(wave, index, rules, monsters);
-  }
-  return total;
+  return after;
 }
 
 export function bossHpPctFrom(balance: BalanceJson, waves: WaveDef[]): Record<number, number> {
@@ -1197,7 +1206,7 @@ export interface Ladder {
 export interface BuildOptions {
   /** Check skill JSON tierBonus values against the computed ones (default true). */
   checkTierBonus?: boolean;
-  /** False builds the waves as the content writes them, unfitted to the schedule's budget (tests of their makeup). */
+  /** False builds the waves as the content writes them, packs unfitted to their budget (tests of their makeup). */
   smooth?: boolean;
 }
 
@@ -1392,8 +1401,7 @@ export function buildGameData(
           while (waves.length < upTo) {
             const wave = endlessWave(design.balance, m, defOf, campaign.length, waves.length - campaign.length + 1);
             if (wave.final) rules.bossHpPct[waves.length] = design.balance.bossHpPct.last;
-            const before = waves[waves.length - 1];
-            if (smooth) smoothWave(wave, waves.length, before ? waveTotalHp(before, waves.length - 1, rules, monsters) : undefined, design.balance, rules, monsters);
+            if (smooth) fitPacks(wave, waves.length, design.balance, rules, monsters);
             waves.push(wave);
           }
         }
@@ -1415,10 +1423,9 @@ export function buildGameData(
   };
   // The HP curve reads the evolved towers' attacks at their bought levels
   rules.stageHpPct = stageHpPctFrom(design.balance, campaign, monsters, design.classes, skills, evolutions, (id, plus, bonus) => skills[skillVariant(id, plus, undefined, bonus)]!).pct;
-  // Then the schedule is smoothed wave by wave, each against the one before it as it spawns
-  let previous: number | undefined;
+  // Then each wave's packs fit its budget over its own target (never another wave's)
   const smooth = options.smooth !== false;
-  if (smooth) campaign.forEach((w, i) => (previous = smoothWave(w, i, previous, design.balance, rules, monsters)));
+  if (smooth) campaign.forEach((w, i) => fitPacks(w, i, design.balance, rules, monsters));
   const skillIds: Record<string, string> = {};
   for (const r of tables.skills) {
     const name = str(r, 'skill');

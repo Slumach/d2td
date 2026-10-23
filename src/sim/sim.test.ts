@@ -5,7 +5,7 @@ import { hasTables, loadTables } from '../../tools/lib/load-tables.ts';
 import { runBot, type Strategy } from '../../tools/bots.ts';
 import { damageAt, elementalAtLevel } from './archetypes/common.ts';
 import type { BuffAuraDef, ControlDef, DebuffDef, ProjectileDef } from './archetypes/types.ts';
-import { baseMonsterId, buildGameData, compound, resolveSkill, waveTotalHp, type GameData } from './data.ts';
+import { baseMonsterId, buildGameData, compound, resolveSkill, waveTargetHp, waveTotalHp, type GameData } from './data.ts';
 import { isqrt } from './fixed.ts';
 import { FIXTURE_BUILD, FIXTURE_TABLES, fixtureDesign, fixtureGameData } from './fixture.ts';
 import { stateHash } from './hash.ts';
@@ -118,7 +118,8 @@ describe('data', () => {
   });
 
   it("puts each act's champion pack, the wave's own monster, in its last wave before the boss", () => {
-    const waves = fixtureGameData().waves;
+    // As the content writes them; the pack budget may shrink a pack (see the budget test)
+    const waves = fixtureGameData(undefined, { smooth: false }).waves;
     const s = DESIGN.balance.modSchedule;
     for (const w of waves) {
       const packs = w.groups.filter((g) => g.rank === 'champion');
@@ -142,16 +143,18 @@ describe('data', () => {
     for (const wave of [5, 6, 30, 55]) expect(modsOn(1, wave)).toEqual(modsOn(99, wave));
   });
 
-  it('keeps every wave within its budget over the one before: 130% for a regular wave, 250% for a boss', () => {
+  it('spawns every wave at its target, packs fitted within 130% of it (250% for a boss wave)', () => {
     const data = fixtureGameData();
+    const plain = fixtureGameData(undefined, { smooth: false });
     const sim = createSim(data, 1);
-    const { regularMaxPct, bossMaxPct } = DESIGN.balance.waveSmoothing;
-    let prev = 0;
+    const raw = createSim(plain, 1);
+    const { regularMaxPct, bossMaxPct } = DESIGN.balance.packBudget;
     for (let i = 0; i < 120; i++) {
       const w = waveAt(sim, i)!;
-      const total = waveTotalHp(w, i, data.rules, data.monsters);
-      if (prev > 0) expect(total * 100).toBeLessThanOrEqual(prev * (w.final ? bossMaxPct : regularMaxPct) + 100);
-      prev = total;
+      const target = waveTargetHp(w, i, data.rules, data.monsters);
+      // The target is the wave's own, unfitted: nothing but packs is ever cut
+      expect(target).toBe(waveTargetHp(waveAt(raw, i)!, i, plain.rules, plain.monsters));
+      expect(waveTotalHp(w, i, data.rules, data.monsters) * 100).toBeLessThanOrEqual(Math.max(target * (w.final ? bossMaxPct : regularMaxPct), waveTotalHp(waveAt(raw, i)!, i, plain.rules, plain.monsters) * 100) + 100);
     }
   });
 
