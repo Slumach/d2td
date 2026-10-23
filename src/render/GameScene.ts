@@ -499,11 +499,35 @@ export class GameScene extends Phaser.Scene {
     return found.map((f) => ({ ...f, label: many ? ` with ${this.skillName(f.other.picks.at(-1) ?? '')} T${f.other.tier} L${f.other.level}` : '' }));
   }
 
+  /**
+   * What a branch leads to, for a tier-up choice: the next tier's skills on the line and the
+   * evolutions the branch is part of ("Concentration: leads to T3 Fanaticism or Conviction;
+   * evolves Hammerdin with a Blessed Hammer tower").
+   */
+  private branchLead(tower: Tower, tierIndex: number, skill: string): string {
+    const sim = this.sim;
+    const line = sim.data.classes[tower.cls]?.lines[tower.line];
+    const after = line?.tiers[tierIndex + 1];
+    const parts: string[] = [];
+    if (after) parts.push(`leads to T${tierIndex + 2} ${after.map((s) => this.skillName(s)).join(' or ')}`);
+    const recipes = sim.data.evolutions.flatMap((r) => {
+      const other = r.attack.skill === skill ? r.partner : r.partner.skill === skill ? r.attack : undefined;
+      return other ? [`${r.name} with a ${this.skillName(other.skill)} tower`] : [];
+    });
+    parts.push(recipes.length ? `evolves ${recipes.join(', ')}` : 'in no evolution');
+    return `${this.skillName(skill)}: ${parts.join('; ')}`;
+  }
+
   private evolveHint(tower: Tower): string {
     const sim = this.sim;
     const line = sim.data.classes[tower.cls]?.lines[tower.line];
     const ofLine = new Set(line?.tiers.flat() ?? []);
-    const recipes = sim.data.evolutions.filter((r) => ofLine.has(r.attack.skill) || ofLine.has(r.partner.skill));
+    // Not a recipe this tower has branched away from (a Holy Freeze tower makes no Hammerdin)
+    const open = (skill: string) => {
+      const at = line?.tiers.findIndex((opts) => opts.includes(skill)) ?? -1;
+      return at < 0 || at >= tower.picks.length || tower.picks[at] === skill;
+    };
+    const recipes = sim.data.evolutions.filter((r) => (ofLine.has(r.attack.skill) && open(r.attack.skill)) || (ofLine.has(r.partner.skill) && open(r.partner.skill)));
     if (recipes.length === 0) return 'Evolve: this line is in no evolution';
     const parts = recipes.slice(0, 2).map((r) => {
       const own = ofLine.has(r.attack.skill) ? r.attack : r.partner;
@@ -1948,6 +1972,10 @@ export class GameScene extends Phaser.Scene {
     const tier = tierCost(sim, tower);
     if (level !== undefined) lines.push(`Next: level ${tower.level + 1} for ${level} gold`);
     else if (tier !== undefined) lines.push(`Next: tier ${tower.tier + 1} for ${tier} gold`);
+    // A branching tier: what each branch leads to, so the choice can be read before it is made
+    const branchTier = tier !== undefined ? tower.tier : tower.line && tower.picks.length === tower.tier - 1 ? tower.tier - 1 : -1;
+    const branches = branchTier >= 0 ? (line?.tiers[branchTier] ?? []) : [];
+    if (branches.length > 1) for (const skill of branches) lines.push(this.branchLead(tower, branchTier, skill));
     lines.push(`Targeting ${tower.targeting}`);
 
     const buttons: PanelButton[] = [];
@@ -1959,7 +1987,7 @@ export class GameScene extends Phaser.Scene {
       for (const skill of options) {
         const commands: Command[] = [{ type: 'upgradeTier', towerId: tower.id }];
         if (options.length > 1) commands.push({ type: 'pickBranch', towerId: tower.id, skill });
-        buttons.push({ label: options.length > 1 ? `Tier up: ${this.skillName(skill)}` : `Tier up ${tier}g`, enabled: this.gold >= tier, onClick: () => this.issue(...commands) });
+        buttons.push({ label: options.length > 1 ? `T${tower.tier + 1}: ${this.skillName(skill)}` : `Tier up ${tier}g`, enabled: this.gold >= tier, onClick: () => this.issue(...commands) });
       }
     }
     let evolvable = false;
@@ -2025,7 +2053,11 @@ export class GameScene extends Phaser.Scene {
       for (const skill of options) {
         const commands: Command[] = [{ type: 'upgradeTier', towerId: tower.id }];
         if (options.length > 1) commands.push({ type: 'pickBranch', towerId: tower.id, skill });
-        specs.push(this.skillButton(skill, `T${tower.tier + 1}: ${this.skillName(skill)} (${tier}g)`, () => this.issue(...commands), this.gold >= tier));
+        const spec = this.skillButton(skill, `T${tower.tier + 1}: ${this.skillName(skill)} (${tier}g)`, () => this.issue(...commands), this.gold >= tier);
+        if (options.length > 1 && spec.tooltip) spec.tooltip.body = `${this.branchLead(tower, tower.tier, skill)}
+
+${spec.tooltip.body}`;
+        specs.push(spec);
       }
     } else if (!tower.evolved && line && tower.level < MAX_TOWER_LEVEL && tower.tier < line.tiers.length) {
       specs.push({ label: `T${tower.tier + 1} unlocks at level ${MAX_TOWER_LEVEL}`, enabled: false, onClick: () => undefined });
