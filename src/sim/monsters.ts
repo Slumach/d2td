@@ -20,7 +20,7 @@ function rankHpPct(sim: Sim, rank: Rank, wave: number): number {
   return rank === 'champion' ? sim.data.rules.championHpPct : rank === 'unique' ? sim.data.rules.uniqueHpPct : 0;
 }
 
-export function createMonster(sim: Sim, def: string, wave: number, rank: Rank, mods: MonsterMod[], dist: number, hp?: number): Monster {
+export function createMonster(sim: Sim, def: string, wave: number, rank: Rank, mods: MonsterMod[], dist: number, hp?: number, groupHpPct = 100): Monster {
   const s = sim.state;
   const d = sim.data.monsters[def]!;
   const rules = sim.data.rules;
@@ -31,7 +31,8 @@ export function createMonster(sim: Sim, def: string, wave: number, rank: Rank, m
   // (an endless wave stands on the curve's last stage, Hell Act 5, its own ramp on top)
   const stageKey = waveDef ? (waveDef.tier !== undefined ? '2-5' : `${waveDef.difficulty}-${waveDef.act}`) : '';
   const stage = rules.stageHpPct[stageKey] ?? 100;
-  const waveHp = idiv((waveDef?.hpPct ?? 100) * stage, 100);
+  // and the wave's and its group's fit to the schedule's budget (smoothWave)
+  const waveHp = idiv(idiv(idiv((waveDef?.hpPct ?? 100) * stage, 100) * (waveDef?.smoothPermille ?? 1000), 1000) * groupHpPct, 100);
   const maxHp = hp ?? Math.max(256, idiv(idiv(rollInt(s.rng, d.minHp, d.maxHp) * (100 + rankHpPct(sim, rank, wave)), 100) * waveHp, 100));
   let damagePct = rank === 'champion' || rank === 'unique' ? rules.championDamagePct : 0;
   for (const mod of mods) damagePct += rules.mods[mod].damagePct;
@@ -82,7 +83,7 @@ export function spawnMonsters(sim: Sim): void {
   const s = sim.state;
   while (s.spawns.length > 0 && s.spawns[0]!.tick <= s.tick) {
     const spawn = s.spawns.shift()!;
-    const m = createMonster(sim, spawn.def, spawn.wave, spawn.rank, spawn.mods, spawn.dist);
+    const m = createMonster(sim, spawn.def, spawn.wave, spawn.rank, spawn.mods, spawn.dist, undefined, spawn.hpPct ?? 100);
     if (spawn.cow) {
       m.cow = true;
       m.runeBoost = sim.data.cow.runeBoost;

@@ -547,11 +547,6 @@ interface BotConfig {
   elements?: boolean;
   /** Stop building new towers here and only improve the ones there are. */
   maxTowers?: number;
-  /**
-   * After this wave, build only the strongest line it has and, where one makes a recipe with
-   * it, the strongest such partner line (MIXED3: its two best lines by the end of Normal).
-   */
-  focusAfterWave?: number;
   opening?: (ctx: OpeningContext) => Goal[];
 }
 
@@ -745,46 +740,7 @@ interface OpeningContext {
   firstFree: (s: Sim, list: Spot[]) => Spot | undefined;
 }
 
-/**
- * The two lines a bot keeps building once it focuses: the line that killed the most monster
- * HP so far (what happened, not the power model, which overrates some lines), then the line
- * that makes a recipe with it that the power model rates highest (a partner aura kills
- * nothing by itself), or the next by HP killed if none does. Returned as their T1 skills.
- */
-function focusLines(s: Sim, config: BotConfig, cov: Coverage, killed: Map<string, number>): string[] {
-  const towers = s.state.towers.filter((t) => t.legendOf === undefined && t.line);
-  const hpCap = nextWaveHp(s);
-  const foes = config.elements ? comingFoes(s) : undefined;
-  const all = totalPower(s, towers, cov, hpCap, foes);
-  const lines = [...new Set(towers.map((t) => `${t.cls}.${t.line}`))];
-  const worth = new Map(lines.map((key) => [key, all - totalPower(s, towers.filter((t) => `${t.cls}.${t.line}` !== key), cov, hpCap, foes)]));
-  const ranked = [...lines].sort((a, b) => (killed.get(b) ?? 0) - (killed.get(a) ?? 0) || worth.get(b)! - worth.get(a)!);
-  const first = ranked[0];
-  if (!first) return config.builds;
-  const lineOfSkill = (skill: string) => {
-    const p = placeOf(s, skill);
-    return p ? `${p.cls}.${p.line}` : '';
-  };
-  const partnerOf = (key: string) => s.data.evolutions.some((r) => {
-    const a = lineOfSkill(r.attack.skill);
-    const b = lineOfSkill(r.partner.skill);
-    return (a === first && b === key) || (b === first && a === key);
-  });
-  const byWorth = [...lines].sort((a, b) => worth.get(b)! - worth.get(a)!);
-  const second = byWorth.find((k) => k !== first && partnerOf(k)) ?? ranked.find((k) => k !== first);
-  const t1Of = (key: string) => {
-    const [cls, line] = key.split('.') as [string, string];
-    return s.data.classes[cls]!.lines[line]!.tiers[0]![0]!;
-  };
-  return [first, ...(second ? [second] : [])].map(t1Of).filter((t1) => config.builds.includes(t1));
-}
-
-function engineBot(baseConfig: BotConfig, sim: Sim): Bot {
-  // A focusing bot narrows its builds once, at its focus wave (MIXED3 by the end of Normal)
-  let config = baseConfig;
-  let focused = false;
-  // Monster HP each line has killed, by "class.line", for the focus
-  const killed = new Map<string, number>();
+function engineBot(config: BotConfig, sim: Sim): Bot {
   const ranged = rankSpots(sim, 40);
   const melee = rankSpots(sim, 15);
   const cov: Coverage = {
@@ -894,12 +850,6 @@ function engineBot(baseConfig: BotConfig, sim: Sim): Bot {
     strategy: config.strategy,
     evolvedOn,
     decide(s) {
-      if (config.focusAfterWave !== undefined && !focused) {
-        for (const p of s.paid) {
-          const t = s.state.towers.find((u) => u.id === p.tower);
-          if (t?.line) killed.set(`${t.cls}.${t.line}`, (killed.get(`${t.cls}.${t.line}`) ?? 0) + p.hp);
-        }
-      }
       const out = callWaveIfClear(s);
       if (s.state.tick % DECISION_TICKS !== 0) return out;
       const opening = advance(s);
@@ -909,12 +859,6 @@ function engineBot(baseConfig: BotConfig, sim: Sim): Bot {
       const key = keyOf(s);
       if (cached?.key !== key) {
         let pick: Option | undefined;
-        if (config.focusAfterWave !== undefined && !focused && s.state.wave > config.focusAfterWave) {
-          focused = true;
-          const keep = focusLines(s, config, cov, killed);
-          if (keep.length > 0) config = { ...config, builds: keep };
-          if (process.env['BOT_DEBUG']) console.error(`focus at wave ${s.state.wave}: ${keep.join(', ')}`);
-        }
         const all = options(s, config, ranged, melee, cov);
         // Save only for what a few waves of income can pay: a goal further off starves the defence
         const gold = s.state.gold[0] ?? 0;
@@ -998,9 +942,6 @@ CONFIGS.DRUID = { strategy: 'DRUID', builds: ['firestorm', 'arctic-blast', 'rave
 CONFIGS.ASSASSIN = { strategy: 'ASSASSIN', builds: ['fire-blast', 'tiger-strike', 'cloak-of-shadows'], tiers: true, evolve: true, elements: true };
 CONFIGS.MIXED3 = {
   strategy: 'MIXED3',
-  // Its two best lines by the end of Normal, and only those after: enough of one class's
-  // lines to make its recipes
-  focusAfterWave: 25,
   builds: ['sacrifice', 'holy-bolt', 'might', ...SORC_BUILDS, ...NECRO_BUILDS],
   tiers: true,
   evolve: true,
@@ -1021,9 +962,7 @@ export function createBot(strategy: Strategy, sim: Sim, pool?: readonly Item[]):
   const cap = Number(process.env['BOT_MAX_TOWERS'] ?? 0);
   const builds = process.env['BOT_BUILDS']?.split(',');
   const noEvolve = !!process.env['BOT_NO_EVOLVE'];
-  // BOT_NO_FOCUS keeps a focusing bot (MIXED3) building every line all game
-  const noFocus = !!process.env['BOT_NO_FOCUS'];
-  return engineBot({ ...CONFIGS[strategy]!, ...(cap > 0 ? { maxTowers: cap } : {}), ...(builds ? { builds } : {}), ...(noEvolve ? { evolve: false } : {}), ...(noFocus ? { focusAfterWave: undefined } : {}) }, sim);
+  return engineBot({ ...CONFIGS[strategy]!, ...(cap > 0 ? { maxTowers: cap } : {}), ...(builds ? { builds } : {}), ...(noEvolve ? { evolve: false } : {}) }, sim);
 }
 
 /** Debug view: a bot's options right now, best power per gold first. */

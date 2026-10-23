@@ -5,14 +5,14 @@ import { hasTables, loadTables } from '../../tools/lib/load-tables.ts';
 import { runBot, type Strategy } from '../../tools/bots.ts';
 import { damageAt, elementalAtLevel } from './archetypes/common.ts';
 import type { BuffAuraDef, ControlDef, DebuffDef, ProjectileDef } from './archetypes/types.ts';
-import { baseMonsterId, buildGameData, compound, resolveSkill, type GameData } from './data.ts';
+import { baseMonsterId, buildGameData, compound, resolveSkill, waveTotalHp, type GameData } from './data.ts';
 import { isqrt } from './fixed.ts';
 import { FIXTURE_BUILD, FIXTURE_TABLES, fixtureDesign, fixtureGameData } from './fixture.ts';
 import { stateHash } from './hash.ts';
 import { monsterIn } from './testkit.ts';
 import { createMap, isPathTile } from './map.ts';
 import { createRng, nextU32, rollInt } from './rng.ts';
-import { createSim, runLog, step } from './sim.ts';
+import { createSim, runLog, step, waveAt } from './sim.ts';
 import type { TimedCommand } from './state.ts';
 
 describe('isqrt', () => {
@@ -100,7 +100,8 @@ describe('data', () => {
   });
 
   it('a superunique walks in the middle of its wave as the unique, with its pack and its superuniques.txt mods', () => {
-    const data = fixtureGameData();
+    // The waves as the content writes them, before the schedule fits them to its budget
+    const data = fixtureGameData(undefined, { smooth: false });
     const wave = data.waves.find((w) => w.groups.some((g) => g.monster === 'rakanishu@nightmare'))!;
     expect(wave).toMatchObject({ difficulty: 1, act: 1 });
     const groups = wave.groups;
@@ -139,6 +140,19 @@ describe('data', () => {
       return sim.state.spawns.filter((sp) => sp.rank !== 'normal').map((sp) => `${sp.rank}:${sp.mods.join('+')}`);
     };
     for (const wave of [5, 6, 30, 55]) expect(modsOn(1, wave)).toEqual(modsOn(99, wave));
+  });
+
+  it('keeps every wave within its budget over the one before: 130% for a regular wave, 250% for a boss', () => {
+    const data = fixtureGameData();
+    const sim = createSim(data, 1);
+    const { regularMaxPct, bossMaxPct } = DESIGN.balance.waveSmoothing;
+    let prev = 0;
+    for (let i = 0; i < 120; i++) {
+      const w = waveAt(sim, i)!;
+      const total = waveTotalHp(w, i, data.rules, data.monsters);
+      if (prev > 0) expect(total * 100).toBeLessThanOrEqual(prev * (w.final ? bossMaxPct : regularMaxPct) + 100);
+      prev = total;
+    }
   });
 
   it('takes monster HP from its level through monlvl, scaled by its stage on the HP curve', () => {
@@ -194,7 +208,7 @@ describe('data', () => {
   });
 
   it('walks a raiser with its party, its monstats minion1, in the middle of its wave, ahead of its pack', () => {
-    const data = fixtureGameData();
+    const data = fixtureGameData(undefined, { smooth: false });
     // Nightmare Act 3, wave 4: Fetish Shamans with their Fetishes (the fixture's PartyMin-PartyMax 2-4, so 3), then Endugu's pack
     const wave = data.waves.find((w) => w.difficulty === 1 && w.act === 3 && w.actWave === 4)!;
     expect(wave.groups.map((g) => [baseMonsterId(g.monster), g.count, g.rank])).toEqual([

@@ -4,6 +4,7 @@
   "aliveWeight": { "normal": 1, "champion": 2, "unique": 3, "boss": 10 },
   "buildCost": 600,
   "bossHpPct": { "first": 60, "last": 450 },
+  "waveSmoothing": { "regularMaxPct": 130, "bossMaxPct": 250, "packMinPct": 25 },
   "hpCurve": {
     "hitsToKill": 2.5,
     "tiers": { "normal": [0, 1, 2, 2, 2], "nightmare": [2, 3, 3, 3, 3], "hell": [3, 3, 3, 4, 4] },

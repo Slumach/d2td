@@ -291,6 +291,8 @@ export interface Spawn {
   mods: MonsterMod[];
   /** Ring distance it appears at: a spawn point. */
   dist: number;
+  /** Its group's HP percent (a superunique pack fitted to the wave's budget). */
+  hpPct?: number;
   cow?: boolean;
   pack?: string;
 }
@@ -387,6 +389,4 @@ export interface PaidKill {
   player: number;
   /** The monster's full HP (1/256 HP), for the harness's HP-killed count. */
   hp: number;
-  /** The tower that made the kill (0 for none), for the harness's kills by line. */
-  tower: number;
 }

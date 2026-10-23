@@ -245,7 +245,7 @@ function startWave(sim: Sim): void {
       const dist = sim.map.arcs[arc]!.spawn;
       offset += group.delayTicks ?? 0;
       for (let i = 0; i < group.count; i++) {
-        s.spawns.push({ tick: s.tick + offset, def: group.monster, wave, rank: group.rank, mods: [...group.mods], dist, ...(group.pack ? { pack: group.pack } : {}) });
+        s.spawns.push({ tick: s.tick + offset, def: group.monster, wave, rank: group.rank, mods: [...group.mods], dist, ...(group.pack ? { pack: group.pack } : {}), ...(group.hpPct !== undefined ? { hpPct: group.hpPct } : {}) });
         offset += group.spacingTicks;
         count++;
       }

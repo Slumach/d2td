@@ -113,11 +113,11 @@
           "monster": "cantor1",
           "kind": "tank",
           "area": "Travincal",
-          "superunique": ["toorc", "ismail", "bremm", "wyand", "maffer"]
+          "superunique": ["toorc", "ismail"]
         },
         { "monster": "bonefetish5", "kind": "swarm", "area": "Durance of Hate" },
         { "monster": "vampire4", "kind": "tank", "area": "Durance of Hate" },
-        { "boss": "mephisto", "area": "Durance of Hate" }
+        { "boss": "mephisto", "area": "Durance of Hate", "superunique": ["bremm", "wyand", "maffer"] }
       ]
     },
     "4": {
