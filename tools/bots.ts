@@ -152,8 +152,20 @@ interface Buff {
 /** Damage per tick by element. */
 type Parts = Partial<Record<Element, number>>;
 
+/**
+ * A tower's attack as the bot plans it: bare, what it wears a bonus on top. Valued in its
+ * gear, a Zeal tower with a found weapon looked four times as strong and the bot sank its gold
+ * into that line and the auras around it, which paid far less in play: with Nightmare loot
+ * MIXED3 died on 52 and 53, planning bare 55 to 76 (0.3.13).
+ */
+function bareSkill(sim: Sim, t: Tower): ReturnType<typeof activeSkill> {
+  return activeSkill(sim, t.gear ? { ...t, gear: undefined } : t);
+}
+
 /** A volley or a blast counts for at most this many monsters in a typical crowd. */
 const CROWD = 3;
+/** The least floor the pulse cap counts with (see totalPower): Normal's is zero. */
+const PULSE_FLOOR_MIN_PCT = 25;
 
 /**
  * Damage per tick of a skill at a level against a typical crowd, by element. Each hit
@@ -336,8 +348,22 @@ function nextWaveHp(sim: Sim): number {
 
 interface Coverage {
   ranged: Map<string, number>;
-  melee: Map<string, number>;
+  /** Path tiles in a melee skill's own reach (a 1.1 tile swing misses the diagonals): see meleeShare. */
+  melee: (rangeUnits: number, key: string) => number;
   best: number;
+}
+
+/** The coverage maps on an empty ring: ranged at 4 tiles, and melee at each melee skill's reach, worked out as asked. */
+function coverageOf(sim: Sim): Coverage {
+  const empty = sim.state.towers.length === 0 ? sim : createSim(sim.data, 0);
+  const ranged = rankSpots(empty, 40);
+  const byReach = new Map<number, Map<string, number>>();
+  const melee = (rangeUnits: number, key: string) => {
+    let map = byReach.get(rangeUnits);
+    if (!map) byReach.set(rangeUnits, (map = new Map(rankSpots(empty, Math.trunc(rangeUnits / 100)).map((p) => [`${p.x},${p.y}`, p.score]))));
+    return map.get(key) ?? 0;
+  };
+  return { ranged: new Map(ranged.map((p) => [`${p.x},${p.y}`, p.score])), melee, best: ranged[0]?.score ?? 1 };
 }
 
 /** A source of monster effects: an aura, or a curse cast around the tower's reach. */
@@ -388,7 +414,7 @@ function monsterSources(sim: Sim, towers: Tower[]): MonsterSource[] {
  * Without (the Normal bots, whose targets were tuned on it): the classic estimate, the sum
  * of attack plus what monster auras add to the attack they cover, resistances ignored.
  */
-function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number, foes: Foe[] | undefined): number {
+function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number, foes: Foe[] | undefined, perTower?: Map<number, number>): number {
   const buffs = new Map<number, Map<string, Buff>>();
   const sources = towers.flatMap((t) => auraSources(sim, t).map((src) => ({ ...src, tower: t })));
   for (const { tower, skill, aura } of sources) {
@@ -410,6 +436,9 @@ function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number, foe
   const attack = new Map<number, Parts>();
   // Corpse skills and Revive feed on kills made by everything else; kept apart to cap them
   const feeders = new Map<number, Parts>();
+  // Static Field's pulses share one pool, every monster's HP above the difficulty's floor:
+  // kept apart to cap them too, with the share of current HP each one takes
+  const pulses = new Map<number, { parts: Parts; hpPct: number }>();
   for (const t of towers) {
     const buff: Buff = { damagePct: 0, attackSpeedPct: 0, fire: 0 };
     for (const b of buffs.get(t.id)?.values() ?? []) {
@@ -421,20 +450,47 @@ function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number, foe
     const key = `${t.tileX},${t.tileY}`;
     const parts: Parts = {};
     const fed: Parts = {};
+    const pulsed: Parts = {};
+    let pulseHpPct = 0;
     const addSkill = (skill: SkillDef, lvl: number) => {
-      const share = (skill.archetype === 'melee' ? cov.melee.get(key) : cov.ranged.get(key)) ?? 0;
-      const into = skill.archetype === 'corpse' || (skill.archetype === 'summon' && skill.kind === 'revive') ? fed : parts;
+      const share = skill.archetype === 'melee' ? cov.melee(skill.rangeUnits, key) : (cov.ranged.get(key) ?? 0);
+      const pulse = skill.archetype === 'debuff' && skill.mode === 'pulse';
+      if (pulse) pulseHpPct = Math.max(pulseHpPct, skill.levels[lvl]?.hpPct ?? 0);
+      const into = skill.archetype === 'corpse' || (skill.archetype === 'summon' && skill.kind === 'revive') ? fed : pulse ? pulsed : parts;
       for (const [e, v] of Object.entries(attackParts(sim, skill, lvl, recipe?.ignoreSkillDelay ?? false, buff, hpCap)) as [Element, number][]) {
         into[e] = (into[e] ?? 0) + (v * share) / cov.best;
       }
     };
-    const active = activeSkill(sim, t);
+    const active = bareSkill(sim, t);
     if (active) addSkill(active.skill, active.lvl);
     if (t.evolved && t.partnerSkill) addSkill(sim.data.skills[t.partnerSkill]!, t.partnerLevel);
     attack.set(t.id, parts);
     if (Object.keys(fed).length > 0) feeders.set(t.id, fed);
+    if (Object.keys(pulsed).length > 0) pulses.set(t.id, { parts: pulsed, hpPct: pulseHpPct });
   }
   const sum = (p: Parts) => Object.values(p).reduce((n, v) => n + (v ?? 0), 0);
+  // Each pulse takes its share of what the ones before it left, so the strongest counts in
+  // full and each further one less (Static Field at 25%: the second 75%, the fourth 42%).
+  // However many pulse, they take only the HP above the floor and the rest of the towers do
+  // the rest: together the pulses do at most (100 - floor) / floor times what the others deal
+  // (floor counted as at least PULSE_FLOOR_MIN_PCT, so Normal's zero floor is not unbounded)
+  if (pulses.size > 0) {
+    let left = 1;
+    const ranked = [...pulses].sort((a, b) => sum(b[1].parts) - sum(a[1].parts));
+    const stacked = ranked.map(([id, p]) => {
+      const share = left;
+      left *= 1 - p.hpPct / 100;
+      return { id, parts: p.parts, share };
+    });
+    const pulseTotal = stacked.reduce((n, p) => n + sum(p.parts) * p.share, 0);
+    const floor = Math.max(PULSE_FLOOR_MIN_PCT, sim.data.rules.staticFloorPct[sim.data.waves[sim.state.wave]?.difficulty ?? 0] ?? 0);
+    const direct = [...attack.values()].reduce((n, p) => n + sum(p), 0);
+    const cap = pulseTotal > 0 ? Math.min(1, (direct * (100 - floor)) / floor / pulseTotal) : 0;
+    for (const { id, parts: pulsed, share } of stacked) {
+      const parts = attack.get(id)!;
+      for (const [e, v] of Object.entries(pulsed) as [Element, number][]) parts[e] = (parts[e] ?? 0) + v * share * cap;
+    }
+  }
   // A kill is about hpCap of damage and leaves one corpse, worth at most a blast on a crowd:
   // together the corpse eaters do no more than CROWD times what the rest of the towers kill
   const fedTotal = [...feeders.values()].reduce((n, p) => n + sum(p), 0);
@@ -447,6 +503,7 @@ function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number, foe
     }
   }
   const allAttack = [...attack.values()].reduce((n, p) => n + sum(p), 0);
+  if (perTower) for (const [id, p] of attack) perTower.set(id, sum(p));
 
   if (!foes) {
     let total = allAttack;
@@ -561,7 +618,7 @@ function bossDamage(sim: Sim, towers: Tower[], cov: Coverage, boss: Omit<LoneBos
         if (boss.resist[e] < 100) total += (v * (100 - boss.resist[e]) * share * sim.data.economy.waveTicks) / 100;
       }
     };
-    const active = activeSkill(sim, t);
+    const active = bareSkill(sim, t);
     if (active) count(active.skill, active.lvl);
     if (t.evolved && t.partnerSkill) count(sim.data.skills[t.partnerSkill], t.partnerLevel);
   }
@@ -842,11 +899,7 @@ interface OpeningContext {
 function engineBot(config: BotConfig, sim: Sim): Bot {
   const ranged = rankSpots(sim, 40);
   const melee = rankSpots(sim, 15);
-  const cov: Coverage = {
-    ranged: new Map(ranged.map((p) => [`${p.x},${p.y}`, p.score])),
-    melee: new Map(melee.map((p) => [`${p.x},${p.y}`, p.score])),
-    best: ranged[0]?.score ?? 1,
-  };
+  const cov = coverageOf(sim);
   const tags: Record<string, number> = {};
   const evolvedOn: Record<string, number> = {};
   const byTag = (s: Sim, tag: string) => s.state.towers.find((t) => t.id === tags[tag]);
@@ -977,7 +1030,7 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
         }
         // ...and the fee is within a few waves of income
         if (pick && evolve && reachable(evolve) && evolve.gain / evolve.cost >= (pick.gain / pick.cost) * EVOLVE_PRIORITY) pick = evolve;
-        if (process.env['BOT_DEBUG']) console.error(`w${s.state.wave} gold ${s.state.gold[0]} pick ${pick?.commands[0]?.type} ${Math.round(((pick?.gain ?? 0) / (pick?.cost ?? 1)) * 1e6)} cost ${pick?.cost} | evolve ${evolve ? Math.round((evolve.gain / evolve.cost) * 1e6) : '-'}`);
+        if (process.env['BOT_DEBUG']) console.error(`w${s.state.wave} gold ${s.state.gold[0]} pick ${pick?.commands[0]?.type} ${Math.round(((pick?.gain ?? 0) / (pick?.cost ?? 1)) * 1e6)} cost ${pick?.cost} ${JSON.stringify(pick?.commands[0])} | evolve ${evolve ? Math.round((evolve.gain / evolve.cost) * 1e6) : '-'}`);
         cached = { key, best: pick, all };
       }
       const gold = s.state.gold[0] ?? 0;
@@ -1070,18 +1123,17 @@ export function createBot(strategy: Strategy, sim: Sim, pool?: readonly Item[]):
 export function explainOptions(sim: Sim, strategy: Strategy): { gainPerGold: number; cost: number; commands: Command[] }[] {
   const ranged = rankSpots(sim, 40);
   const melee = rankSpots(sim, 15);
-  // Coverage needs the empty-map ranking; recompute it the same way the bot does at start
-  const fresh = createSim(sim.data, 0);
-  const r0 = rankSpots(fresh, 40);
-  const m0 = rankSpots(fresh, 15);
-  const cov: Coverage = {
-    ranged: new Map(r0.map((p) => [`${p.x},${p.y}`, p.score])),
-    melee: new Map(m0.map((p) => [`${p.x},${p.y}`, p.score])),
-    best: r0[0]?.score ?? 1,
-  };
-  return options(sim, CONFIGS[strategy]!, ranged, melee, cov)
+  // Coverage needs the empty-map ranking, worked out the same way the bot does at start
+  return options(sim, CONFIGS[strategy]!, ranged, melee, coverageOf(sim))
     .map((o) => ({ gainPerGold: o.gain / o.cost, cost: o.cost, commands: o.commands }))
     .sort((a, b) => b.gainPerGold - a.gainPerGold);
+}
+
+/** Debug view: each tower's attack as the bot's power model has it, before resistances and curses. */
+export function explainPower(sim: Sim): Map<number, number> {
+  const out = new Map<number, number>();
+  totalPower(sim, sim.state.towers, coverageOf(sim), nextWaveHp(sim), undefined, out);
+  return out;
 }
 
 export interface RunResult {
