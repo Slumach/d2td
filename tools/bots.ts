@@ -519,30 +519,47 @@ function totalPower(sim: Sim, towers: Tower[], cov: Coverage, hpCap: number, foe
   }
   if (allAttack === 0) return 0;
 
-  // Monster effects, each weighted by the share of attack it covers
-  const cut: Partial<Record<Element, number>> = {};
+  // Monster effects. A resistance cut counts on the towers whose attack lands inside it, at
+  // its full value: an aura or curse is worth the damage it unlocks on the towers in its
+  // reach, above all against monsters they could not hurt without it (an immunity broken at
+  // a fifth of the cut), and nothing for damage of its own. Before 0.3.14 the cut was spread
+  // over the whole ring by the share of attack it covered, so a Conviction covering a third
+  // of the attack counted as -50 everywhere instead of -150 where it is, and the bot rarely
+  // saved for it. Slows and gold still count by the share they cover.
+  const cutOf = new Map<number, Partial<Record<Element, number>>>();
   let slowBonus = 0;
   let incomeBonus = 0;
   for (const src of monsterSources(sim, towers)) {
-    const covered = towers
-      .filter((t) => (t.x - src.tower.x) ** 2 + (t.y - src.tower.y) ** 2 <= src.radiusUnits ** 2)
-      .reduce((n, t) => n + sum(attack.get(t.id) ?? {}), 0);
-    const share = covered / allAttack;
-    for (const [e, v] of Object.entries(src.resistDown) as [Element, number][]) cut[e] = Math.max(cut[e] ?? 0, v * share);
+    const inside = towers.filter((t) => (t.x - src.tower.x) ** 2 + (t.y - src.tower.y) ** 2 <= src.radiusUnits ** 2);
+    const share = inside.reduce((n, t) => n + sum(attack.get(t.id) ?? {}), 0) / allAttack;
+    for (const t of inside) {
+      const c = cutOf.get(t.id) ?? {};
+      for (const [e, v] of Object.entries(src.resistDown) as [Element, number][]) c[e] = Math.max(c[e] ?? 0, v);
+      cutOf.set(t.id, c);
+    }
     slowBonus += (src.slowPct / 2 / 100) * share;
     incomeBonus = Math.max(incomeBonus, ((src.goldPct * INCOME_WEIGHT) / 100) * share);
   }
 
-  const byElement: Parts = {};
-  for (const p of attack.values()) for (const [e, v] of Object.entries(p) as [Element, number][]) byElement[e] = (byElement[e] ?? 0) + v;
+  // Attack by element, pooled by the cuts it lands under
+  const groups = new Map<string, { cut: Partial<Record<Element, number>>; parts: Parts }>();
+  for (const [id, p] of attack) {
+    const cut = cutOf.get(id) ?? {};
+    const key = ELEMENTS.map((e) => cut[e] ?? 0).join(',');
+    const g = groups.get(key) ?? { cut, parts: {} };
+    for (const [e, v] of Object.entries(p) as [Element, number][]) g.parts[e] = (g.parts[e] ?? 0) + v;
+    groups.set(key, g);
+  }
   let time = 0;
   for (const foe of foes) {
     let power = 0;
-    for (const [e, v] of Object.entries(byElement) as [Element, number][]) {
-      const base = foe.resist[e];
-      const down = cut[e] ?? 0;
-      const resist = Math.max(-100, base >= 100 ? base - down / 5 : base - down);
-      if (resist < 100) power += (v * (100 - resist)) / 100;
+    for (const { cut, parts } of groups.values()) {
+      for (const [e, v] of Object.entries(parts) as [Element, number][]) {
+        const base = foe.resist[e];
+        const down = cut[e] ?? 0;
+        const resist = Math.max(-100, base >= 100 ? base - down / 5 : base - down);
+        if (resist < 100) power += (v * (100 - resist)) / 100;
+      }
     }
     time += foe.weight / Math.max(power, 1e-9);
   }
@@ -561,6 +578,8 @@ interface Option {
   commands: Command[];
   /** Buys damage (anything but an aura or a debuff): what a bot in trouble spends on. */
   damage: boolean;
+  /** The option ends with this tower at tier 3 on these picks: chosen, the bot saves for it (see decide). */
+  toTop?: { towerId: number; picks: string[] };
 }
 
 /** True for a skill that kills by itself rather than helping others. */
@@ -625,10 +644,29 @@ function bossDamage(sim: Sim, towers: Tower[], cov: Coverage, boss: Omit<LoneBos
   return total;
 }
 
-/** The next boss within BOSS_LOOKAHEAD_WAVES, when the bot's bossKill towers would not kill it within its wave. */
+/**
+ * A boss the bot's bossKill towers would not kill within a wave: one already lapping the ring
+ * (its HP now), else the next within BOSS_LOOKAHEAD_WAVES. A lapping boss counts first: the
+ * lookahead alone let Normal Baal walk past once and then never counted again, and the NECRO
+ * bot carried him and the next four act bosses round the ring until they filled it (0.3.14,
+ * Nightmare Diablo's wave with no Bone Spear built).
+ */
 function lonelyBoss(sim: Sim, config: BotConfig, towers: Tower[], cov: Coverage): LoneBoss | undefined {
   if (!config.bossKill) return undefined;
   const rules = sim.data.rules;
+  const reachable = (resist: Record<Element, number>) => config.bossKill!.some((id) => resist[sim.data.skills[id]!.damageType as Element] < 100);
+  let lapping: LoneBoss | undefined;
+  for (const m of sim.state.monsters) {
+    if (m.rank !== 'boss' || m.hp <= 0 || m.walked < sim.map.length) continue;
+    const d = sim.data.monsters[m.def]!;
+    const resist = { ...d.resist };
+    for (const e of ELEMENTS) resist[e] = withMods(rules, d.resist[e], e, m.mods, m.rank, d.difficulty);
+    if (!reachable(resist) || (lapping && lapping.hp >= m.hp)) continue;
+    const boss = { hp: m.hp, resist, skills: config.bossKill };
+    const before = bossDamage(sim, towers, cov, boss);
+    if (before < m.hp) lapping = { ...boss, before };
+  }
+  if (lapping) return lapping;
   for (let w = sim.state.wave; w < sim.state.wave + BOSS_LOOKAHEAD_WAVES; w++) {
     const wave = waveAt(sim, w);
     const group = wave?.groups.find((g) => g.rank === 'boss');
@@ -637,7 +675,7 @@ function lonelyBoss(sim: Sim, config: BotConfig, towers: Tower[], cov: Coverage)
     const resist = { ...d.resist };
     for (const e of ELEMENTS) resist[e] = withMods(rules, d.resist[e], e, group.mods, group.rank, d.difficulty);
     // Nothing of the line could ever hurt it: no reason to build for it
-    if (!config.bossKill.some((id) => resist[sim.data.skills[id]!.damageType as Element] < 100)) return undefined;
+    if (!reachable(resist)) return undefined;
     const hp = waveTotalHp({ ...wave, groups: [group] }, w, rules, sim.data.monsters);
     const boss = { hp, resist, skills: config.bossKill };
     const before = bossDamage(sim, towers, cov, boss);
@@ -859,10 +897,15 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
         const commands: Command[] =
           t.level < MAX_TOWER_LEVEL ? [{ type: 'upgrade', towerId: t.id }] : [{ type: 'upgradeTier', towerId: t.id }];
         if (t.level >= MAX_TOWER_LEVEL && opts.length > 1) commands.push({ type: 'pickBranch', towerId: t.id, skill });
-        // Pay only for the next step now; the option is judged on the whole path
-        const stepCost = t.level < MAX_TOWER_LEVEL ? level! : tierPrice;
+        // Pay only for the next step now; the option is judged on the whole path, and a tier
+        // bought now is a purchase, not a payoff several purchases away: it counts in full.
+        // At half, a Fanaticism tier the next buy away lost to Blessed Hammer levels every
+        // time and the PALADIN bot never reached tier 3 (0.3.13)
+        const now = t.level >= MAX_TOWER_LEVEL;
+        const stepCost = now ? tierPrice : level!;
         const damage = isDamage(sim.data.skills[skill]);
-        out.push({ cost: remaining, stepCost, gain: (gainOf(sim, towers, judge, next) * LOOKAHEAD_DISCOUNT_PCT) / 100, commands, damage });
+        const toTop = next.tier === MAX_TIER ? { towerId: t.id, picks: next.picks } : undefined;
+        out.push({ cost: remaining, stepCost, gain: (gainOf(sim, towers, judge, next) * (now ? 100 : LOOKAHEAD_DISCOUNT_PCT)) / 100, commands, damage, toTop });
         // And the tier after it: the power sits in the top tier, and the tier between can
         // look no better than another tower, so a bot judging one tier ahead never climbs
         const after = line.tiers[t.tier + 1];
@@ -871,7 +914,8 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
         const through = remaining + sum(e.levelCosts[t.tier]!) + afterPrice;
         for (const top of after) {
           const far = { ...t, tier: t.tier + 2, level: 1, picks: [...t.picks, skill, top] };
-          out.push({ cost: through, stepCost, gain: (gainOf(sim, towers, judge, far) * FAR_LOOKAHEAD_PCT) / 100, commands, damage });
+          const toTop = far.tier === MAX_TIER ? { towerId: t.id, picks: far.picks } : undefined;
+          out.push({ cost: through, stepCost, gain: (gainOf(sim, towers, judge, far) * FAR_LOOKAHEAD_PCT) / 100, commands, damage, toTop });
         }
       }
     }
@@ -995,6 +1039,27 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
     const then = earnedAt.get(back) ?? 0;
     return Math.max(1, (earned - then) / Math.max(1, s.state.wave - back));
   };
+  // A tier 3 the bot has chosen to save for, and the picks that get it there: until it has the
+  // gold for each step it buys nothing but emergency damage. Without it a stream of cheaper
+  // levels, each the best buy per gold for a moment, spent the savings before the 10,000 for
+  // the tier gathered (the PALADIN bot with Nightmare loot, twice in one run, 0.3.13)
+  let goal: { towerId: number; picks: string[] } | undefined;
+  /** The next command toward the goal and its price; undefined once it is met or cannot be. */
+  const goalStep = (s: Sim): { commands: Command[]; cost: number } | undefined => {
+    const t = s.state.towers.find((x) => x.id === goal!.towerId);
+    if (!t || t.evolved || t.legendOf !== undefined || t.picks.some((p, i) => p !== goal!.picks[i])) return undefined;
+    if (t.picks.length < t.tier) return { commands: [{ type: 'pickBranch', towerId: t.id, skill: goal!.picks[t.tier - 1]! }], cost: 0 };
+    if (t.tier >= MAX_TIER) return undefined;
+    if (t.level < MAX_TOWER_LEVEL) {
+      const cost = upgradeCost(s, t);
+      return cost === undefined ? undefined : { commands: [{ type: 'upgrade', towerId: t.id }], cost };
+    }
+    const cost = tierCost(s, t);
+    if (cost === undefined) return undefined;
+    const commands: Command[] = [{ type: 'upgradeTier', towerId: t.id }];
+    if ((s.data.classes[t.cls]!.lines[t.line]!.tiers[t.tier] ?? []).length > 1) commands.push({ type: 'pickBranch', towerId: t.id, skill: goal!.picks[t.tier]! });
+    return { commands, cost };
+  };
   const keyOf = (s: Sim) =>
     `${s.state.wave}|${s.state.towers.map((t) => `${t.id}:${t.tileX},${t.tileY}:${t.tier}.${t.level}:${t.picks.join('+')}:${t.evolved}:${t.partnerSkill}.${t.partnerLevel}`).join(';')}`;
 
@@ -1015,7 +1080,14 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
         // Save only for what a few waves of income can pay: a goal further off starves the defence
         const gold = s.state.gold[0] ?? 0;
         const perWave = recentIncome(s);
-        const reachable = (o: Option) => (o.stepCost ?? o.cost) - gold <= (o.commands[0]?.type === 'evolve' ? EVOLVE_SAVE_WAVES : SAVE_WAVES) * perWave;
+        // Until the ring has a defence (LOOKAHEAD_MIN_TOWERS towers), the next tower comes first
+        // and is always worth saving for: on a seed whose first waves paid little, a second tower
+        // looked out of reach on wave 2's income, the bot sank its gold into its one tower's
+        // levels, and that tower alone stopped killing in Act 2 (MIXED3 seed 5 with no items died
+        // on wave 10 with two towers, 0.3.13)
+        const founding = s.state.towers.length < LOOKAHEAD_MIN_TOWERS && all.some((o) => o.gain > 0 && o.commands[0]?.type === 'build');
+        const reachable = (o: Option) =>
+          founding ? o.commands[0]?.type === 'build' : (o.stepCost ?? o.cost) - gold <= (o.commands[0]?.type === 'evolve' ? EVOLVE_SAVE_WAVES : SAVE_WAVES) * perWave;
         for (const o of all) {
           if (o.gain <= 0 || !reachable(o)) continue;
           if (!pick || o.gain / o.cost > pick.gain / pick.cost) pick = o;
@@ -1035,18 +1107,25 @@ function engineBot(config: BotConfig, sim: Sim): Bot {
       }
       const gold = s.state.gold[0] ?? 0;
       const best = cached.best;
-      if (best && gold >= (best.stepCost ?? best.cost)) return [...best.commands, ...out];
       // The ring is filling: no more saving, the best damage affordable now. (Buying the
       // cheapest thing when the model rates nothing was tried and made every bot worse.)
-      if (s.state.alive * 100 >= aliveLimitOf(s) * PANIC_PCT) {
+      const emergency = (): Command[] => {
+        if (s.state.alive * 100 < aliveLimitOf(s) * PANIC_PCT) return [];
         let now: Option | undefined;
-        for (const o of cached.all) {
+        for (const o of cached!.all) {
           if (o.gain <= 0 || !o.damage || gold < (o.stepCost ?? o.cost)) continue;
           if (!now || o.gain / o.cost > now.gain / now.cost) now = o;
         }
-        if (now) return [...now.commands, ...out];
+        return now?.commands ?? [];
+      };
+      if (!goal && best?.toTop && !process.env['BOT_NO_GOAL']) goal = best.toTop;
+      if (goal) {
+        const next = goalStep(s);
+        if (next) return [...(gold >= next.cost ? next.commands : emergency()), ...out];
+        goal = undefined;
       }
-      return out;
+      if (best && gold >= (best.stepCost ?? best.cost)) return [...best.commands, ...out];
+      return [...emergency(), ...out];
     },
   };
 }
@@ -1113,6 +1192,7 @@ export function createBot(strategy: Strategy, sim: Sim, pool?: readonly Item[]):
   }
   // BOT_MAX_TOWERS=n holds a bot to n towers: a few high towers against the bot's own choice
   // BOT_NO_EVOLVE holds a bot to T3 (it never evolves), the same bot otherwise
+  // BOT_NO_GOAL lets a bot spend while it saves for a tier 3 (see decide), as before 0.3.14
   const cap = Number(process.env['BOT_MAX_TOWERS'] ?? 0);
   const builds = process.env['BOT_BUILDS']?.split(',');
   const noEvolve = !!process.env['BOT_NO_EVOLVE'];
