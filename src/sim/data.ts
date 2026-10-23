@@ -163,7 +163,12 @@ export interface BalanceJson {
    * by act as the towers do. Bosses keep bossHpPct on top. Computed at load time from the
    * tables (rules.stageHpPct); npm run hpcurve prints it.
    */
-  hpCurve: { hitsToKill: number; tiers: Record<string, number[]>; levels: Record<string, number[]> };
+  /**
+   * difficultyPct: a percent on each difficulty's stages after the curve (Hell's carries into
+   * the endless Tiers, which take Hell Act 5's stage): the curve sizes HP to the towers a stage
+   * expects, and this sets how hard the difficulty is for them.
+   */
+  hpCurve: { hitsToKill: number; tiers: Record<string, number[]>; levels: Record<string, number[]>; difficultyPct?: Record<string, number> };
   /**
    * Past Hell Baal the run goes on forever. Every `tierWaves` waves is a Tier (Tier 1 is
    * waves 76 to 85). Waves 1 to 9 of a Tier walk Hell's regular waves in campaign order,
@@ -1039,7 +1044,7 @@ export function stageHpPctFrom(
       const hp = median(hps);
       if (hit <= 0 || hp <= 0) continue;
       const stage = `${d}-${act}`;
-      pct[stage] = Math.max(1, Math.round((100 * hitsToKill * hit) / hp));
+      pct[stage] = Math.max(1, Math.round((100 * hitsToKill * hit * (balance.hpCurve.difficultyPct?.[DIFFICULTIES[d]!] ?? 100)) / 100 / hp));
       stages.push({ stage, difficulty: d, act, tier, level, hit, hp, pct: pct[stage]! });
     }
   }
