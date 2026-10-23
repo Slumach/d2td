@@ -19,7 +19,7 @@
 
 import type { HitFilter, SkillDef } from '../src/sim/archetypes/types.ts';
 import { auraSources } from '../src/sim/auras.ts';
-import { baseSkillId, EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, type GameData } from '../src/sim/data.ts';
+import { baseSkillId, EVOLVED_LEVEL_INDEX, MAX_TIER, MAX_TOWER_LEVEL, waveTotalHp, type GameData } from '../src/sim/data.ts';
 import { tileCenter, isPathTile } from '../src/sim/map.ts';
 import { activeSkill, aliveLimitOf, buildCostFor, canBuild, createSim, waveAt, evolutionFor, pendingChoices, step, tierCost, upgradeCost } from '../src/sim/sim.ts';
 import { withMods } from '../src/sim/combat.ts';
@@ -517,6 +517,76 @@ interface Judge {
   hpCap: number;
   foes: Foe[] | undefined;
   before: number;
+  /** Set while the bot's bossKill towers would not kill the coming boss within its wave. */
+  boss?: LoneBoss;
+}
+
+/** The coming boss: its HP as it spawns, its resistances, and the bot's skills that count against it. */
+interface LoneBoss {
+  hp: number;
+  resist: Record<Element, number>;
+  skills: string[];
+  /** What the bot's towers deal it over a wave now. */
+  before: number;
+}
+
+/**
+ * Damage per tick a skill deals one lone target: its estimate against a crowd, one hit an
+ * attack (a Bone Spear pierces a boss once, a volley lands one missile).
+ */
+function loneParts(sim: Sim, skill: SkillDef, lvl: number, ignoreDelay: boolean): Parts {
+  const parts = attackParts(sim, skill, lvl, ignoreDelay, { damagePct: 0, attackSpeedPct: 0, fire: 0 }, Infinity);
+  const l = skill.levels[lvl] as { hops?: number; count?: number } | undefined;
+  const hits = skill.archetype === 'pierce' ? (skill.mode === 'chain' ? (l?.hops ?? 0) + 1 : 2) : skill.archetype === 'projectile' ? Math.max(1, Math.min(l?.count ?? 1, CROWD)) : 1;
+  const out: Parts = {};
+  for (const [e, v] of Object.entries(parts) as [Element, number][]) out[e] = v / hits;
+  return out;
+}
+
+/**
+ * What a set of towers' bossKill skills deal the coming boss over one wave, in 1/256 HP: each
+ * tower's lone-target damage through the boss's resistances, for the share of a lap it is in
+ * range (the path tiles it covers over the ring's), for the wave's length. Auras and curses
+ * are left out, so it errs toward more than enough.
+ */
+function bossDamage(sim: Sim, towers: Tower[], cov: Coverage, boss: Omit<LoneBoss, 'before'>): number {
+  const ringTiles = sim.map.pathTiles.filter(Boolean).length || 1;
+  let total = 0;
+  for (const t of towers) {
+    const recipe = t.evolved ? sim.data.evolutions.find((e) => e.id === t.evolved) : undefined;
+    const share = (cov.ranged.get(`${t.tileX},${t.tileY}`) ?? 0) / ringTiles;
+    const count = (skill: SkillDef | undefined, lvl: number) => {
+      if (!skill || !boss.skills.includes(baseSkillId(skill.id))) return;
+      for (const [e, v] of Object.entries(loneParts(sim, skill, lvl, recipe?.ignoreSkillDelay ?? false)) as [Element, number][]) {
+        if (boss.resist[e] < 100) total += (v * (100 - boss.resist[e]) * share * sim.data.economy.waveTicks) / 100;
+      }
+    };
+    const active = activeSkill(sim, t);
+    if (active) count(active.skill, active.lvl);
+    if (t.evolved && t.partnerSkill) count(sim.data.skills[t.partnerSkill], t.partnerLevel);
+  }
+  return total;
+}
+
+/** The next boss within BOSS_LOOKAHEAD_WAVES, when the bot's bossKill towers would not kill it within its wave. */
+function lonelyBoss(sim: Sim, config: BotConfig, towers: Tower[], cov: Coverage): LoneBoss | undefined {
+  if (!config.bossKill) return undefined;
+  const rules = sim.data.rules;
+  for (let w = sim.state.wave; w < sim.state.wave + BOSS_LOOKAHEAD_WAVES; w++) {
+    const wave = waveAt(sim, w);
+    const group = wave?.groups.find((g) => g.rank === 'boss');
+    if (!wave || !group) continue;
+    const d = sim.data.monsters[group.monster]!;
+    const resist = { ...d.resist };
+    for (const e of ELEMENTS) resist[e] = withMods(rules, d.resist[e], e, group.mods, group.rank, d.difficulty);
+    // Nothing of the line could ever hurt it: no reason to build for it
+    if (!config.bossKill.some((id) => resist[sim.data.skills[id]!.damageType as Element] < 100)) return undefined;
+    const hp = waveTotalHp({ ...wave, groups: [group] }, w, rules, sim.data.monsters);
+    const boss = { hp, resist, skills: config.bossKill };
+    const before = bossDamage(sim, towers, cov, boss);
+    return before < hp ? { ...boss, before } : undefined;
+  }
+  return undefined;
 }
 
 /** The auras a tower projects, by base skill (its own skill, an evolved tower's partner). */
@@ -533,7 +603,27 @@ function gainOf(sim: Sim, towers: Tower[], judge: Judge, changed: Tower, removed
   const mine = aurasOf(sim, changed);
   if (mine.length > 0 && after.some((t) => aurasOf(sim, t).some((a) => mine.includes(a)))) return 0;
   after.push(changed);
-  return totalPower(sim, after, judge.cov, judge.hpCap, judge.foes) - judge.before;
+  const gain = totalPower(sim, after, judge.cov, judge.hpCap, judge.foes) - judge.before;
+  if (!judge.boss) return gain;
+  // A boss that would outlive its wave: a tower may not branch away from the boss skills its
+  // line offers, and the damage it adds on the boss counts on top, per tick like the rest
+  const was = towers.find((t) => t.id === changed.id);
+  const tiers = sim.data.classes[changed.cls]?.lines[changed.line]?.tiers ?? [];
+  const away = changed.picks.some((p, i) => i >= (was?.picks.length ?? 1) && !judge.boss!.skills.includes(p) && (tiers[i] ?? []).some((o) => judge.boss!.skills.includes(o)));
+  if (away) return 0;
+  return gain + (bossDamage(sim, after, judge.cov, judge.boss) - judge.boss.before) / sim.data.economy.waveTicks;
+}
+
+/**
+ * A new tower valued against a lone boss: as the first tier of its line with a bossKill skill
+ * (a Teeth tower as the Bone Spear it becomes), undefined when its line has none.
+ */
+function bossAim(sim: Sim, boss: LoneBoss, fresh: Tower): Tower | undefined {
+  const tiers = sim.data.classes[fresh.cls]?.lines[fresh.line]?.tiers ?? [];
+  const k = tiers.findIndex((opts) => opts.some((o) => boss.skills.includes(o)));
+  if (k <= 0) return undefined;
+  const picks = tiers.slice(0, k + 1).map((opts, i) => (i === k ? opts.find((o) => boss.skills.includes(o))! : i === 0 ? fresh.picks[0]! : opts[0]!));
+  return { ...fresh, tier: k + 1, level: 1, picks };
 }
 
 interface BotConfig {
@@ -547,6 +637,13 @@ interface BotConfig {
   elements?: boolean;
   /** Stop building new towers here and only improve the ones there are. */
   maxTowers?: number;
+  /**
+   * Single-target skills the bot keeps enough of to kill a lone boss within its wave: while
+   * the next boss (BOSS_LOOKAHEAD_WAVES out) would outlive its wave, no tower branches away
+   * from them and what they add on the boss counts on top (see bossDamage). The
+   * Necromancer's Bone Spear line.
+   */
+  bossKill?: string[];
   opening?: (ctx: OpeningContext) => Goal[];
 }
 
@@ -573,7 +670,7 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
   const towers = sim.state.towers;
   const hpCap = nextWaveHp(sim);
   const foes = config.elements ? comingFoes(sim) : undefined;
-  const judge: Judge = { cov, hpCap, foes, before: totalPower(sim, towers, cov, hpCap, foes) };
+  const judge: Judge = { cov, hpCap, foes, before: totalPower(sim, towers, cov, hpCap, foes), boss: lonelyBoss(sim, config, towers, cov) };
   const out: Option[] = [];
   const e = sim.data.economy;
 
@@ -592,9 +689,11 @@ function options(sim: Sim, config: BotConfig, ranged: Spot[], melee: Spot[], cov
         id: -1, owner: 0, cls, tileX: spot.x, tileY: spot.y, x: c.x, y: c.y, line, tier: 1, level: 1,
         picks: [skill], spent: 0, cooldown: 0, targeting: 'first', evolved: '', partnerSkill: '', partnerLevel: 0, summonCooldown: 0, partnerCooldown: 0,
       };
+      // Against a lone boss a new tower is worth what its line's boss skill will deal, a few buys off
+      const aim = judge.boss && bossAim(sim, judge.boss, fresh);
       out.push({
         cost: buildCostFor(sim, 0),
-        gain: gainOf(sim, towers, judge, fresh),
+        gain: aim ? (gainOf(sim, towers, judge, aim) * LOOKAHEAD_DISCOUNT_PCT) / 100 : gainOf(sim, towers, judge, fresh),
         commands: [{ type: 'build', x: spot.x, y: spot.y, cls, skill }],
         damage: isDamage(sim.data.skills[skill]),
       });
@@ -929,7 +1028,9 @@ CONFIGS.SORC = { strategy: 'SORC', builds: SORC_BUILDS, tiers: true, evolve: tru
 // The Necromancer bot builds the bone and curse lines: its power model overrates the summoning
 // line's skeletons, which build a ring that cannot hold Normal Act 5 (wave 23 with them, 108
 // without; 0.3.8). BOT_BUILDS=a,b overrides any bot's T1 list for a run.
-CONFIGS.NECRO = { strategy: 'NECRO', builds: ['teeth', 'amplify-damage'], tiers: true, evolve: true, elements: true };
+// It keeps enough of the Bone Spear line to kill a lone boss within its wave: Corpse Explosion
+// needs kills, and a boss alone leaves none (Normal Baal and Nightmare Andariel lapped it to death)
+CONFIGS.NECRO = { strategy: 'NECRO', builds: ['teeth', 'amplify-damage'], tiers: true, evolve: true, elements: true, bossKill: ['bone-spear', 'bone-spirit'] };
 CONFIGS.AMAZON = { strategy: 'AMAZON', builds: ['magic-arrow', 'poison-javelin', 'critical-strike'], tiers: true, evolve: true, elements: true };
 CONFIGS.BARB = {
   strategy: 'BARB',
