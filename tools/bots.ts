@@ -8,7 +8,9 @@
 //   PALADIN   Zealot, Holy and Aura towers; opens for a Hammerdin by wave 15
 //   SORC      the four Sorceress lines, evolving whatever pair it can
 //   NECRO     the Necromancer's bone and curse lines, evolving whatever pair it can
-//   MIXED3    every class's lines, evolving whatever pair it can
+//   MIXED3    the Paladin's, Sorceress's and Necromancer's lines, evolving whatever pair it can
+//   AMAZON, BARB, DRUID, ASSASSIN   each of the newer classes' lines, evolving whatever pair it can
+//   MIXED7    all seven classes' lines
 //
 // All share one engine, so they differ only in what they may use. Each decision takes the
 // option with the most estimated power per gold among: a new tower on the best free tile,
@@ -28,10 +30,10 @@ import { lootBuilds, lootPool, outfit, type LootSet } from './outfit.ts';
 import type { Item } from '../src/sim/items/item.ts';
 import { ELEMENTS, type Command, type Element, type Sim, type TimedCommand, type Tower } from '../src/sim/state.ts';
 
-export type Strategy = 'BOLT' | 'HOLY' | 'TWOLINE' | 'PALADIN' | 'SORC' | 'NECRO' | 'MIXED3' | 'AMAZON' | 'BARB' | 'DRUID' | 'ASSASSIN' | 'LOOTBUILD';
+export type Strategy = 'BOLT' | 'HOLY' | 'TWOLINE' | 'PALADIN' | 'SORC' | 'NECRO' | 'MIXED3' | 'AMAZON' | 'BARB' | 'DRUID' | 'ASSASSIN' | 'MIXED7' | 'LOOTBUILD';
 /** The Normal balance targets' bots; the class bots play the Hell gate. */
 export const STRATEGIES: Strategy[] = ['BOLT', 'HOLY', 'TWOLINE', 'PALADIN'];
-export const HELL_STRATEGIES: Strategy[] = ['PALADIN', 'SORC', 'NECRO', 'MIXED3', 'AMAZON', 'BARB', 'DRUID', 'ASSASSIN'];
+export const HELL_STRATEGIES: Strategy[] = ['PALADIN', 'SORC', 'NECRO', 'MIXED3', 'AMAZON', 'BARB', 'DRUID', 'ASSASSIN', 'MIXED7'];
 
 /** The class and line whose T1 options include a skill. */
 function lineOf(sim: Sim, skill: string): { cls: string; line: string } {
@@ -1163,19 +1165,25 @@ CONFIGS.SORC = { strategy: 'SORC', builds: SORC_BUILDS, tiers: true, evolve: tru
 // It keeps enough of the Bone Spear line to kill a lone boss within its wave: Corpse Explosion
 // needs kills, and a boss alone leaves none (Normal Baal and Nightmare Andariel lapped it to death)
 CONFIGS.NECRO = { strategy: 'NECRO', builds: ['teeth', 'amplify-damage'], tiers: true, evolve: true, elements: true, bossKill: ['bone-spear', 'bone-spirit'] };
-CONFIGS.AMAZON = { strategy: 'AMAZON', builds: ['magic-arrow', 'poison-javelin', 'critical-strike'], tiers: true, evolve: true, elements: true };
-CONFIGS.BARB = {
-  strategy: 'BARB',
-  builds: ['bash', 'double-swing', 'battle-cry', 'find-item'],
+const AMAZON_BUILDS = ['magic-arrow', 'poison-javelin', 'critical-strike'];
+const BARB_BUILDS = ['bash', 'double-swing', 'battle-cry', 'find-item'];
+const DRUID_BUILDS = ['firestorm', 'arctic-blast', 'raven'];
+const ASSASSIN_BUILDS = ['fire-blast', 'tiger-strike', 'cloak-of-shadows'];
+CONFIGS.AMAZON = { strategy: 'AMAZON', builds: AMAZON_BUILDS, tiers: true, evolve: true, elements: true };
+CONFIGS.BARB = { strategy: 'BARB', builds: BARB_BUILDS, tiers: true, evolve: true, elements: true };
+CONFIGS.DRUID = { strategy: 'DRUID', builds: DRUID_BUILDS, tiers: true, evolve: true, elements: true };
+CONFIGS.ASSASSIN = { strategy: 'ASSASSIN', builds: ASSASSIN_BUILDS, tiers: true, evolve: true, elements: true };
+CONFIGS.MIXED3 = {
+  strategy: 'MIXED3',
+  builds: ['sacrifice', 'holy-bolt', 'might', ...SORC_BUILDS, ...NECRO_BUILDS],
   tiers: true,
   evolve: true,
   elements: true,
 };
-CONFIGS.DRUID = { strategy: 'DRUID', builds: ['firestorm', 'arctic-blast', 'raven'], tiers: true, evolve: true, elements: true };
-CONFIGS.ASSASSIN = { strategy: 'ASSASSIN', builds: ['fire-blast', 'tiger-strike', 'cloak-of-shadows'], tiers: true, evolve: true, elements: true };
-CONFIGS.MIXED3 = {
-  strategy: 'MIXED3',
-  builds: ['sacrifice', 'holy-bolt', 'might', ...SORC_BUILDS, ...NECRO_BUILDS],
+
+CONFIGS.MIXED7 = {
+  strategy: 'MIXED7',
+  builds: [...CONFIGS.MIXED3.builds, ...AMAZON_BUILDS, ...BARB_BUILDS, ...DRUID_BUILDS, ...ASSASSIN_BUILDS],
   tiers: true,
   evolve: true,
   elements: true,
