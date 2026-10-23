@@ -30,6 +30,10 @@ export interface SkillArt {
 export const SKILL_ART = sprites.skillArt as Record<string, SkillArt>;
 /** The missile a ranged summon shoots, by its element. */
 export const SUMMON_BOLTS = sprites.summonBolts as Record<string, string>;
+/** Summons drawn as a class's hero figure (Decoy, Shadow Master): see sprites.json summonHeroes. */
+export const SUMMON_HEROES = Object.fromEntries(
+  Object.entries(sprites.summonHeroes).filter(([k]) => k !== 'comment'),
+) as Record<string, { cls: string; line: string; tint: number; alpha: number }>;
 export const STATUS_OVERLAYS = sprites.statusOverlays as { frozen: string; poison: string };
 /** The extraction lists every missile it wrote here, explosions included. */
 export const MISSILE_INDEX = 'missiles/index.json';

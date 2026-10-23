@@ -15,7 +15,7 @@ import { Lockstep } from '../net/lockstep.ts';
 import type { LobbyPlayer } from '../net/protocol.ts';
 import { actJustStarted, takeCheckpoint, type Checkpoint } from '../sim/checkpoint.ts';
 import { baseMonsterId, baseSkillId, buildGameData, MAX_TIER, MAX_TOWER_LEVEL, stageName, waveLabel as labelOf, type DesignData, type GameData, type WaveDef } from '../sim/data.ts';
-import { effectsOn, projected, reachOf, terms } from './aurainfo.ts';
+import { effectsOn, helps, projected, reachOf, terms } from './aurainfo.ts';
 import { GroundDrops } from './drops.ts';
 import { isAura, standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
@@ -48,7 +48,7 @@ import {
 import { TABLE_NAMES, type Tables } from '../sim/tables.ts';
 import { TARGETING_MODES, type LootFilter } from '../sim/state.ts';
 import type { DebuffDef, PierceDef, SkillDef } from '../sim/archetypes/types.ts';
-import { SKILL_ART, STATUS_OVERLAYS, SUMMON_BOLTS } from './art.ts';
+import { SKILL_ART, STATUS_OVERLAYS, SUMMON_BOLTS, SUMMON_HEROES } from './art.ts';
 import {
   MAP_KEY,
   groundKey,
@@ -131,6 +131,29 @@ const PLAYER_COLOURS = [0xc8a040, 0x4a84d8, 0xc84a3a, 0x60b060, 0xa070e0, 0x50c0
 /** The alive bar across the top of the screen. */
 const ALIVE_BAR = { width: 440, height: 16, y: 10 };
 /** Dev: ?debug logs every sprite the scene creates. */
+/**
+ * The panel's damage per second: standardDps, but a poison skill no more than one dose over its
+ * length, since a new dose replaces the old rather than stacking (combat.ts poison). Counting each
+ * throw's whole dose at once showed a T1 Poison Javelin at 4,709 where one target takes 62.
+ */
+function panelDps(skill: SkillDef, lvl: number, ignoreDelay = false): number {
+  const dps = standardDps(skill, lvl, ignoreDelay);
+  const ticks = skill.damageType === 'pois' ? (skill.poisonTicks[lvl] ?? 0) : 0;
+  const l = ('levels' in skill ? skill.levels[lvl] : undefined) as { min?: number; max?: number } | undefined;
+  if (ticks <= 0 || l?.min === undefined || l.max === undefined) return dps;
+  return Math.min(dps, Math.trunc((((l.min + l.max) / 2) * 1000) / ticks));
+}
+
+/** What a summon tower's panel calls its summons, by monster. */
+const SUMMON_NOUNS: Record<string, [string, string]> = {
+  necroskeleton: ['skeleton', 'skeletons'],
+  necromage: ['skeletal mage', 'skeletal mages'],
+  druidhawk: ['raven', 'ravens'],
+  fenris: ['dire wolf', 'dire wolves'],
+  druidbear: ['grizzly', 'grizzlies'],
+  dopplezon: ['decoy', 'decoys'],
+  shadowmaster: ['shadow master', 'shadow masters'],
+};
 const DEBUG = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug');
 
 
@@ -1117,7 +1140,7 @@ export class GameScene extends Phaser.Scene {
     if (source) {
       for (const aura of projected(this.sim, source)) {
         const overlay = SKILL_ART[aura.skill]?.overlay;
-        if (!overlay || (aura.damagePct === 0 && aura.attackSpeedPct === 0 && aura.fireMax === 0)) continue;
+        if (!overlay || !helps(aura)) continue;
         for (const { tower } of reachOf(this.sim, source, aura)) {
           const key = `ta${tower.id}.${aura.skill}`;
           riders.add(key);
@@ -1433,9 +1456,12 @@ export class GameScene extends Phaser.Scene {
       const { x: px, y: py } = project(u.x, u.y);
       let view = this.summons.get(u.id);
       if (!view) {
-        const texture = monsterKey(this.sim.data.monsters[u.def]?.base ?? u.def, 'normal');
+        const base = this.sim.data.monsters[u.def]?.base ?? u.def;
+        const hero = SUMMON_HEROES[base];
+        const texture = hero ? heroKey({ cls: hero.cls, line: hero.line, tier: MAX_TIER, evolved: '' }) : monsterKey(base, 'normal');
         if (!this.textures.exists(texture)) continue;
         const sprite = this.sprite(texture, px, py);
+        if (hero) sprite.setTint(hero.tint).setAlpha(hero.alpha);
         if (u.kind === 'revive') {
           sprite.setTint(REVIVED_TINT);
           const raise = SKILL_ART['revive']?.raise;
@@ -1444,7 +1470,10 @@ export class GameScene extends Phaser.Scene {
         view = { sprite, texture, facing: 'n', cooldown: u.cooldown };
         this.summons.set(u.id, view);
         // Raised skeletons and mages climb out of the ground (D2's S1)
-        if (this.anims.exists(animKey(texture, 'S1', view.facing))) sprite.play(animKey(texture, 'S1', view.facing));
+        // (a sentry trap is drawn in one facing: modeKey finds it)
+        const rise = this.modeKey(texture, 'S1', view.facing);
+        if (rise) sprite.play(rise);
+        else this.playIfChanged(sprite, this.modeKey(texture, 'NU', view.facing) ?? '', false);
       }
       const target = s.monsters.find((m) => m.id === u.targetId && m.hp > 0) ?? this.nearestMonster(u, UNITS_PER_TILE * 4);
       if (target) {
@@ -1455,16 +1484,17 @@ export class GameScene extends Phaser.Scene {
       view.cooldown = u.cooldown;
       const rising = view.sprite.anims.currentAnim?.key.includes('|S1|') && view.sprite.anims.isPlaying;
       if (attacked && target) {
-        view.sprite.play(animKey(view.texture, 'A1', view.facing));
+        const swing = this.modeKey(view.texture, 'A1', view.facing);
+        if (swing) view.sprite.play(swing);
         if (u.kind === 'ranged') {
           const bolt = SUMMON_BOLTS[u.element];
           const v = screenVector(target.x - u.x, target.y - u.y);
           if (bolt) this.fx.shoot(bolt, { x: px, y: py - 40 }, this.chest(target), 220, angle64(v.x, v.y));
         }
       } else if (!rising && !view.sprite.anims.currentAnim?.key.includes('|A1|')) {
-        this.playIfChanged(view.sprite, animKey(view.texture, 'NU', view.facing), true);
+        this.playIfChanged(view.sprite, this.modeKey(view.texture, 'NU', view.facing) ?? '', true);
       } else if (!rising && !view.sprite.anims.isPlaying) {
-        this.playIfChanged(view.sprite, animKey(view.texture, 'NU', view.facing), false);
+        this.playIfChanged(view.sprite, this.modeKey(view.texture, 'NU', view.facing) ?? '', false);
       }
       // A monster that broke through shoved it: it stumbles aside and back
       const shove = u.shovedTicks > 0 ? Math.round((SHOVE_PX * u.shovedTicks) / 10) : 0;
@@ -1892,13 +1922,22 @@ export class GameScene extends Phaser.Scene {
       case 'debuff': {
         const l = skill.levels[lvl]!;
         if (skill.mode === 'pulse') return `Takes ${l.hpPct}% of current HP in radius`;
-        if (skill.mode === 'curse') return `Curses monsters for ${Math.round(l.durationTicks / TICKS_PER_SECOND)} s`;
+        if (skill.mode === 'curse') {
+          // What the curse does, then for how long: Battle Cry weakens, Cloak of Shadows blinds
+          const does = [
+            ...(l.damageDownPct >= 100 ? ['blinds'] : l.damageDownPct > 0 ? [`-${l.damageDownPct}% monster damage`] : []),
+            ...Object.entries(l.resistDown).filter(([, v]) => (v ?? 0) > 0).map(([el, v]) => `-${v}% ${el === 'phys' ? 'physical' : el} resistance`),
+            ...(l.slowPct > 0 ? [`${l.slowPct}% slower`] : []),
+          ];
+          return `Curses monsters for ${Math.round(l.durationTicks / TICKS_PER_SECOND)} s${does.length ? `: ${does.join(', ')}` : ''}`;
+        }
         return 'Aura tower';
       }
       case 'summon': {
         const l = skill.levels[lvl]!;
-        const what = skill.kind === 'revive' ? 'revived corpses' : skill.kind === 'ranged' ? 'skeletal mages' : 'skeletons';
-        return `Up to ${l.count} ${what}`;
+        if (skill.kind === 'trap') return `Sets up to ${l.count} traps on the path, ${l.shots} shots each`;
+        const [one, many] = skill.kind === 'revive' ? ['revived corpse', 'revived corpses'] : (SUMMON_NOUNS[skill.monster] ?? ['summon', 'summons']);
+        return `Up to ${l.count} ${l.count === 1 ? one : many}`;
       }
       case 'corpse':
         return 'Explodes fresh corpses';
@@ -1931,9 +1970,9 @@ export class GameScene extends Phaser.Scene {
       const buff = sim.fx.towers[tower.id];
       // An evolved tower fires both lines: its partner's casts count with its attack
       const partnerSkill = tower.evolved && tower.partnerSkill ? geared(sim, tower, sim.data.skills[tower.partnerSkill]!) : undefined;
-      const partnerDps = partnerSkill && !isAura(partnerSkill) ? standardDps(partnerSkill, tower.partnerLevel) : 0;
+      const partnerDps = partnerSkill && !isAura(partnerSkill) ? panelDps(partnerSkill, tower.partnerLevel) : 0;
       const recipe = tower.evolved ? sim.data.evolutions.find((r) => r.id === tower.evolved) : undefined;
-      const base = standardDps(active.skill, active.lvl, recipe?.ignoreSkillDelay === true) + partnerDps;
+      const base = panelDps(active.skill, active.lvl, recipe?.ignoreSkillDelay === true) + partnerDps;
       // 1/256 HP per 1000 ticks, at 20 ticks a second; the auras this tower stands in broken out
       const perSecond = (damagePct: number, speedPct: number) => Math.round((((base * TICKS_PER_SECOND) / 1000 / 256) * (100 + damagePct) * (100 + speedPct)) / 10000);
       const dps = perSecond(buff?.damagePct ?? 0, buff?.attackSpeedPct ?? 0);
@@ -1952,7 +1991,7 @@ export class GameScene extends Phaser.Scene {
       const what = terms(aura);
       if (!what) continue;
       lines.push(`${auraName(aura)}: ${what}`);
-      if (aura.damagePct || aura.attackSpeedPct || aura.fireMax) {
+      if (helps(aura)) {
         const reach = reachOf(sim, tower, aura).filter((r) => r.tower.id !== tower.id);
         const names = reach.map((r) => {
           const a = activeSkill(sim, r.tower);
@@ -2017,7 +2056,7 @@ export class GameScene extends Phaser.Scene {
     });
     const skillId = recipe?.attack.skill ?? active?.skill.id;
     const icon = skillId ? this.skillButton(skillId, '', () => undefined).icon : undefined;
-    const title = legend ? legend.name : recipe ? recipe.name : active ? active.skill.name : `${className} tower`;
+    const title = legend ? legend.name : recipe ? recipe.name : active ? active.skill.displayName : `${className} tower`;
     return { icon, title, lines, buttons };
   }
 
@@ -2032,7 +2071,7 @@ export class GameScene extends Phaser.Scene {
       ? `${legend.name} L${tower.level}`
       : recipe
         ? `${recipe.name}: ${this.skillName(recipe.attack.skill)} with ${this.skillName(tower.partnerSkill)} aura`
-        : `${line?.name ?? 'Inert'} T${tower.tier} L${tower.level}: ${active ? active.skill.name : 'pick a skill'}`;
+        : `${line?.name ?? 'Inert'} T${tower.tier} L${tower.level}: ${active ? active.skill.displayName : 'pick a skill'}`;
     this.info.setText(`${title}   targeting ${tower.targeting}`);
 
     const pick = pendingChoices(sim, tower);

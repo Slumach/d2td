@@ -1,6 +1,11 @@
 {
   "monsterModes": ["WL", "A1", "DT", "DD"],
   "summons": { "ids": ["necroskeleton", "necromage", "dopplezon", "druidhawk", "fenris", "druidbear", "shadowmaster", "lightningsentry", "deathsentry"], "modes": ["NU", "WL", "A1", "DT", "S1"] },
+  "summonHeroes": {
+    "comment": "Summons D2 draws as a copy of the player, not from art of their own (their monster files are stubs in D2R): Decoy is the Amazon, Shadow Master the Assassin. Drawn as that class's T3 figure, tinted.",
+    "dopplezon": { "cls": "amazon", "line": "javelin", "tint": 13693183, "alpha": 0.8 },
+    "shadowmaster": { "cls": "assassin", "line": "shadow", "tint": 7364767, "alpha": 0.75 }
+  },
   "objects": { "redportal": { "token": "PP", "modes": ["OP", "ON"], "variant": "lit" } },
   "heroes": {
     "paladin": {

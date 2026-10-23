@@ -16,6 +16,10 @@ export interface AuraEffect {
   damagePct: number;
   attackSpeedPct: number;
   fireMax: number;
+  /** Pierce: the chance a missile passes through. */
+  piercePct: number;
+  /** Shout: defence for the summons of the towers in reach. */
+  defensePct: number;
   resistDown: Partial<Record<Element, number>>;
   slowPct: number;
   goldPct: number;
@@ -31,11 +35,18 @@ export function projected(sim: Sim, tower: Tower): AuraEffect[] {
     damagePct: aura.towers?.damagePct ?? 0,
     attackSpeedPct: aura.towers?.attackSpeedPct ?? 0,
     fireMax: aura.towers?.fireMax ?? 0,
+    piercePct: aura.towers?.piercePct ?? 0,
+    defensePct: aura.towers?.defensePct ?? 0,
     resistDown: aura.monsters?.resistDown ?? {},
     slowPct: aura.monsters?.slowPct ?? 0,
     goldPct: aura.monsters?.goldPct ?? 0,
     radiusUnits: aura.radiusUnits,
   }));
+}
+
+/** True for an aura that does something for the towers it reaches. */
+export function helps(e: AuraEffect): boolean {
+  return e.damagePct > 0 || e.attackSpeedPct > 0 || e.fireMax > 0 || e.piercePct > 0 || e.defensePct > 0;
 }
 
 /**
@@ -46,10 +57,10 @@ export function effectsOn(sim: Sim, tower: Tower): AuraEffect[] {
   const best = new Map<string, AuraEffect>();
   for (const src of sim.state.towers) {
     for (const e of projected(sim, src)) {
-      if (e.damagePct === 0 && e.attackSpeedPct === 0 && e.fireMax === 0) continue;
+      if (!helps(e)) continue;
       if (!within(src, tower, e.radiusUnits)) continue;
       const have = best.get(e.skill);
-      if (!have || e.damagePct + e.attackSpeedPct + e.fireMax > have.damagePct + have.attackSpeedPct + have.fireMax) best.set(e.skill, e);
+      if (!have || e.damagePct + e.attackSpeedPct + e.fireMax + e.piercePct + e.defensePct > have.damagePct + have.attackSpeedPct + have.fireMax + have.piercePct + have.defensePct) best.set(e.skill, e);
     }
   }
   return [...best.values()];
@@ -68,6 +79,8 @@ export function terms(e: AuraEffect): string {
   if (e.damagePct) out.push(`+${e.damagePct}% damage`);
   if (e.attackSpeedPct) out.push(`+${e.attackSpeedPct}% attack speed`);
   if (e.fireMax) out.push(`+${Math.round(e.fireMax / 256)} fire a hit`);
+  if (e.piercePct) out.push(`${e.piercePct}% chance a missile passes through`);
+  if (e.defensePct) out.push(`+${e.defensePct}% defence for their summons`);
   const cuts = ELEMENTS.filter((el) => (e.resistDown[el] ?? 0) > 0);
   if (cuts.length) {
     const same = cuts.every((el) => e.resistDown[el] === e.resistDown[cuts[0]!]);
