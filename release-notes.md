@@ -1,3 +1,7 @@
+0.4.3
+
+- Random towers in the game setup is Legion's random builder: a fresh roll of four lines from different races every wave, and only those build that wave (0.4.2 shipped it as random races by mistake).
+
 0.4.2
 
 - Battle Mode is now Eternal Conflict: Heaven against Hell, Legion style.
@@ -7,7 +11,7 @@
 - Legion's wave timing: 60 seconds before the first wave, then the 20-second countdown starts only when every creep on both sides is dead. The HUD shows the countdown while it runs and who is still fighting while it is not.
 - Souls are Worldstone shards, mined all match long: each worker adds a tenth of a shard a second, the pile beside your pad counts them, and the HUD shows the rate.
 - The HUD: the wave box top centre, the scoreboard on the right (value, income, shards, bounty, West and East alive, the kings' life), the send panel over the belt with each monster's own figure and its shard cost.
-- A game setup screen before a conflict: random races or all pick, X1 to X4 sends, mirror mode, easy mode, the long game (waves 22 to 30), no champions, with D2R's own checkboxes. The host's setup shows in the lobby.
+- A game setup screen before a conflict: random towers (a fresh roll of lines from different races every wave) or all pick, X1 to X4 sends, mirror mode, easy mode, the long game (waves 22 to 30), no champions, with D2R's own checkboxes. The host's setup shows in the lobby.
 - The update page's changelog scrolls inside D2R's panel; the lobby wears the same panel and stone buttons.
 - Setup extracts the rebuilt battlefields, Baal's standing art, the classes' stats and the checkbox on the first start after the update.
 
