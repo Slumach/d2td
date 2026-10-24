@@ -854,11 +854,14 @@ const SLOT_NAMES: Record<Slot, string> = {
   amulet: 'Amulet',
 };
 
+/** itemtypes.txt class codes, by name. */
+const CLASS_ONLY: Record<string, string> = { ama: 'Amazon', sor: 'Sorceress', nec: 'Necromancer', pal: 'Paladin', bar: 'Barbarian', dru: 'Druid', ass: 'Assassin' };
+
 /** Why an item will not go on a tower, in a few words. */
 function wearRefusal(data: ItemData, item: Item, slot: Slot, tower: Tower): string {
   const b = data.bases[item.code];
   if (!b || !b.slots.includes(slot)) return `That does not go in the ${SLOT_NAMES[slot].toLowerCase()} slot`;
-  if (b.classOnly) return `Only ${b.classOnly === 'pal' ? 'Paladin' : b.classOnly === 'sor' ? 'Sorceress' : b.classOnly === 'nec' ? 'Necromancer' : 'another class'} towers can use that`;
+  if (b.classOnly) return `Only ${CLASS_ONLY[b.classOnly] ?? 'another class'} towers can use that`;
   if (slot === 'shield') return 'Two-handed weapons leave no hand for a shield';
   if (b.twoHanded) return 'Take the shield off first: it is two-handed';
   return `The ${tower.cls} tower cannot use that`;

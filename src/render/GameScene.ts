@@ -88,8 +88,6 @@ import { SkillFx, type Point } from './skillfx.ts';
 import { SoundBank, preloadSounds } from './sound.ts';
 import { FONT, buttonRow, createTooltip, type ButtonSpec, type Tooltip } from './ui.ts';
 
-/** The classes a tile offers, in the order of the build tabs. */
-const BUILD_CLASSES = ['paladin', 'sorceress', 'necromancer'];
 /** How far a tower looks for a monster to face, in units. */
 const FACE_RANGE = 6 * UNITS_PER_TILE;
 
@@ -268,7 +266,8 @@ export class GameScene extends Phaser.Scene {
   private cursesSeen = new Map<number, Set<string>>();
   private fx!: SkillFx;
   /** The class tab the build menu shows. */
-  private buildClass = BUILD_CLASSES[0]!;
+  /** The build tab chosen; every class the game data carries has one, in its order. */
+  private buildClass = 'paladin';
 
   constructor() {
     super('Game');
@@ -1817,8 +1816,8 @@ export class GameScene extends Phaser.Scene {
 
     if (sel?.kind === 'tile') {
       this.info.setText(`Build a tower (${buildCostFor(sim, this.seat)}g): its class and T1 skill fix its line`);
-      for (const cls of BUILD_CLASSES) {
-        for (const line of Object.values(sim.data.classes[cls]?.lines ?? {})) {
+      for (const [cls, c] of Object.entries(sim.data.classes)) {
+        for (const line of Object.values(c.lines)) {
           const skill = line.tiers[0]![0]!;
           specs.push(
             this.skillButton(skill, `${line.name}: ${this.skillName(skill)}`, () => {
@@ -1843,11 +1842,11 @@ export class GameScene extends Phaser.Scene {
     const d2 = this.d2!;
     if (sel?.kind === 'tile') {
       // A tab per class over the belt; the belt holds the chosen class's first skills
-      const cls = this.buildClass;
+      const cls = sim.data.classes[this.buildClass] ? this.buildClass : Object.keys(sim.data.classes)[0]!;
       const c = sim.data.classes[cls]!;
       this.info.setText(`Build a ${c.name} tower (${buildCostFor(sim, this.seat)} gold): its first skill fixes its line`);
       d2.setTabs(
-        BUILD_CLASSES.filter((id) => sim.data.classes[id]).map((id) => ({
+        Object.keys(sim.data.classes).map((id) => ({
           label: sim.data.classes[id]!.name,
           chosen: id === cls,
           onClick: () => {
