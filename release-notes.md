@@ -1,3 +1,8 @@
+0.3.17
+
+- Fixed: the build menu only offered the Paladin, the Sorceress and the Necromancer. Every class has its tab now: the Amazon, the Barbarian, the Druid and the Assassin too.
+- The message for a class-only item on the wrong tower names all seven classes.
+
 0.3.16
 
 - The Amazon's Javelin line climbs in D2's order: Poison Javelin, then Plague Javelin, then Lightning Fury at the top. Lightning Fury is much weaker than it was at T2 and sits with the other top-tier towers. The Fishyzon evolves from a T2 Plague Javelin; the Javazon needs a T3 Lightning Fury.
