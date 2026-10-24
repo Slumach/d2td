@@ -187,6 +187,8 @@
     "startingGold": 1000,
     "startingSouls": 0,
     "buildCostPctPerTower": 20,
+    "evolveCost": 20000,
+    "legendCost": 60000,
     "bountyPerLevel": 3,
     "income": [250, 300, 360, 430, 520, 620, 750, 900, 1100, 1300, 1600, 1900, 2300, 2800, 3300, 4000, 4800, 5800, 7000, 8400, 10000],
     "sendIncomePerSoul": 15,

@@ -81,6 +81,9 @@ export interface BattleJson {
   startingSouls: number;
   /** Each tower a player owns raises their next build by this percent. */
   buildCostPctPerTower: number;
+  /** A match is 21 waves, not a campaign: an evolution and a legend cost this much here. */
+  evolveCost: number;
+  legendCost: number;
   /** Kill gold: monster level times this times the rank multiplier (balance.json rankBountyMultiplier). */
   bountyPerLevel: number;
   /** Base gold paid to every player at the end of each wave, by wave. */
@@ -124,7 +127,7 @@ export function battleData(data: GameData): GameData {
   const out: GameData = {
     ...data,
     waves: b.waves,
-    economy: { ...data.economy, startingGold: b.rules.startingGold, bountyPerLevel: b.rules.bountyPerLevel },
+    economy: { ...data.economy, startingGold: b.rules.startingGold, bountyPerLevel: b.rules.bountyPerLevel, evolveCost: b.rules.evolveCost, legend: { ...data.economy.legend, cost: b.rules.legendCost } },
     rules: { ...data.rules, bossHpPct: {}, stageHpPct: {} },
     noLoot: true,
   };

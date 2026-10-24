@@ -118,8 +118,8 @@ export function botCommands(match: Match, slot: number): Command[] {
       // One tower bought a look: costs and values change with it
       break;
     }
-    // Worth saving for: within the temper's waves of income
-    if (o.cost <= gold + income * temper.saveWaves) break;
+    // Worth saving for: within the temper's waves of income, an evolution within four
+    if (o.cost <= gold + income * (o.command.type === 'evolve' ? 4 : temper.saveWaves)) break;
   }
 
   if (king.hp * 2 >= king.maxHp && wave >= 8 && gold > 0) {
@@ -238,7 +238,7 @@ function towerOptions(sim: Sim, seat: number, race: string, mine: Tower[], lines
     const up = upgradeCost(sim, t);
     const skill = activeSkill(sim, t)?.skill;
     if (up !== undefined && skill) {
-      const gain = partner ? idiv(planGain, 4) : t.level < MAX_TOWER_LEVEL ? worth(sim, skill, t.level) - worth(sim, skill, t.level - 1) : idiv(dps, 10);
+      const gain = partner ? idiv(planGain, 4) : levelGain(sim, t);
       if (gain > 0) out.push({ score: idiv(gain * PER, up), cost: up, command: { type: 'upgrade', towerId: t.id } });
     }
     const tc = tierCost(sim, t);
@@ -252,6 +252,24 @@ function towerOptions(sim: Sim, seat: number, race: string, mine: Tower[], lines
       const gain = partner ? planGain : def ? worth(sim, def, MAX_TOWER_LEVEL - 1) - dps : 0;
       if (gain > 0) out.push({ score: idiv(gain * PER, path), cost: tc, command: { type: 'upgradeTier', towerId: t.id } });
     }
+    // A level short of 5 is also a step toward the next tier: the whole path valued at its end
+    const line = t.line && !t.evolved ? cls.lines[t.line] : undefined;
+    const next = line?.tiers[t.tier];
+    if (up !== undefined && next && t.level < MAX_TOWER_LEVEL && t.tier < MAX_TIER) {
+      const nextSkill = next.find((s) => s === recipe?.attack.skill || s === recipe?.partner.skill) ?? next[0]!;
+      const def = sim.data.skills[nextSkill];
+      const levels = (sim.data.economy.levelCosts[t.tier - 1] ?? []).slice(t.level - 1).reduce((n, c) => n + c, 0);
+      const path = levels + (sim.data.economy.tierCosts[t.tier - 1] ?? 0) + levelPath(sim, t.tier + 1);
+      const gain = partner ? planGain : def ? worth(sim, def, MAX_TOWER_LEVEL - 1) - dps : 0;
+      if (gain > 0) out.push({ score: idiv(gain * PER, path), cost: up, command: { type: 'upgrade', towerId: t.id } });
+    }
+  }
+
+  // A ready evolution is the thing to save for
+  if (recipe) {
+    const pair = readyPair(sim, mine, recipe);
+    const cost = sim.data.economy.evolveCost;
+    if (pair) out.push({ score: Number.MAX_SAFE_INTEGER, cost, command: { type: 'evolve', towerA: pair[0].id, towerB: pair[1].id } });
   }
 
   // A new tower on the next line in turn, or the plan's partner when the attack is far enough
@@ -272,6 +290,14 @@ function towerOptions(sim: Sim, seat: number, race: string, mine: Tower[], lines
     }
   }
   return out;
+}
+
+/** What the tower's next level adds to its damage: its skill a level on, past 5 the skill levels it buys. */
+function levelGain(sim: Sim, t: Tower): number {
+  const now = activeSkill(sim, t);
+  const next = activeSkill(sim, { ...t, level: t.level + 1 });
+  if (!now || !next) return 0;
+  return worth(sim, next.skill, Math.min(next.lvl, MAX_TOWER_LEVEL - 1)) - worth(sim, now.skill, Math.min(now.lvl, MAX_TOWER_LEVEL - 1));
 }
 
 /** Gold for levels 1 to 5 of a tier. */

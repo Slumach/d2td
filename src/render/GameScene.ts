@@ -170,6 +170,9 @@ export interface BattleStart {
   battle: LocalBattle;
 }
 
+/** Battle Mode's workers: D2's hirelings once extracted, a Rogue in the meantime. */
+const WORKER_ART = ['mon:roguehire:normal', 'mon:corruptrogue1:normal'];
+
 /** The grey-box ground, for a run without the extracted maps: field, then boss lair. */
 const GREY_BOX: [number, number] = [0x30402a, 0x34343a];
 
@@ -716,6 +719,70 @@ export class GameScene extends Phaser.Scene {
   }
 
   private tyraelSprite: Phaser.GameObjects.Sprite | undefined;
+  /** Battle Mode: the workers standing in each lane's back row, by lane and slot; the sends seen queued. */
+  private workerSprites = new Map<string, Phaser.GameObjects.Sprite>();
+  private queuedSeen = 0;
+
+  /**
+   * Battle Mode, every tick: each lane's workers in its back row, Tyrael striking, what
+   * reached the Worldstone (its damage floating red over it), and a word when a send is
+   * made at your lane.
+   */
+  private syncBattle(): void {
+    const d = this.driver!;
+    const sim = this.sim;
+    const b = sim.state.battle!;
+    const slots = sim.map.workerSlots ?? [];
+    const key = WORKER_ART.find((k) => this.textures.exists(k));
+    slots.forEach((spots, lane) => {
+      const seat = sim.arcOwners[lane] ?? 0;
+      const n = b.workers[seat] ?? 0;
+      spots.forEach((spot, i) => {
+        const id = `${lane}:${i}`;
+        const have = this.workerSprites.get(id);
+        if (i >= n || !key) {
+          have?.destroy();
+          this.workerSprites.delete(id);
+          return;
+        }
+        if (have) return;
+        const at = project((spot.x + 0.5) * UNITS_PER_TILE, (spot.y + 0.5) * UNITS_PER_TILE);
+        const s = this.sprite(key, Math.round(at.x), Math.round(at.y)).setDepth(DEPTH.units + at.y / 1000);
+        const anim = this.modeKey(key, 'NU', i % 2 ? 'se' : 'sw');
+        if (anim) s.play({ key: anim, startFrame: i % 3 });
+        this.workerSprites.set(id, s);
+      });
+    });
+    // Tyrael swings at what he strikes; the strike lands as a holy bolt's burst
+    for (const h of sim.tyraelHits ?? []) {
+      const t = this.tyraelSprite;
+      if (t) {
+        const anim = this.modeKey(t.texture.key, 'A1', 'sw');
+        if (anim) t.play(anim).once('animationcomplete', () => {
+          const idle = this.modeKey(t.texture.key, 'NU', 'sw');
+          if (idle && t.active) t.play(idle);
+        });
+      }
+      this.effect('fistoftheheavensbolt', this.chest(h).x, this.chest(h).y);
+    }
+    const king = sim.map.king;
+    for (const hit of sim.kingHits ?? []) {
+      if (!king) break;
+      const at = project((king.x + 0.5) * UNITS_PER_TILE, (king.y + 0.5) * UNITS_PER_TILE);
+      const t = this.add.text(Math.round(at.x), Math.round(at.y) - 80, `-${hit.damage}`, { fontFamily: FONT, fontSize: '15px', color: '#ff5040', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setDepth(DEPTH.effects);
+      this.tweens.add({ targets: t, y: t.y - 24, alpha: 0, duration: 1200, ease: 'Cubic.easeIn', onComplete: () => t.destroy() });
+    }
+    // A send made at your own team's lanes, as it is queued
+    const own = d.match.zones[ringOf(d.match, d.me)]!.state.battle!;
+    if (own.queued.length < this.queuedSeen) this.queuedSeen = 0;
+    for (; this.queuedSeen < own.queued.length; this.queuedSeen++) {
+      const q = own.queued[this.queuedSeen]!;
+      const send = d.match.data.battle?.rules.sends.find((x) => x.id === q.send);
+      const target = slotOf(d.match, ringOf(d.match, d.me), d.match.zones[ringOf(d.match, d.me)]!.arcOwners[q.lane] ?? 0);
+      const name = send?.name ?? (this.gameData.monsters[this.gameData.monsterVariant([send?.monster ?? ''].flat()[0]!, 0)]?.name ?? q.send);
+      this.toast(`${this.nameOf(q.from)} sends ${name} down ${target === d.me ? 'your lane' : `${this.nameOf(target)}'s lane`}`);
+    }
+  }
 
   /** Alone, the monsters' one spawn is marked on the ground until the first wave: the place to build near. */
   private markSpawn(): void {
@@ -871,6 +938,8 @@ export class GameScene extends Phaser.Scene {
 
   /** Drops every sprite so the next tick rebuilds the zone on screen from scratch. */
   private clearViews(): void {
+    for (const s of this.workerSprites.values()) s.destroy();
+    this.workerSprites.clear();
     this.lastTick = -1;
     this.selection = undefined;
     this.panelKey = '';
@@ -1037,6 +1106,7 @@ export class GameScene extends Phaser.Scene {
     this.syncMissiles();
     this.syncSummons();
     this.floatGold();
+    if (this.battleHud) this.syncBattle();
     this.drops?.sync(this.sim.data.items, s.drops, this.seat, this.sim.state.lootFilters[this.seat] ?? 'default', this.altKey?.isDown === true);
     if (this.spawnLabel && s.wave >= 1) {
       this.spawnLabel.destroy();

@@ -666,6 +666,35 @@ Calls made for Stage 1 (each in balance.json, none per skill):
 - **Each tower a player owns raises their next build 20%** (battle.buildCostPctPerTower). At a flat 600 the Barbarian bot built 173 level-1 towers (Double Swing's damage does not grow with its level, so a fresh tower always looked best) and the Assassin 66; with the rise, lanes go up the tiers.
 - **Wave HP was tuned on the bots**, not by hand: mirror matches of every race (two seeds) measured each wave's leaked share of its weight, sends included, and moved its HP toward 3% for waves 1 to 4, 8% to wave 10 and 12% after; a boss wave's own percent (battle.waves bossHpPct, on the boss alone, so the sends that join its wave keep the wave's percent) toward a quarter of bosses leaking. The figures are the geometric mean of the tuner's last three rounds (scratch tool, not committed). Waves 1 and 2 were then set lower by hand (250% and 350%) so a single level-1 tower holds most of wave 1: the bot levels its first tower to 3 before wave 1, and a human who did not lost 36 of 100 life to it.
 
+### Stage 2: economy
+
+- **Gold.** Kill gold is the campaign's bounty formula at battle.bountyPerLevel (3 a monster level, the rank multipliers on top); base income (battle.income, 250 after wave 1 rising to 10,000 after wave 21) is paid to every player at the end of each fight, with what their sends added. Gold buys towers, levels, tiers and evolutions at the campaign's prices, except that each tower owned raises the next build 20% (Stage 1), and an evolution costs 20,000 and a legend 60,000 (battle.evolveCost, legendCost; 45,000 and 150,000 in the campaign): at campaign prices no bot evolved inside 21 waves.
+- **Souls and workers.** A worker is a hireling in the player's back row (the `hire` command): 250 gold, 25 more for each one already hired (battle.worker), at most 12, and each brings 2 Souls at the end of every wave. Souls buy sends and nothing else. Workers stand in the lane's back row (drawn as a Rogue until the hirelings are extracted, Stage 4).
+- **Sends** (battle.sends, the `send` command, applied by the match because it crosses teams). A send joins the enemy team's next wave on the lane the sender chooses, walking behind that lane's own monsters at the wave's level and HP percent. Each permanently raises its sender's income by 15 gold a wave for every Soul it cost (sendIncomePerSoul). Costs rise 10% a wave (5% for the act bosses). The panel:
+
+| Send | What walks | Souls at wave 1 | From wave |
+| --- | --- | --- | --- |
+| The Cow King | the Cow King and his Hell Bovines, at 30% HP: the cheap joke | 2 | 1 |
+| Corpsefire | Corpsefire and his Zombies | 4 | 1 |
+| Champion Fallen | three Extra Fast champion Fallen | 4 | 2 |
+| Bishibosh | Bishibosh and his Fallen Shamans | 5 | 2 |
+| Rakanishu | Rakanishu and his Carvers | 6 | 3 |
+| The Countess | the Countess and her pack | 10 | 6 |
+| Fire Eye, Radament | each with their pack | 11, 12 | 7 |
+| Champion Mummies | three Stone Skin champion Mummies | 10 | 8 |
+| Pindleskin, Nihlathak | each with their pack | 20, 22 | 13, 14 |
+| Champion Blood Lords | three Extra Strong, Magic Resistant champions | 18 | 13 |
+| The Ancients | Talic, Madawc and Korlic | 36 | 16 |
+| Andariel to Baal | the act boss alone, once a match each, at 12% HP (an act boss's own HP is many waves' worth) | 40, 55, 75, 100, 130 | 8, 11, 14, 17, 19 |
+
+- **The king's upgrades** (the `king` command; battle.king.upgrades), bought by any player of the team for the team: the Worldstone's life (+20 max and healed, from 500 gold), its regeneration (+2 a wave, from 400) and Tyrael's strike (+5% of a monster's life, a fifth of that on bosses, from 600), each 150% dearer a level, ten levels each.
+- **What it comes to** (mirror bot matches of every race, two seeds, per lane, the economy probe): income 250 after wave 1, 1,600 after wave 10 and about 12,900 after wave 21, a fifth of it from sends; kill gold 100 to 3,800 a wave; nine workers by wave 14, sends from wave 6 at about one a wave; king damage about 6 a wave from wave 10, half of it from sends.
+
+Calls made for Stage 2:
+
+- The bot runs inside the match step on every client (src/sim/battlebot.ts), not as a host-side player, so bots need no network traffic and stay in lockstep. It plays its race's two strongest attack lines (a trap line counts its trap's bolt), buys by damage gained per gold, saves for a ready evolution up to four waves of income ahead, values a level short of 5 as a step toward the next tier (Double Swing gains nothing from its own levels, and the Barbarian bot never tiered), hires workers early, sends the dearest send its Souls buy at the enemy lane that leaks most, and buys king life when the king is under 70%. Each bot slot has a temper drawn from the seed (workers, how far ahead it saves, how long it holds Souls, a lean toward one line), so the harness sees more than one game a pairing.
+- A send's monsters take the joined wave's HP percent, not their own: a superunique at a late wave is as dangerous for its cost as at an early one.
+
 ## Overnight decisions
 
 Calls made without asking, each the option closest to Diablo II's own rules.
