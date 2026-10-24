@@ -644,7 +644,7 @@ Crushing blow, by D2's rules (combat.ts crushingBlow): a quarter of the monster'
 
 SORC and DRUID on wave 52, traced on all eight itemless seeds of each: it is act bosses carried round the ring. Neither class's ring kills an act boss in one lap. Normal Bloodraven first laps on wave 7 or 8, Normal Diablo takes eight laps and Normal Baal twelve, and from Nightmare Andariel on (wave 31) each act boss is still circling when the next arrives. On every seed the run ends with five bosses on the ring (the five Nightmare act bosses for SORC, Nightmare Duriel to Baal plus Normal Baal for DRUID). A boss weighs 10 against the alive limit of 100, so half the limit is gone before Hell starts, and the step into Hell on wave 51 (2.85x the wave before) fills the rest. Their rings: SORC builds Chain Lightning (617 DPS at T3 level 5, among the lowest T3s) with Enchant and Static Field; DRUID one or two Volcanoes and five to nine Dire Wolves. Neither class has a resistance cut or a damage multiplier, and the Nightmare act bosses resist 50% of every element, where the Paladin's auras and the Necromancer's curses carry their bots past them. The other lines do no better (BOT_BUILDS, seeds 1 to 3): SORC on Ice Bolt alone dies on 11, 11 and 47, on Fire Bolt alone on 11, 43 and 11 (Normal Duriel on wave 11), and on Charged Bolt alone on 52 like the full bot; DRUID on Wind alone dies on 41 to 49 and on Fire alone on 52.
 
-## Battle Mode (Oct 24 overnight)
+## Eternal Conflict (Battle Mode until 0.4.2; Oct 24 overnight)
 
 Legion TD on D2's data: two teams, each with a straight lane per player running side by side into the team's king, the Worldstone, with Tyrael beside it striking whatever leaks. Harrogath under siege is the first team's keep, the Pandemonium Fortress the second's. Every number is in balance.json `battle`; the rules are src/sim/battle.ts, the phases and sends src/sim/match.ts, the bot src/sim/battlebot.ts.
 
@@ -782,6 +782,10 @@ Kings fell before wave 21 in 56% of 1v1 matches and 57% of mirror matches (from 
 | Assassin | 53 | 41 | 44 | 34 | 56 | 63 | | 48 |
 
 Kings fell before wave 21 in 60% of 2v2 matches and 61% of mirror matches; every race between 46% and 53%, four pairings outside 40 to 60. 3v3 and 4v4 (two seeds, falls only): 50% and 57% of matches; their race tables were not tuned.
+
+### Pass three: Eternal Conflict (0.4.2)
+
+The mode is called Eternal Conflict everywhere a player reads it (the menu, the lobby, the setup screen, the HUD, the end screen, the profile's record, the docs); the code keeps its battle identifiers (match mode `battle`, src/sim/battle.ts, balance.json `battle`), and the menu button's hint is "Heaven against Hell, Legion style." Co-op keeps its name under the heading. The references for the pass are references/legion (Legion TD screenshots) and, for our own art, references/ (the D2R screenshots; references/d2td/ does not exist).
 
 ## Overnight decisions
 

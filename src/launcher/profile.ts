@@ -25,7 +25,7 @@ export interface Profile {
   belt: (Item | null)[];
   /** The furthest wave reached, for the character screen. */
   bestWave: number;
-  /** Battle Mode's record: matches won and lost (draws count as neither), and the furthest wave a match reached. */
+  /** Eternal Conflict's record: matches won and lost (draws count as neither), and the furthest wave a match reached. */
   battle: BattleRecord;
 }
 

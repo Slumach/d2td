@@ -19,7 +19,7 @@ export const TICK_MS = 50;
 export interface LobbyPlayer {
   slot: number;
   name: string;
-  /** Battle Mode: the race they picked ('random' by default) and the team they asked for. */
+  /** Eternal Conflict: the race they picked ('random' by default) and the team they asked for. */
   race?: string;
   team?: number;
 }
@@ -37,7 +37,7 @@ export type ClientMessage =
       token?: string;
     }
   | { t: 'mode'; mode: MatchMode }
-  /** Battle Mode: the host sets the team size; anyone sets their own race and team. */
+  /** Eternal Conflict: the host sets the team size; anyone sets their own race and team. */
   | { t: 'battle'; teamSize?: number; race?: string; team?: number }
   /** The host starts the match; with `resume`, from its saved checkpoint (JSON). */
   | { t: 'start'; resume?: string }

@@ -6,7 +6,7 @@
     "dopplezon": { "cls": "amazon", "line": "javelin", "tint": 13693183, "alpha": 0.8 },
     "shadowmaster": { "cls": "assassin", "line": "shadow", "tint": 7364767, "alpha": 0.75 }
   },
-  "hirelings": { "comment": "Battle Mode's workers: D2's hirelings, each in its own act's palette, standing and swinging.", "ids": { "roguehire": 1, "act2hire": 2, "act3hire": 3, "act5hire1": 5 } },
+  "hirelings": { "comment": "Eternal Conflict's workers: D2's hirelings, each in its own act's palette, standing and swinging.", "ids": { "roguehire": 1, "act2hire": 2, "act3hire": 3, "act5hire1": 5 } },
   "objects": { "redportal": { "token": "PP", "modes": ["OP", "ON"], "variant": "lit" } },
   "heroes": {
     "paladin": {

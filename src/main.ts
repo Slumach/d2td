@@ -10,7 +10,7 @@ import { startGame } from './render/start.ts';
 //   ?speed=4   run the sim 4 times as fast
 //   ?wave=26   start the run at that wave of the campaign (to look at a later act)
 //   ?menu      the launcher's menus on a stub of the Electron API, to look at them in a browser
-//   ?battle    Battle Mode against bots (?battle=coop for co-op; &team=2 players a team, &race=paladin)
+//   ?battle    Eternal Conflict against bots (?battle=coop for co-op; &team=2 players a team, &race=paladin)
 const params = new URLSearchParams(window.location.search);
 // The cursor and font come from the extraction; before first setup they simply are not there
 await loadFeel();

@@ -270,7 +270,7 @@ export interface MapManifest {
   /** By act number, then field or lair. Prefab names are `act<N>/<name>`. */
   acts: Record<string, Record<MapName, BakedMap>>;
   prefabs: Record<string, PrefabOut>;
-  /** Battle Mode's battlefields (battlemap.ts): by keep (harrogath, fortress), then by lanes (1 to 4). */
+  /** Eternal Conflict's battlefields (battlemap.ts): by keep (harrogath, fortress), then by lanes (1 to 4). */
   battle?: Record<string, Record<string, BakedMap>>;
 }
 

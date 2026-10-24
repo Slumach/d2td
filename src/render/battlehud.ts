@@ -1,4 +1,4 @@
-// Battle Mode's HUD (src/sim/battle.ts): both kings' life across the top, the shared phase
+// Eternal Conflict's HUD (src/sim/battle.ts): both kings' life across the top, the shared phase
 // and its timer under them, and a panel down the left with this player's race, gold and
 // Souls, the worker button, the king's upgrades and the send panel. Reads the match; every
 // button only issues a command.

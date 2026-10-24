@@ -101,7 +101,7 @@ export class Keeper {
     this.save();
   }
 
-  /** Battle Mode: a finished match on the profile's record (won true, lost false, a draw undefined). */
+  /** Eternal Conflict: a finished match on the profile's record (won true, lost false, a draw undefined). */
   recordBattle(won: boolean | undefined, wave: number): void {
     const go = () => {
       const r = this.profile!.battle;

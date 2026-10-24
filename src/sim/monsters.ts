@@ -131,7 +131,7 @@ function resurrect(sim: Sim, shaman: Monster): boolean {
 
 export function speedOf(sim: Sim, m: Monster): number {
   let speed = sim.data.monsters[m.def]!.speed;
-  // Battle Mode: an act boss walks its one lane at a share of its pace (balance.json battle.bossSpeedPct)
+  // Eternal Conflict: an act boss walks its one lane at a share of its pace (balance.json battle.bossSpeedPct)
   if (sim.state.battle && m.rank === 'boss') speed = idiv(speed * sim.data.battle!.rules.bossSpeedPct, 100);
   for (const mod of m.mods) speed += idiv(speed * sim.data.rules.mods[mod].speedPct, 100);
   const chill = m.chillTicks > 0 ? sim.data.rules.chillPct : 0;

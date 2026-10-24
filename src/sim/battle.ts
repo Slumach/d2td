@@ -1,4 +1,4 @@
-// Battle Mode (Legion TD style): two teams, each with a lane per player running into the
+// Eternal Conflict (Legion TD style): two teams, each with a lane per player running into the
 // team's king, the Worldstone, with Tyrael beside it striking whatever leaks. Every number
 // is balance.json battle's.
 //
@@ -101,7 +101,7 @@ export interface BattleJson {
    * Per race (class): percent on its base income and kill gold, the balance lever between
    * races, and a second percent on top in a team game (two or more a side), which plays
    * differently: two senders can pile onto one lane. damagePct (100 when absent) is on every
-   * hit its towers land, for a class whose towers lean on the items Battle Mode leaves out.
+   * hit its towers land, for a class whose towers lean on the items Eternal Conflict leaves out.
    */
   races: Record<string, { goldPct: number; teamGoldPct?: number; damagePct?: number }>;
   waves: BattleWaveJson[];

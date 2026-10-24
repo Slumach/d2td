@@ -36,7 +36,7 @@ export interface SimOptions {
    * players than arcs the rest go round, so the whole ring is always someone's.
    */
   players?: number;
-  /** The ground: the ring by default, a battlefield's lanes in Battle Mode (map.ts createLaneMap). */
+  /** The ground: the ring by default, a battlefield's lanes in Eternal Conflict (map.ts createLaneMap). */
   map?: GameMap;
 }
 

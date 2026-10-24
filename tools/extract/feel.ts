@@ -57,7 +57,7 @@ export interface SoundManifest {
   cow: { portal: string[]; music: string | null };
   /** The menus: button click and hover, and the title music. */
   ui: { click: string[]; hover: string[]; music: string | null };
-  /** Battle Mode: a send made, a leak reaching the Worldstone, Tyrael's strike, a won match. */
+  /** Eternal Conflict: a send made, a leak reaching the Worldstone, Tyrael's strike, a won match. */
   battle?: { send: string[]; kingHit: string[]; tyrael: string[]; victory: string[] };
   volumePct: { music: number; ambience: number; sfx: number };
 }

@@ -97,11 +97,11 @@ export type CommandBody =
   | { type: 'sellDrop'; dropId: number }
   /** The trade window: handled by the match, which spans rings (src/sim/items/trade.ts). */
   | TradeCommand
-  /** Battle Mode (src/sim/battle.ts): hire a worker into this player's back row, for Souls each wave. */
+  /** Eternal Conflict (src/sim/battle.ts): hire a worker into this player's back row, for Souls each wave. */
   | { type: 'hire' }
-  /** Battle Mode: a send (balance.json battle.sends) onto an enemy lane's next wave. The match handles it: it crosses teams. */
+  /** Eternal Conflict: a send (balance.json battle.sends) onto an enemy lane's next wave. The match handles it: it crosses teams. */
   | { type: 'send'; send: string; lane: number }
-  /** Battle Mode: gold into the team's king: the Worldstone's life, its regeneration or Tyrael's hits. */
+  /** Eternal Conflict: gold into the team's king: the Worldstone's life, its regeneration or Tyrael's hits. */
   | { type: 'king'; upgrade: KingUpgrade };
 
 export type KingUpgrade = 'hp' | 'regen' | 'tyrael';
@@ -353,7 +353,7 @@ export interface SimState {
   belts: (Item | null)[][];
   /** Each player's loot filter (src/sim/items/loot.ts passesFilter). */
   lootFilters: LootFilter[];
-  /** Battle Mode only: this team's king, workers, Souls and income (src/sim/battle.ts). */
+  /** Eternal Conflict only: this team's king, workers, Souls and income (src/sim/battle.ts). */
   battle?: BattleSimState;
 }
 
@@ -413,7 +413,7 @@ export interface Sim {
    * what it paid its killer, gold find and Find Item included. Not state: cleared every step.
    */
   paid: PaidKill[];
-  /** Battle Mode: what reached the king this tick and what Tyrael struck, for the renderer. Not state. */
+  /** Eternal Conflict: what reached the king this tick and what Tyrael struck, for the renderer. Not state. */
   kingHits?: { x: number; y: number; damage: number }[];
   tyraelHits?: { x: number; y: number }[];
 }

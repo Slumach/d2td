@@ -109,8 +109,8 @@ export function damageAgainst(sim: Sim, monster: Monster, amount: number, elemen
 }
 
 /**
- * Battle Mode: a tower's hit takes its race's damage percent (balance.json battle.races
- * damagePct), the lever for a class whose towers lean on the items Battle Mode leaves out.
+ * Eternal Conflict: a tower's hit takes its race's damage percent (balance.json battle.races
+ * damagePct), the lever for a class whose towers lean on the items Eternal Conflict leaves out.
  */
 function raceDamage(sim: Sim, amount: number): number {
   const race = sim.state.battle && sim.actorTower ? sim.state.battle.races[sim.actor] : undefined;
@@ -268,7 +268,7 @@ export function killMonster(sim: Sim, monster: Monster): void {
   // Find Item's aura on the monster adds to the killer's gold find
   const found = bounty(sim, monster) + idiv(bounty(sim, monster) * (gear.goldFindPct + (monsterFx(sim, monster).goldPct ?? 0)), 100);
   const killer = Math.min(monster.lastHit, s.gold.length - 1);
-  // Battle Mode: the race's gold percent, the lever between races (balance.json battle.races)
+  // Eternal Conflict: the race's gold percent, the lever between races (balance.json battle.races)
   const race = s.battle?.races[killer];
   const r = race ? sim.data.battle?.rules.races[race] : undefined;
   const pct = r ? (sim.players > 1 ? idiv(r.goldPct * (r.teamGoldPct ?? 100), 100) : r.goldPct) : 100;

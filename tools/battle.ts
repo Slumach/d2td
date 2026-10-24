@@ -1,4 +1,4 @@
-// Battle harness (Battle Mode, src/sim/battle.ts): the battle bot plays bot against bot, a
+// Battle harness (Eternal Conflict, src/sim/battle.ts): the battle bot plays bot against bot, a
 // 1v1 for every race pairing on every seed, each pairing played from both sides of the map
 // so neither team's side counts. It prints each race's win rate against every other, the
 // wave the losing king fell on, and flags any race above 60% or below 40% overall or

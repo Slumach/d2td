@@ -69,7 +69,7 @@ describe('battle seats', () => {
   });
 });
 
-describe.skipIf(!hasTables())('Battle Mode (real tables)', () => {
+describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
   it('online, a lobby slot acts for the seat it was given', () => {
     const setup = battleSetupFor('battle', 2, [{ race: 'paladin', team: 0 }, { race: 'sorceress', team: 1 }])!;
     const m = createMatch(real(), 9, 'battle', 4, setup);

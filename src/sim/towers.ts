@@ -173,7 +173,7 @@ function removeTower(sim: Sim, id: number): void {
   s.summons = s.summons.filter((u) => u.towerId !== id);
 }
 
-/** What `player`'s next tower costs: buildCost, the same for every tower however many they own, in Battle Mode too. */
+/** What `player`'s next tower costs: buildCost, the same for every tower however many they own, in Eternal Conflict too. */
 export function buildCostFor(sim: Sim, _player: number): number {
   return sim.data.economy.buildCost;
 }
@@ -181,7 +181,7 @@ export function buildCostFor(sim: Sim, _player: number): number {
 export function build(sim: Sim, player: number, x: number, y: number, cls: string, skill?: string): void {
   const s = sim.state;
   const cost = buildCostFor(sim, player);
-  // Battle Mode: a player builds only their race's towers
+  // Eternal Conflict: a player builds only their race's towers
   if (s.battle && s.battle.races[player] !== cls) return;
   if (!sim.data.classes[cls] || !canBuild(sim, x, y, player) || !pay(sim, player, cost)) return;
   const center = tileCenter({ x, y });

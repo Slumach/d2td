@@ -177,7 +177,7 @@
     "holy-bolt": { "fullDamageTo": "undead", "otherDamagePct": 40 }
   },
   "battle": {
-    "comment": "Battle Mode (src/sim/battle.ts): Legion TD style, two teams with a lane each and a king at the back. Ticks are 1/20 s; gold, Souls and king life are whole points.",
+    "comment": "Eternal Conflict (src/sim/battle.ts): Legion TD style, two teams with a lane each and a king at the back. Ticks are 1/20 s; gold, Souls and king life are whole points.",
     "streamTicks": 360,
     "bossSpeedPct": 40,
     "meleeReachTenths": 25,

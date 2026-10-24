@@ -34,7 +34,7 @@ export interface MapManifest {
   /** By act number, then field or lair. */
   acts: Record<string, Record<string, BakedMap>>;
   prefabs: Record<string, { image: string; anchorX: number; anchorY: number }>;
-  /** Battle Mode's battlefields: by keep, then by lane count. Their grounds load when first shown. */
+  /** Eternal Conflict's battlefields: by keep, then by lane count. Their grounds load when first shown. */
   battle?: Record<string, Record<string, BakedMap>>;
 }
 
@@ -47,7 +47,7 @@ const ICON_FOLDERS = Object.keys(sprites.heroes);
 const iconIndexKey = (folder: string) => `icons:${folder}`;
 
 export const SUMMON_IDS = sprites.summons.ids;
-/** Battle Mode's workers: D2's hirelings, Act 1's Rogue to Act 5's Barbarian. */
+/** Eternal Conflict's workers: D2's hirelings, Act 1's Rogue to Act 5's Barbarian. */
 export const HIRELING_IDS = Object.keys((sprites as { hirelings?: { ids: Record<string, number> } }).hirelings?.ids ?? {});
 
 /**

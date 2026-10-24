@@ -95,7 +95,7 @@ export interface HudNumbers {
   actFrac: number;
   /** The next wave's tooltip, or undefined after the last. */
   nextWave?: { title: string; body: string };
-  /** What the life globe's number says, when it is not the alive weight (Battle Mode: the Worldstone). */
+  /** What the life globe's number says, when it is not the alive weight (Eternal Conflict: the Worldstone). */
   lifeLabel?: string;
 }
 
@@ -130,7 +130,7 @@ export interface SkillSlot {
 
 export interface HudCallbacks {
   onCallWave: () => void;
-  /** False hides Send Wave (Battle Mode: the match starts every wave). */
+  /** False hides Send Wave (Eternal Conflict: the match starts every wave). */
   sendWave?: boolean;
   onInventory: () => void;
   onAutomap: () => void;

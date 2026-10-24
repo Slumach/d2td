@@ -1,6 +1,6 @@
 // The scoreboard on Tab, in the manner of D2's party panel: a dark sheet in a bronze frame,
 // a row per player in their colour with kills, alive weight against the limit, gold, towers
-// and wave. Solo, team and FFA alike; in Battle Mode each player's race, team, kills, leaks,
+// and wave. Solo, team and FFA alike; in Eternal Conflict each player's race, team, kills, leaks,
 // sends, workers and towers. Reads the match, writes nothing.
 
 import Phaser from 'phaser';

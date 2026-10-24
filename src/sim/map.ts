@@ -50,13 +50,13 @@ export interface GameMap {
   /** arcTiles[y * width + x] is the arc whose wedge holds the tile (whose player may build there). */
   arcTiles: number[];
   /**
-   * Battle Mode (lanes): the path is open, one straight lane per arc laid end to end in ring
+   * Eternal Conflict (lanes): the path is open, one straight lane per arc laid end to end in ring
    * distance, each ending at the king. Nothing wraps; a monster at its lane's end leaks.
    */
   open?: boolean;
-  /** Battle Mode: the back-row tiles each lane's workers stand on, in hiring order. */
+  /** Eternal Conflict: the back-row tiles each lane's workers stand on, in hiring order. */
   workerSlots?: Point[][];
-  /** Battle Mode: the king's tile (the Worldstone) and Tyrael's beside it. */
+  /** Eternal Conflict: the king's tile (the Worldstone) and Tyrael's beside it. */
   king?: Point;
   tyrael?: Point;
 }

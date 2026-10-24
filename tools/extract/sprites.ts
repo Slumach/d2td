@@ -348,7 +348,7 @@ function monsterJobs(shared: Shared): SpriteJob[] {
   const summons = new Set(sprites.summons.ids);
   // The T5 legends' NPCs and monsters, standing and swinging
   const legendArt = new Set(Object.values(legends).map((l) => l.monster));
-  // Battle Mode's workers: the hirelings, in their own acts' palettes
+  // Eternal Conflict's workers: the hirelings, in their own acts' palettes
   const hirelings = (sprites as { hirelings?: { ids: Record<string, number> } }).hirelings?.ids ?? {};
   const ids = [...new Set([...MONSTER_ART, ...summons, ...legendArt, ...Object.keys(hirelings)])];
   // A superunique wears its class's art in its own palette: palshift.dat row Utrans

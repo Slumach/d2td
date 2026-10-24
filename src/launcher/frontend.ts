@@ -7,7 +7,7 @@
 import Phaser from 'phaser';
 
 import { SOUND_MANIFEST, type SoundManifest } from '../render/sound.ts';
-import { FONT } from '../render/ui.ts';
+import { FONT, type Tooltip } from '../render/ui.ts';
 
 export const FRONTEND_KEY = 'frontend:manifest';
 export const frontendKey = (name: string) => `frontend:${name}`;
@@ -95,6 +95,9 @@ export interface StoneButtonOptions {
   width?: number;
   enabled?: boolean;
   fontSize?: number;
+  /** A line shown in `tooltip` while the pointer rests on the button. */
+  hint?: string;
+  tooltip?: Tooltip;
 }
 
 /** A D2 stone button: normal, hover and pressed frames, Exocet label, D2's click and hover sounds. */
@@ -118,10 +121,15 @@ export function stoneButton(scene: Phaser.Scene, x: number, y: number, label: st
       img.setFrame(1);
       text.setColor('#f2e4b8');
       uiSound(scene, 'hover');
+      if (opts.hint && opts.tooltip) {
+        opts.tooltip.move(x - 150, y - img.displayHeight / 2 - 4);
+        opts.tooltip.show(label, opts.hint);
+      }
     });
     img.on('pointerout', () => {
       img.setFrame(0);
       text.setColor('#d8c89a');
+      opts.tooltip?.hide();
     });
     img.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
       e.stopPropagation();

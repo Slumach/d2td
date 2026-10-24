@@ -1,4 +1,4 @@
-// Battle Mode's battlefields, baked at extraction from the player's own tiles and our layout
+// Eternal Conflict's battlefields, baked at extraction from the player's own tiles and our layout
 // (src/data/map/battle.json): Harrogath under siege for the first team, the Pandemonium
 // Fortress for the second, each once for every team size, on the lanes src/sim/map.ts
 // createLaneMap lays out.

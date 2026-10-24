@@ -31,8 +31,8 @@ const MODE_TEXT: Record<MatchMode, { name: string; about: string }> = {
   team: { name: 'Team', about: 'One ring, an arc each (up to four players). Monsters lap the ring until someone kills them, kill gold goes to the killer, and the team loses when 100 are alive at once.' },
   ffa: { name: 'Free for all', about: 'Everyone gets their own ring and the same waves. Let 100 pile up on yours and you are out; the last ring standing wins.' },
   solo: { name: 'Solo', about: '' },
-  battle: { name: 'Battle', about: 'Two teams, a lane each, a king at the back. Build your race, hire workers for Souls, and send monsters down the other team\'s lanes. First king to fall loses.' },
-  coop: { name: 'Co-op', about: 'One team, a lane each, against 21 waves with sends arriving on a timer. Keep the Worldstone standing.' },
+  battle: { name: 'Eternal Conflict', about: 'Two teams, a lane each, a king at the back. Build your race, hire workers for Souls, and send monsters down the other team\'s lanes. First king to fall loses.' },
+  coop: { name: 'Eternal Conflict co-op', about: 'One team, a lane each, against 21 waves with sends arriving on a timer. Keep the Worldstone standing.' },
 };
 
 type Phase = 'code' | 'connecting' | 'lobby';
@@ -53,7 +53,7 @@ export class LobbyScene extends Phaser.Scene {
   private isHost = false;
   private codes: JoinCode[] = [];
   private upnp: UpnpStatus | 'trying' = 'trying';
-  /** Battle Mode: players a team (the host's), and the choices the host came in with from the Battle Mode page. */
+  /** Eternal Conflict: players a team (the host's), and the choices the host came in with from the Eternal Conflict page. */
   private teamSize = 1;
   private preset: BattleChoice | undefined;
 
@@ -99,7 +99,7 @@ export class LobbyScene extends Phaser.Scene {
         this.isHost = m.host;
         this.phase = 'lobby';
         this.message = '';
-        // Hosting from the Battle Mode page: its mode, team size and race come along
+        // Hosting from the Eternal Conflict page: its mode, team size and race come along
         const p = this.preset;
         if (p && m.host) {
           this.preset = undefined;
@@ -149,7 +149,8 @@ export class LobbyScene extends Phaser.Scene {
     this.parts = [];
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
     add(this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x14120e).setOrigin(0));
-    add(this.add.text(LEFT, 90, this.role === 'host' ? 'Host a game' : 'Join a game', { ...TEXT, fontSize: '44px' }));
+    const conflict = this.phase === 'lobby' && (this.mode === 'battle' || this.mode === 'coop');
+    add(this.add.text(LEFT, 90, conflict ? 'Eternal Conflict' : this.role === 'host' ? 'Host a game' : 'Join a game', { ...TEXT, fontSize: '44px' }));
     let y = 180;
 
     if (this.phase === 'code') {

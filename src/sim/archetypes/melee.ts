@@ -65,7 +65,7 @@ export const melee: ArchetypeModule<MeleeDef> = {
 
   act(sim, tower, skill, lvl, buff) {
     const { swings, damagePct, elementalPct } = skill.levels[lvl]!;
-    // Battle Mode: a lane is walked once, so melee reaches at least balance.json battle.meleeReachTenths
+    // Eternal Conflict: a lane is walked once, so melee reaches at least balance.json battle.meleeReachTenths
     const reach = sim.state.battle ? Math.max(skill.rangeUnits, idiv((sim.data.battle?.rules.meleeReachTenths ?? 0) * 1000, 10)) : skill.rangeUnits;
     const elements = ELEMENTS.filter((e) => e === (skill.convert ?? 'phys') || (elementalPct[e] ?? 0) > 0);
     // The gear's added damage can hurt what the weapon cannot

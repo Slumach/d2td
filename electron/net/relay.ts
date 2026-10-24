@@ -34,7 +34,7 @@ interface Peer {
   /** Set once the peer has said hello and been let in. */
   joined: boolean;
   gone: boolean;
-  /** Battle Mode: the race they picked and the team they asked for. */
+  /** Eternal Conflict: the race they picked and the team they asked for. */
   race: string;
   team: number;
 }
@@ -48,7 +48,7 @@ export class Relay {
   private readonly opts: RelayOptions;
   private peers: Peer[] = [];
   private mode: MatchMode = 'team';
-  /** Battle Mode: players a team, set by the host. */
+  /** Eternal Conflict: players a team, set by the host. */
   private teamSize = 1;
   private started = false;
   private tick = 0;

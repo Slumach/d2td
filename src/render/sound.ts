@@ -18,7 +18,7 @@ export interface SoundManifest {
   items?: Record<string, string[]>;
   /** The cow level's portal sound and music; absent before the cow level. */
   cow?: { portal: string[]; music: string | null };
-  /** Battle Mode's sounds; absent before the extraction that adds them. */
+  /** Eternal Conflict's sounds; absent before the extraction that adds them. */
   battle?: { send: string[]; kingHit: string[]; tyrael: string[]; victory: string[] };
   /** Menu sounds; absent in extractions from before the D2 menu. */
   ui?: { click: string[]; hover: string[]; music: string | null };
@@ -121,7 +121,7 @@ export class SoundBank {
     this.play(this.manifest?.gold, 45);
   }
 
-  /** Battle Mode's moments: a send made, a leak at the Worldstone, Tyrael's strike, a won match. */
+  /** Eternal Conflict's moments: a send made, a leak at the Worldstone, Tyrael's strike, a won match. */
   battle(moment: 'send' | 'kingHit' | 'tyrael' | 'victory'): void {
     this.play(this.manifest?.battle?.[moment], moment === 'tyrael' ? 45 : 80);
   }

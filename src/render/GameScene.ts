@@ -166,7 +166,7 @@ export interface SoloStart {
   resume?: Checkpoint;
 }
 
-/** Battle Mode against the match's own bots, from the main menu. */
+/** Eternal Conflict against the match's own bots, from the main menu. */
 export interface BattleStart {
   battle: LocalBattle;
 }
@@ -174,7 +174,7 @@ export interface BattleStart {
 /** The battlefields' keeps in team order, as the extraction names them (src/data/map/battle.json). */
 const BATTLE_KEEPS = ['harrogath', 'fortress'];
 
-/** Battle Mode's workers: D2's hirelings of every act in turn, a Dark Hunter before they are extracted. */
+/** Eternal Conflict's workers: D2's hirelings of every act in turn, a Dark Hunter before they are extracted. */
 const WORKER_ART = HIRELING_IDS.map((id) => `mon:${id}:normal`);
 const WORKER_STAND_IN = 'mon:corruptrogue1:normal';
 
@@ -284,7 +284,7 @@ export class GameScene extends Phaser.Scene {
   /** The class tab the build menu shows. */
   /** The build tab chosen; every class the game data carries has one, in its order. */
   private buildClass = 'paladin';
-  /** Battle Mode: its HUD, the keep's sprites, the local battle to play again, and whether the result is on the profile. */
+  /** Eternal Conflict: its HUD, the keep's sprites, the local battle to play again, and whether the result is on the profile. */
   private battleHud: BattleHud | undefined;
   private keepParts: Phaser.GameObjects.GameObject[] = [];
   private localBattle: LocalBattle | undefined;
@@ -418,7 +418,7 @@ export class GameScene extends Phaser.Scene {
     if (battle) this.buildClass = battle.races[this.driver.me] ?? this.buildClass;
     this.waveSeen = this.sim.state.wave;
     this.keeper = new Keeper(this.registry.get('launcher') as LauncherApi | undefined, this.gameData.items);
-    // Battle Mode carries no items: the profile only takes its record
+    // Eternal Conflict carries no items: the profile only takes its record
     if (!battle) this.keeper.begin((c) => this.issue(c));
     // The loot filter from Options; the default needs no command
     const filter = (this.registry.get('lootFilter') as LootFilter | undefined) ?? 'default';
@@ -691,7 +691,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Battle Mode: each lane's player named at its top in their colour, and the keep at the
+   * Eternal Conflict: each lane's player named at its top in their colour, and the keep at the
    * back: the Worldstone, with Tyrael beside it.
    */
   private markLanes(): void {
@@ -743,12 +743,12 @@ export class GameScene extends Phaser.Scene {
   private tyraelSprite: Phaser.GameObjects.Sprite | undefined;
   /** Battlefield grounds asked for, so each loads once. */
   private battlefieldLoading = new Set<string>();
-  /** Battle Mode: the workers standing in each lane's back row, by lane and slot; the sends seen queued. */
+  /** Eternal Conflict: the workers standing in each lane's back row, by lane and slot; the sends seen queued. */
   private workerSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private queuedSeen = 0;
 
   /**
-   * Battle Mode, every tick: each lane's workers in its back row, Tyrael striking, what
+   * Eternal Conflict, every tick: each lane's workers in its back row, Tyrael striking, what
    * reached the Worldstone (its damage floating red over it), and a word when a send is
    * made at your lane.
    */
@@ -1091,7 +1091,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.scoreboard.visible && match.state.battle) {
       const b = match.state.battle;
-      this.scoreboard.table(BATTLE_COLUMNS, battleRows(match, d.me, (slot) => this.nameOf(slot), colourOf), `${match.state.mode === 'coop' ? 'Co-op' : 'Battle'}: wave ${b.wave} of ${match.data.battle!.waves.length}`);
+      this.scoreboard.table(BATTLE_COLUMNS, battleRows(match, d.me, (slot) => this.nameOf(slot), colourOf), `${match.state.mode === 'coop' ? 'Eternal Conflict co-op' : 'Eternal Conflict'}: wave ${b.wave} of ${match.data.battle!.waves.length}`);
     } else if (this.scoreboard.visible) {
       const title = match.state.mode === 'ffa' ? 'Free for All' : match.state.mode === 'team' ? 'Party' : 'Score';
       this.scoreboard.update(scoreRows(match, d.me, (slot) => this.nameOf(slot), colourOf, (wave) => this.waveLabel(wave)), title);
@@ -1944,7 +1944,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** Battle Mode: the kings, the phase and the panel, the globes on your king, and the result at the end. */
+  /** Eternal Conflict: the kings, the phase and the panel, the globes on your king, and the result at the end. */
   private drawBattleHud(): void {
     const d = this.driver!;
     const match = d.match;
@@ -1981,7 +1981,7 @@ click to return to the menu`).setFontSize(40).setVisible(true);
   }
 
   /**
-   * Battle Mode's end, in D2's style: the stone panel with the result in gold, each team's
+   * Eternal Conflict's end, in D2's style: the stone panel with the result in gold, each team's
    * Worldstone, kills, leaks and sends, and a stone button back to the menu. False without
    * the frontend art (the plain overlay shows instead).
    */

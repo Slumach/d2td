@@ -32,7 +32,7 @@ export interface StartOptions {
   startWave?: number;
   /** 0 to 100. */
   volume?: number;
-  /** Browser preview: Battle Mode against bots instead of the campaign. */
+  /** Browser preview: Eternal Conflict against bots instead of the campaign. */
   battle?: LocalBattle;
   /** Inside Electron: setup and the main menu come before the game. */
   launcher?: LauncherApi;

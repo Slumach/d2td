@@ -3,14 +3,14 @@
 // (Host or Join), Continue when there is a save, Options, Exit. Single Player opens a page
 // in the manner of D2's character select: the player's profile (name, the stash's worth,
 // the best wave reached) with Play and Continue. Options opens D2R's options panel for
-// volume, name and the D2R folder. Battle Mode opens its own page: the battle record, the
+// volume, name and the D2R folder. Eternal Conflict opens its own page: the battle record, the
 // mode (a battle or co-op), team size and race, then Play against bots, Host or Join.
 // Without the frontend art (an extraction from before it existed) the plain look stands in.
 
 import Phaser from 'phaser';
 
 import type { BattleStart, SoloStart } from '../render/GameScene.ts';
-import { FONT, button } from '../render/ui.ts';
+import { FONT, button, createTooltip, type Tooltip } from '../render/ui.ts';
 import { clearCheckpoint, loadCheckpoint } from '../render/saves.ts';
 import type { Checkpoint } from '../sim/checkpoint.ts';
 import { stageName } from '../sim/data.ts';
@@ -36,7 +36,7 @@ const BUTTON_STEP = 92;
 
 type Page = 'main' | 'character' | 'newgame' | 'multiplayer' | 'options' | 'update' | 'battle';
 
-/** Battle Mode's lobby choices, kept while the menu is open. */
+/** Eternal Conflict's lobby choices, kept while the menu is open. */
 export interface BattleChoice {
   mode: 'battle' | 'coop';
   teamSize: number;
@@ -70,8 +70,9 @@ export class MenuScene extends Phaser.Scene {
   /** The profile, for the character page. */
   private profile: Profile | undefined;
   private items: ItemData | undefined;
-  /** Battle Mode's choices on its page. */
+  /** Eternal Conflict's choices on its page. */
   private battle: BattleChoice = { mode: 'battle', teamSize: 1, race: 'random' };
+  private hintTip: Tooltip | undefined;
 
   constructor() {
     super('Menu');
@@ -106,6 +107,7 @@ export class MenuScene extends Phaser.Scene {
       if (this.state) this.draw();
     });
     const m = frontendManifest(this);
+    this.hintTip = createTooltip(this, 0, 0);
     this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000).setOrigin(0).setDepth(0);
     if (m) smoothHd(this, m);
     this.logo = burningLogo(this, CX, LOGO_TOP, LOGO_SCALE, 2);
@@ -163,7 +165,7 @@ export class MenuScene extends Phaser.Scene {
     if (this.page === 'update') return this.drawUpdate(d2);
     if (this.page === 'battle') return this.drawBattle(d2);
     const saved = this.saved;
-    const items: [string, () => void][] =
+    const items: [string, () => void, string?][] =
       this.page === 'multiplayer'
         ? [
             ['Host Game', () => this.scene.start('Lobby', { role: 'host' })],
@@ -172,7 +174,7 @@ export class MenuScene extends Phaser.Scene {
           ]
         : [
             ['Single Player', () => this.go('character')],
-            ['Battle Mode', () => this.go('battle')],
+            ['Eternal Conflict', () => this.go('battle'), 'Heaven against Hell, Legion style.'],
             ['Multiplayer', () => this.go('multiplayer')],
             ...(saved ? [[`Continue: ${stageName(saved.difficulty, saved.act)}`, () => this.startGame(saved)] as [string, () => void]] : []),
             ['Options', () => this.go('options')],
@@ -181,15 +183,15 @@ export class MenuScene extends Phaser.Scene {
           ];
     // Seven buttons close up so the last stays on screen
     const step = Math.min(BUTTON_STEP, Math.floor((GAME_HEIGHT - 70 - BUTTONS_TOP) / Math.max(1, items.length - 1)));
-    items.forEach(([label, onClick], i) => {
+    items.forEach(([label, onClick, hint], i) => {
       const y = BUTTONS_TOP + i * step;
-      if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 330 }));
+      if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 330, ...(hint ? { hint, tooltip: this.hintTip } : {}) }));
       else this.parts.push(...button(this, CX - 180, y - 18, { label, onClick, width: 360 }));
     });
   }
 
   /**
-   * Battle Mode: the profile's battle record, the choices (a battle or co-op, players a
+   * Eternal Conflict: the profile's battle record, the choices (a battle or co-op, players a
    * team, race), and Play against bots, Host and Join. Bots fill every seat no player takes.
    */
   private drawBattle(d2: boolean): void {
@@ -198,14 +200,14 @@ export class MenuScene extends Phaser.Scene {
     const r = this.profile?.battle;
     const top = BUTTONS_TOP - 70;
     add(this.add.rectangle(CX, top + 30, 620, 130, 0x000000, 0.75).setStrokeStyle(1, 0x7a6440).setDepth(3000));
-    add(this.add.text(CX, top - 10, 'Battle Mode', { ...TEXT, fontSize: '28px', color: '#c7b377' }).setOrigin(0.5).setDepth(3001));
-    const record = r ? `Won ${r.wins}, lost ${r.losses}${r.draws ? `, drawn ${r.draws}` : ''}; best wave ${r.bestWave || 'none yet'}` : 'Reading the profile...';
+    add(this.add.text(CX, top - 10, 'Eternal Conflict', { ...TEXT, fontSize: '28px', color: '#c7b377' }).setOrigin(0.5).setDepth(3001));
+    const record = r ? `Eternal Conflict record: won ${r.wins}, lost ${r.losses}${r.draws ? `, drawn ${r.draws}` : ''}; best wave ${r.bestWave || 'none yet'}` : 'Reading the profile...';
     add(this.add.text(CX, top + 28, record, TEXT).setOrigin(0.5).setDepth(3001));
     const about = b.mode === 'battle' ? 'Two teams, a lane each; first Worldstone to fall loses' : 'One team against 21 waves, sends on a timer';
     add(this.add.text(CX, top + 60, about, MUTED).setOrigin(0.5).setDepth(3001));
     const size = `${b.teamSize}v${b.teamSize}`;
     const items: [string, () => void][] = [
-      [b.mode === 'battle' ? `Mode: Battle ${size}` : `Mode: Co-op, ${b.teamSize} ${b.teamSize === 1 ? 'player' : 'players'}`, () => ((this.battle = { ...b, mode: b.mode === 'battle' ? 'coop' : 'battle' }), this.draw())],
+      [b.mode === 'battle' ? `Mode: Eternal Conflict ${size}` : `Mode: Co-op, ${b.teamSize} ${b.teamSize === 1 ? 'player' : 'players'}`, () => ((this.battle = { ...b, mode: b.mode === 'battle' ? 'coop' : 'battle' }), this.draw())],
       ['Players a team: ' + b.teamSize, () => ((this.battle = { ...b, teamSize: (b.teamSize % 4) + 1 }), this.draw())],
       [`Race: ${RACE_NAMES[b.race] ?? b.race}`, () => ((this.battle = { ...b, race: ['random', ...RACES][(['random', ...RACES].indexOf(b.race) + 1) % (RACES.length + 1)]! }), this.draw())],
       ['Play against bots', () => this.startBattle()],

@@ -39,7 +39,7 @@ export const CHECKSUM_FILE = 'checksums.json';
  * 14: Act 5: its monsters and maps.
  * 29: cast sounds from skills.txt's class, do and charge-up columns where a skill has no
  *     stsound (the War Cries, Bash, Arctic Blast, Tiger Strike), and more cast overlays.
- * 30: Battle Mode: the battlefields (Harrogath under siege and the Pandemonium Fortress,
+ * 30: Eternal Conflict: the battlefields (Harrogath under siege and the Pandemonium Fortress,
  *     for one to four lanes, with the Worldstone) and the hirelings that stand as workers.
  */
 export const EXTRACT_VERSION = 30;
