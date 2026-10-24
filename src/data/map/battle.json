@@ -1,0 +1,180 @@
+{
+  "comment": "Battle Mode's battlefields (src/sim/battle.ts), authored by us and baked at extraction from the player's tiles (tools/extract/battlemap.ts), once for each team size, on the lanes map.ts createLaneMap lays out: Harrogath under siege for the first team, the Pandemonium Fortress for the second. edge stands on the open ground beside the lanes (a clear strip left along each), tall pieces behind and left at tallPct of the tiles, low ones at lowPct on the side facing the camera; divider between neighbouring lanes; keep round the Worldstone. A prefab may take its own palette (the Worldstone's crystals are the Throne of Destruction's).",
+  "keeps": {
+    "harrogath": {
+      "palette": "global/palette/act5/pal.dat",
+      "seed": 7101,
+      "floor": {
+        "file": "Expansion/Siege/snow.dt1",
+        "ground": ["6-0"]
+      },
+      "road": {
+        "file": "Expansion/Siege/battle.dt1",
+        "tiles": ["20-0", "20-1", "20-2", "20-3", "20-4", "20-5", "20-6", "20-7", "20-8", "20-9", "20-10", "20-11", "20-12", "20-13"],
+        "halfWidth": 0.62,
+        "wobble": 0.08,
+        "edge": 0.12
+      },
+      "edge": {
+        "tall": ["deadtree1", "deadtree2", "deadtree3", "pine1", "pine2"],
+        "low": ["rock1", "rock2", "rock3"],
+        "tallPct": 16,
+        "lowPct": 5
+      },
+      "divider": {
+        "prefabs": ["rock1", "rock2", "rock3"],
+        "every": 4
+      },
+      "keep": {
+        "prefabs": ["rock1", "rock2"],
+        "chancePct": 6,
+        "flank": "post"
+      },
+      "prefabs": {
+        "deadtree1": {
+          "pieces": [
+            { "file": "Expansion/Siege/trees.dt1", "o": 14, "key": "0-13", "at": [0, 0] }
+          ]
+        },
+        "deadtree2": {
+          "pieces": [
+            { "file": "Expansion/Siege/trees.dt1", "o": 14, "key": "0-9", "at": [0, 0] }
+          ]
+        },
+        "deadtree3": {
+          "pieces": [
+            { "file": "Expansion/Siege/trees.dt1", "o": 14, "key": "0-6", "at": [0, 0] }
+          ]
+        },
+        "pine1": {
+          "pieces": [
+            { "file": "Expansion/Siege/pinetree.dt1", "o": 14, "key": "2-1", "at": [0, 0] }
+          ]
+        },
+        "pine2": {
+          "pieces": [
+            { "file": "Expansion/Siege/pinetree.dt1", "o": 14, "key": "2-0", "at": [0, 0] }
+          ]
+        },
+        "rock1": {
+          "pieces": [
+            { "file": "Expansion/Siege/rocks.dt1", "o": 12, "key": "30-0", "at": [0, 0] }
+          ]
+        },
+        "rock2": {
+          "pieces": [
+            { "file": "Expansion/Siege/rocks.dt1", "o": 12, "key": "30-2", "at": [0, 0] }
+          ]
+        },
+        "rock3": {
+          "pieces": [
+            { "file": "Expansion/Siege/rocks.dt1", "o": 12, "key": "30-3", "at": [0, 0] }
+          ]
+        },
+        "shrub1": {
+          "pieces": [
+            { "file": "Expansion/Siege/shrub.dt1", "o": 14, "key": "30-0", "at": [0, 0] }
+          ]
+        },
+        "shrub2": {
+          "pieces": [
+            { "file": "Expansion/Siege/shrub.dt1", "o": 14, "key": "30-1", "at": [0, 0] }
+          ]
+        },
+        "post": {
+          "pieces": [
+            { "file": "Expansion/Siege/battle.dt1", "o": 7, "key": "11-0", "at": [0, 0] }
+          ]
+        },
+        "worldstone": {
+          "palette": "global/palette/act5/pal.dat",
+          "pieces": [
+            { "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-0", "at": [0, 0] },
+            { "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-1", "at": [1, 0] },
+            { "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-3", "at": [0, 1] }
+          ]
+        }
+      }
+    },
+    "fortress": {
+      "palette": "global/palette/act4/pal.dat",
+      "seed": 7202,
+      "floor": {
+        "file": "Act4/Fort/plaza.dt1",
+        "ground": ["0-18", "0-19", "0-14", "0-12", "0-11", "0-10", "0-6", "0-3", "0-2"]
+      },
+      "road": {
+        "file": "Act4/Fort/plaza.dt1",
+        "tiles": ["0-61", "0-56", "0-48", "0-45", "0-40"],
+        "halfWidth": 0.62,
+        "wobble": 0.04,
+        "edge": 0.1
+      },
+      "edge": {
+        "tall": ["spire1", "spire2", "tower1", "pillar"],
+        "low": ["darkrock1", "lavarock1"],
+        "tallPct": 14,
+        "lowPct": 5
+      },
+      "divider": {
+        "prefabs": ["darkrock1", "lavarock1"],
+        "every": 4
+      },
+      "keep": {
+        "prefabs": ["darkrock1", "lavarock1"],
+        "chancePct": 6,
+        "flank": "statue1"
+      },
+      "prefabs": {
+        "spire1": {
+          "pieces": [
+            { "file": "Act4/Mesa/Surf_Struct.dt1", "o": 7, "key": "11-6", "at": [0, 0] }
+          ]
+        },
+        "spire2": {
+          "pieces": [
+            { "file": "Act4/Mesa/Surf_Struct.dt1", "o": 7, "key": "11-7", "at": [0, 0] }
+          ]
+        },
+        "tower1": {
+          "pieces": [
+            { "file": "Act4/Mesa/Surf_Struct.dt1", "o": 7, "key": "11-8", "at": [0, 0] }
+          ]
+        },
+        "pillar": {
+          "pieces": [
+            { "file": "Act4/Fort/plaza.dt1", "o": 1, "key": "0-2", "at": [0, 0] }
+          ]
+        },
+        "wall": {
+          "pieces": [
+            { "file": "Act4/Fort/plaza.dt1", "o": 1, "key": "0-0", "at": [0, 0] }
+          ]
+        },
+        "darkrock1": {
+          "pieces": [
+            { "file": "Act4/Lava/Rocks.dt1", "o": 12, "key": "23-0", "at": [0, 0], "v": 0 }
+          ]
+        },
+        "lavarock1": {
+          "pieces": [
+            { "file": "Act4/Lava/Rocks.dt1", "o": 12, "key": "23-1", "at": [0, 0], "v": 0 }
+          ]
+        },
+        "statue1": {
+          "pieces": [
+            { "file": "Act4/Lava/Specials.dt1", "o": 12, "key": "22-8", "at": [0, 0] }
+          ]
+        },
+        "worldstone": {
+          "palette": "global/palette/act5/pal.dat",
+          "pieces": [
+            { "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-0", "at": [0, 0] },
+            { "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-1", "at": [1, 0] },
+            { "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-3", "at": [0, 1] }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -52,7 +52,7 @@ export interface SpriteJob {
    * Bumped when the job's code changes what it writes from the same inputs, so an update
    * re-runs it; a job whose label, inputs and rev are unchanged is reused.
    */
-  rev?: number;
+  rev?: number | string;
   run(): OutputFile[];
 }
 
@@ -348,7 +348,9 @@ function monsterJobs(shared: Shared): SpriteJob[] {
   const summons = new Set(sprites.summons.ids);
   // The T5 legends' NPCs and monsters, standing and swinging
   const legendArt = new Set(Object.values(legends).map((l) => l.monster));
-  const ids = [...new Set([...MONSTER_ART, ...summons, ...legendArt])];
+  // Battle Mode's workers: the hirelings, in their own acts' palettes
+  const hirelings = (sprites as { hirelings?: { ids: Record<string, number> } }).hirelings?.ids ?? {};
+  const ids = [...new Set([...MONSTER_ART, ...summons, ...legendArt, ...Object.keys(hirelings)])];
   // A superunique wears its class's art in its own palette: palshift.dat row Utrans
   const superuniques = readTable(source, 'superuniques.txt');
   const jobs: SpriteJob[] = [];
@@ -359,7 +361,7 @@ function monsterJobs(shared: Shared): SpriteJob[] {
     const token = String(row['Code']).toLowerCase();
     const weaponClass = column(ex, 'BaseW').toLowerCase();
     const folder = `monsters/${token}`;
-    const modes = summons.has(id) ? sprites.summons.modes : legendArt.has(id) ? LEGEND_MODES : sprites.monsterModes;
+    const modes = summons.has(id) ? sprites.summons.modes : legendArt.has(id) || hirelings[id] ? LEGEND_MODES : sprites.monsterModes;
     // A mode the base weapon class lacks plays hand to hand (a Goatman's death is hth)
     const cofFor = (mode: string, wc: string) => `global/${folder}/cof/${token}${mode}${wc}.cof`.toLowerCase();
     const classFor = (mode: string) => (!source.exists(cofFor(mode, weaponClass)) && source.exists(cofFor(mode, 'hth')) ? 'hth' : weaponClass);
@@ -385,7 +387,7 @@ function monsterJobs(shared: Shared): SpriteJob[] {
       if (!found) inputs.push(cofFor(spec.mode, spec.weaponClass));
       else inputs.push(found.cofPath, ...Object.values(found.layers));
     }
-    const variants: [string, ShiftSpec | undefined][] = bosses.has(id) || summons.has(id)
+    const variants: [string, ShiftSpec | undefined][] = bosses.has(id) || summons.has(id) || hirelings[id]
       ? [['normal', undefined]]
       : [
           ['normal', undefined],
@@ -399,7 +401,7 @@ function monsterJobs(shared: Shared): SpriteJob[] {
     });
     if (named.length > 0) inputs.push('global/excel/superuniques.txt');
     if (named.some((n) => n.utrans > 0) && !inputs.includes(palshift) && source.exists(palshift)) inputs.push(palshift);
-    const act = summons.has(id) ? 1 : (ART_ACT[id] ?? 1);
+    const act = summons.has(id) ? 1 : (hirelings[id] ?? ART_ACT[id] ?? 1);
     const { palette: actPalette, pl2 } = shared.acts.get(act) ?? { palette: shared.palette, pl2: shared.pl2 };
     jobs.push({
       label: `monster ${id}`,

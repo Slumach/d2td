@@ -18,6 +18,8 @@ export interface SoundManifest {
   items?: Record<string, string[]>;
   /** The cow level's portal sound and music; absent before the cow level. */
   cow?: { portal: string[]; music: string | null };
+  /** Battle Mode's sounds; absent before the extraction that adds them. */
+  battle?: { send: string[]; kingHit: string[]; tyrael: string[]; victory: string[] };
   /** Menu sounds; absent in extractions from before the D2 menu. */
   ui?: { click: string[]; hover: string[]; music: string | null };
   volumePct: { music: number; ambience: number; sfx: number };
@@ -32,6 +34,7 @@ export function preloadSounds(scene: Phaser.Scene): void {
     const all = new Set<string>([...m.gold, ...[m.cast, m.travel, m.hit, m.death, m.items ?? {}].flatMap((g) => Object.values(g).flat())]);
     if (m.music) all.add(m.music);
     for (const p of m.cow?.portal ?? []) all.add(p);
+    for (const p of Object.values(m.battle ?? {}).flat()) all.add(p);
     if (m.cow?.music) all.add(m.cow.music);
     if (m.ambience) all.add(m.ambience);
     for (const path of all) if (!scene.cache.audio.exists(path)) scene.load.audio(path, path);
@@ -116,6 +119,11 @@ export class SoundBank {
 
   gold(): void {
     this.play(this.manifest?.gold, 45);
+  }
+
+  /** Battle Mode's moments: a send made, a leak at the Worldstone, Tyrael's strike, a won match. */
+  battle(moment: 'send' | 'kingHit' | 'tyrael' | 'victory'): void {
+    this.play(this.manifest?.battle?.[moment], moment === 'tyrael' ? 45 : 80);
   }
 
   /** An item sound by its table name (an item landing, or going into the inventory). */

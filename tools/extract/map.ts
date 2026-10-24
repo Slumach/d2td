@@ -30,16 +30,18 @@ import { decodePalDat, type Palette } from '../lib/palette.ts';
 import { encodePng } from '../lib/png.ts';
 import type { DataSource } from './source.ts';
 import type { OutputFile, SpriteJob } from './sprites.ts';
+import { battleInputs, battleLayout, bakeBattle } from './battlemap.ts';
+import { createHash } from 'node:crypto';
 
-const W = WORLD_WIDTH;
-const H = WORLD_HEIGHT;
+export const W = WORLD_WIDTH;
+export const H = WORLD_HEIGHT;
 /** A D2 cell is 160 x 80 px; our sim tile is 64 x 32. */
 const CELL_TILES = 2.5;
-const SHADOW = 13;
+export const SHADOW = 13;
 /** DT1 orientations a preset uses as markers, not art. */
 const MARKERS = [10, 11, SHADOW];
 
-interface Piece {
+export interface Piece {
   file: string;
   o: number;
   key: string;
@@ -48,7 +50,7 @@ interface Piece {
   v?: number;
 }
 
-interface TileSet {
+export interface TileSet {
   file: string;
   tiles: string[];
 }
@@ -74,7 +76,7 @@ interface ActLayout {
   prefabs: Record<string, { pieces: Piece[] }>;
 }
 
-const tilePath = (file: string) => `global/tiles/${file}`.toLowerCase();
+export const tilePath = (file: string) => `global/tiles/${file}`.toLowerCase();
 
 /**
  * Every act's layout, src/data/map/act<N>.json, in act order. Imported, not read from disk,
@@ -107,13 +109,13 @@ export function mapInputs(layouts = actLayouts()): string[] {
 }
 
 /** A hash of a lattice point to 0..1, for value noise and per-cell picks. */
-function hash2(x: number, y: number, seed: number): number {
+export function hash2(x: number, y: number, seed: number): number {
   let h = Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(seed, 2246822519);
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-function valueNoise(x: number, y: number, seed: number): number {
+export function valueNoise(x: number, y: number, seed: number): number {
   const ix = Math.floor(x);
   const iy = Math.floor(y);
   const fx = x - ix;
@@ -127,7 +129,7 @@ function valueNoise(x: number, y: number, seed: number): number {
   return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
 }
 
-class Tiles {
+export class Tiles {
   private readonly cache = new Map<string, Dt1Tile[]>();
   private readonly images = new Map<Dt1Tile, TileImage>();
 
@@ -180,7 +182,7 @@ class Tiles {
 }
 
 /** An RGBA buffer with palette-index blitting. */
-class Canvas {
+export class Canvas {
   readonly rgba: Uint8Array;
 
   constructor(
@@ -226,12 +228,12 @@ class Canvas {
 }
 
 /** World position of a point in sim tiles. */
-function at(tx: number, ty: number): { x: number; y: number } {
+export function at(tx: number, ty: number): { x: number; y: number } {
   return project(tx * UNITS_PER_TILE, ty * UNITS_PER_TILE);
 }
 
 /** Distance from p to segment ab, all in sim tiles. */
-function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+export function segDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
   const dx = bx - ax;
   const dy = by - ay;
   const len = dx * dx + dy * dy;
@@ -257,7 +259,7 @@ function footOf(c: Canvas): { footX: number; footY: number } {
   return { footX: xs[xs.length >> 1] ?? c.width >> 1, footY: bottom };
 }
 
-interface PrefabOut {
+export interface PrefabOut {
   image: string;
   /** The image pixel that stands on the object's spot. */
   anchorX: number;
@@ -266,17 +268,27 @@ interface PrefabOut {
 
 export interface MapManifest {
   /** By act number, then field or lair. Prefab names are `act<N>/<name>`. */
-  acts: Record<string, Record<MapName, { ground: { image: string; originX: number; originY: number }; objects: { prefab: string; at: number[] }[] }>>;
+  acts: Record<string, Record<MapName, BakedMap>>;
   prefabs: Record<string, PrefabOut>;
+  /** Battle Mode's battlefields (battlemap.ts): by keep (harrogath, fortress), then by lanes (1 to 4). */
+  battle?: Record<string, Record<string, BakedMap>>;
+}
+
+/** One baked map: its ground image and where it sits, and the scenery standing on it. */
+export interface BakedMap {
+  ground: { image: string; originX: number; originY: number };
+  objects: { prefab: string; at: number[] }[];
 }
 
 export function mapJob(source: DataSource): SpriteJob {
   const layouts = actLayouts();
-  return { label: 'maps', inputs: mapInputs(layouts), run: () => bake(source, layouts) };
+  // The layouts are ours, not game files: a change to one re-bakes, as a change of rev would
+  const rev = createHash('sha256').update(JSON.stringify([layouts, battleLayout()])).digest('hex').slice(0, 16);
+  return { label: 'maps', inputs: [...mapInputs(layouts), ...battleInputs()], rev, run: () => bake(source, layouts) };
 }
 
 /** A built prefab: its image, the floor centre of its cell (0, 0) in it, and its foot. */
-interface Built {
+export interface Built {
   canvas: Canvas;
   cellX: number;
   cellY: number;
@@ -284,7 +296,7 @@ interface Built {
   anchorY: number;
 }
 
-function buildPieces(pieces: Piece[], tiles: Tiles, palette: Palette): Built {
+export function buildPieces(pieces: Piece[], tiles: Tiles, palette: Palette): Built {
   const placed = pieces.map((piece) => {
     const t = tiles.variants(piece.file, piece.o, piece.key)[piece.v ?? 0];
     if (!t) throw new Error(`${piece.file} has no orientation ${piece.o} tile ${piece.key} variant ${piece.v ?? 0}`);
@@ -307,6 +319,7 @@ function bake(source: DataSource, layouts: ActLayout[]): OutputFile[] {
   const out: OutputFile[] = [];
   const manifest: MapManifest = { acts: {}, prefabs: {} };
   for (const layout of layouts) bakeAct(source, tiles, layout, out, manifest);
+  bakeBattle(source, tiles, out, manifest);
   out.push({ path: 'map/maps.json', bytes: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) });
   return out;
 }

@@ -9,7 +9,7 @@ import Phaser from 'phaser';
 
 import { DESIGN } from '../data/design.ts';
 import type { MpEvent, LauncherApi, SaveSlot } from '../launcher/api.ts';
-import { menuMusic, preloadFrontend } from '../launcher/frontend.ts';
+import { frontendManifest, menuMusic, preloadFrontend, stoneButton, stonePanel } from '../launcher/frontend.ts';
 import { MpSession } from '../launcher/session.ts';
 import { Lockstep } from '../net/lockstep.ts';
 import type { LobbyPlayer } from '../net/protocol.ts';
@@ -66,6 +66,7 @@ import {
   monsterKey,
   objectKey,
   originOf,
+  HIRELING_IDS,
   preloadAssets,
   type IconIndex,
 } from './assets.ts';
@@ -82,7 +83,7 @@ import { facingFromVector, type Facing8 } from './facing.ts';
 import { ISO_H, ISO_W, ORIGIN, WORLD_WIDTH, ellipseOf, project, screenVector, tileAtWorld, tileDiamond } from './iso.ts';
 import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, PANEL_TOP } from './layout.ts';
 import { Minimap } from './minimap.ts';
-import { Scoreboard, scoreRows } from './scoreboard.ts';
+import { BATTLE_COLUMNS, battleRows, Scoreboard, scoreRows } from './scoreboard.ts';
 import { saveCheckpoint } from './saves.ts';
 import { WorldView } from './view.ts';
 import { SkillFx, type Point } from './skillfx.ts';
@@ -170,8 +171,12 @@ export interface BattleStart {
   battle: LocalBattle;
 }
 
-/** Battle Mode's workers: D2's hirelings once extracted, a Rogue in the meantime. */
-const WORKER_ART = ['mon:roguehire:normal', 'mon:corruptrogue1:normal'];
+/** The battlefields' keeps in team order, as the extraction names them (src/data/map/battle.json). */
+const BATTLE_KEEPS = ['harrogath', 'fortress'];
+
+/** Battle Mode's workers: D2's hirelings of every act in turn, a Dark Hunter before they are extracted. */
+const WORKER_ART = HIRELING_IDS.map((id) => `mon:${id}:normal`);
+const WORKER_STAND_IN = 'mon:corruptrogue1:normal';
 
 /** The grey-box ground, for a run without the extracted maps: field, then boss lair. */
 const GREY_BOX: [number, number] = [0x30402a, 0x34343a];
@@ -354,6 +359,7 @@ export class GameScene extends Phaser.Scene {
     this.keepParts = [];
     this.localBattle = undefined;
     this.battleRecorded = false;
+    this.battleEndShown = false;
     this.halted = '';
     this.groundGfx = undefined;
     this.mapParts = [];
@@ -505,7 +511,10 @@ export class GameScene extends Phaser.Scene {
         match: () => this.driver!.match,
         me: () => this.driver!.me,
         nameOf: (slot) => this.nameOf(slot),
-        issue: (c) => this.issue(c),
+        issue: (c) => {
+          this.issue(c);
+          if (c.type === 'send') this.sounds.battle('send');
+        },
         monsterName: (id) => (this.gameData.monsters[id]?.name ?? id).replace(/([a-z])([A-Z])/g, '$1 $2'),
         tooltip: this.tooltip,
       });
@@ -712,8 +721,9 @@ export class GameScene extends Phaser.Scene {
     if (!map.king || !map.tyrael) return;
     this.camera.asWorld(() => {
       const k = project((map.king!.x + 0.5) * UNITS_PER_TILE, (map.king!.y + 0.5) * UNITS_PER_TILE);
-      // The Worldstone: a tall crystal until its own art is extracted
-      const g = this.add.graphics().setDepth(DEPTH.units + k.y / 1000);
+      // The Worldstone stands in the baked battlefield; a drawn crystal stands in without it
+      const baked = (this.cache.json.get(MAP_KEY) as MapManifest | undefined)?.battle !== undefined;
+      const g = this.add.graphics().setDepth(DEPTH.units + k.y / 1000).setVisible(!baked);
       g.fillStyle(0x6040a0, 0.9).fillTriangle(k.x - 14, k.y, k.x + 14, k.y, k.x, k.y - 70);
       g.fillStyle(0xa080f0, 0.8).fillTriangle(k.x - 6, k.y - 4, k.x + 8, k.y - 4, k.x + 1, k.y - 60);
       g.lineStyle(2, 0xd0c0ff, 0.9).strokeTriangle(k.x - 14, k.y, k.x + 14, k.y, k.x, k.y - 70);
@@ -731,6 +741,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private tyraelSprite: Phaser.GameObjects.Sprite | undefined;
+  /** Battlefield grounds asked for, so each loads once. */
+  private battlefieldLoading = new Set<string>();
   /** Battle Mode: the workers standing in each lane's back row, by lane and slot; the sends seen queued. */
   private workerSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private queuedSeen = 0;
@@ -745,12 +757,13 @@ export class GameScene extends Phaser.Scene {
     const sim = this.sim;
     const b = sim.state.battle!;
     const slots = sim.map.workerSlots ?? [];
-    const key = WORKER_ART.find((k) => this.textures.exists(k));
+    const hired = WORKER_ART.filter((k) => this.textures.exists(k));
     slots.forEach((spots, lane) => {
       const seat = sim.arcOwners[lane] ?? 0;
       const n = b.workers[seat] ?? 0;
       spots.forEach((spot, i) => {
         const id = `${lane}:${i}`;
+        const key = hired.length ? hired[i % hired.length]! : this.textures.exists(WORKER_STAND_IN) ? WORKER_STAND_IN : undefined;
         const have = this.workerSprites.get(id);
         if (i >= n || !key) {
           have?.destroy();
@@ -766,6 +779,8 @@ export class GameScene extends Phaser.Scene {
       });
     });
     // Tyrael swings at what he strikes; the strike lands as a holy bolt's burst
+    if (sim.tyraelHits?.length) this.sounds.battle('tyrael');
+    if (sim.kingHits?.length && this.onOwnRing) this.sounds.battle('kingHit');
     for (const h of sim.tyraelHits ?? []) {
       const t = this.tyraelSprite;
       if (t) {
@@ -793,6 +808,7 @@ export class GameScene extends Phaser.Scene {
       const target = slotOf(d.match, ringOf(d.match, d.me), d.match.zones[ringOf(d.match, d.me)]!.arcOwners[q.lane] ?? 0);
       const name = send?.name ?? (this.gameData.monsters[this.gameData.monsterVariant([send?.monster ?? ''].flat()[0]!, 0)]?.name ?? q.send);
       this.toast(`${this.nameOf(q.from)} sends ${name} down ${target === d.me ? 'your lane' : `${this.nameOf(target)}'s lane`}`);
+      this.sounds.battle('send');
     }
   }
 
@@ -1073,7 +1089,10 @@ export class GameScene extends Phaser.Scene {
       }));
       this.minimap.rings(chips, (p) => p !== this.view && this.watch(p));
     }
-    if (this.scoreboard.visible) {
+    if (this.scoreboard.visible && match.state.battle) {
+      const b = match.state.battle;
+      this.scoreboard.table(BATTLE_COLUMNS, battleRows(match, d.me, (slot) => this.nameOf(slot), colourOf), `${match.state.mode === 'coop' ? 'Co-op' : 'Battle'}: wave ${b.wave} of ${match.data.battle!.waves.length}`);
+    } else if (this.scoreboard.visible) {
       const title = match.state.mode === 'ffa' ? 'Free for All' : match.state.mode === 'team' ? 'Party' : 'Score';
       this.scoreboard.update(scoreRows(match, d.me, (slot) => this.nameOf(slot), colourOf, (wave) => this.waveLabel(wave)), title);
     }
@@ -1771,14 +1790,9 @@ export class GameScene extends Phaser.Scene {
    * extracted), and the grey box shows instead.
    */
   private drawBakedMap(stage: { act: number; lair: boolean; cow?: boolean }): boolean {
-    // A battlefield is drawn on its own ground, never an act's ring
-    if (this.sim.map.open) {
-      for (const o of this.mapParts) o.destroy();
-      this.mapParts = [];
-      this.mapShown = '';
-      return false;
-    }
     const manifest = this.cache.json.get(MAP_KEY) as MapManifest | undefined;
+    // A battlefield is drawn on its own ground, never an act's ring
+    if (this.sim.map.open) return this.drawBattlefield(manifest);
     const name = stage.cow ? 'cow' : stage.lair ? 'lair' : 'field';
     const baked = manifest?.acts[String(stage.act)]?.[name];
     const key = groundKey(stage.act, name);
@@ -1791,6 +1805,43 @@ export class GameScene extends Phaser.Scene {
     // The bake's world origin and ours line up unless the layout changed since
     const ground = this.add.image(ORIGIN.x - baked.ground.originX, ORIGIN.y - baked.ground.originY, key).setOrigin(0).setDepth(DEPTH.ground - 0.5);
     this.mapParts.push(ground);
+    for (const obj of baked.objects) {
+      const prefab = manifest.prefabs[obj.prefab];
+      if (!prefab || !this.textures.exists(sceneryKey(obj.prefab))) continue;
+      const p = project(obj.at[0]! * UNITS_PER_TILE, obj.at[1]! * UNITS_PER_TILE);
+      const img = this.add.image(Math.round(p.x), Math.round(p.y), sceneryKey(obj.prefab));
+      img.setOrigin(prefab.anchorX / img.width, prefab.anchorY / img.height).setDepth(DEPTH.units + p.y / 1000);
+      this.mapParts.push(img);
+    }
+    return true;
+  }
+
+  /**
+   * A battlefield's baked ground and scenery (the extraction's map/battle-<keep>-<lanes>):
+   * its team's keep, for its lane count. Its ground image loads the first time it is shown;
+   * false (the grey box) until then, or without the art.
+   */
+  private drawBattlefield(manifest: MapManifest | undefined): boolean {
+    const keep = BATTLE_KEEPS[this.view];
+    const baked = keep ? manifest?.battle?.[keep]?.[String(this.sim.map.arcs.length)] : undefined;
+    const key = groundKey(`battle-${keep}`, String(this.sim.map.arcs.length));
+    const want = baked && this.textures.exists(key) ? key : '';
+    if (baked && !want && !this.battlefieldLoading.has(key)) {
+      // Load it now and draw again once it is in
+      this.battlefieldLoading.add(key);
+      this.load.image(key, baked.ground.image);
+      this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+        this.mapShown = '-';
+        this.redrawGround();
+      });
+      this.load.start();
+    }
+    if (want === this.mapShown) return want !== '';
+    for (const o of this.mapParts) o.destroy();
+    this.mapParts = [];
+    this.mapShown = want;
+    if (!baked || !manifest || !want) return false;
+    this.mapParts.push(this.add.image(ORIGIN.x - baked.ground.originX, ORIGIN.y - baked.ground.originY, key).setOrigin(0).setDepth(DEPTH.ground - 0.5));
     for (const obj of baked.objects) {
       const prefab = manifest.prefabs[obj.prefab];
       if (!prefab || !this.textures.exists(sceneryKey(obj.prefab))) continue;
@@ -1908,7 +1959,7 @@ export class GameScene extends Phaser.Scene {
       const left = b.phase === 'build' ? (b.phaseTick - match.state.tick) / Math.max(1, b.wave === 0 ? rules.firstBuildTicks : rules.buildTicks) : 0;
       this.d2.update({ ...n, gold: own.state.gold[seatOf(match, d.me)] ?? 0, alive: king.maxHp - Math.max(0, king.hp), aliveLimit: king.maxHp, lifeLabel: `Worldstone: ${Math.max(0, king.hp)} / ${king.maxHp}`, wave: `Wave ${b.wave} of ${match.data.battle!.waves.length}`, timer: '', timerFrac: Math.max(0, Math.min(1, left)), actFrac: b.wave / match.data.battle!.waves.length, nextWave: this.nextWaveTip(b.wave) });
     }
-    if (match.state.status === 'over' && !this.endOverlay.visible && !this.halted) {
+    if (match.state.status === 'over' && !this.endOverlay.visible && !this.battleEndShown && !this.halted) {
       const won = match.state.winners.includes(d.me);
       const draw = match.state.winners.length === 0 && match.state.mode === 'battle';
       const kings = match.zones.map((z) => z.state.battle!.king.hp);
@@ -1918,15 +1969,50 @@ export class GameScene extends Phaser.Scene {
           ? won ? 'The Worldstone stands' : 'The Worldstone has fallen'
           : draw ? 'A draw' : won ? (fell ? "Victory: the enemy's Worldstone fell" : 'Victory on life') : fell ? 'Defeat: your Worldstone fell' : 'Defeat on life';
       const yours = kings[teamOf(match, d.me)] ?? 0;
-      this.endOverlay.setText(`${title}
+      if (!this.battleEnd(title, won)) this.endOverlay.setText(`${title}
 wave ${b.wave}, your Worldstone at ${Math.max(0, yours)}
 click to return to the menu`).setFontSize(40).setVisible(true);
+      if (won) this.sounds.battle('victory');
       if (!this.battleRecorded) {
         this.battleRecorded = true;
         this.keeper?.recordBattle(draw ? undefined : won, b.wave);
       }
     }
   }
+
+  /**
+   * Battle Mode's end, in D2's style: the stone panel with the result in gold, each team's
+   * Worldstone, kills, leaks and sends, and a stone button back to the menu. False without
+   * the frontend art (the plain overlay shows instead).
+   */
+  private battleEnd(title: string, won: boolean): boolean {
+    if (this.battleEndShown) return true;
+    if (!frontendManifest(this)) return false;
+    this.battleEndShown = true;
+    const d = this.driver!;
+    const match = d.match;
+    const cx = GAME_WIDTH / 2;
+    const cy = GAME_HEIGHT / 2 - 40;
+    const parts: Phaser.GameObjects.GameObject[] = [];
+    parts.push(this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55).setOrigin(0).setDepth(6000).setInteractive());
+    const panel = stonePanel(this, cx, cy, 760, 520);
+    if (panel) parts.push(panel.setDepth(6001));
+    const text = (y: number, s: string, size: number, colour: string) => parts.push(this.add.text(cx, y, s, { fontFamily: FONT, fontSize: `${size}px`, color: colour, align: 'center' }).setOrigin(0.5).setDepth(6002).setShadow(1, 1, '#000000', 2));
+    text(cy - 200, title, 34, won ? '#c7b377' : '#d06048');
+    text(cy - 150, `Wave ${match.state.battle!.wave} of ${match.data.battle!.waves.length}`, 20, '#a8a088');
+    match.zones.forEach((zone, t) => {
+      const b = zone.state.battle!;
+      const team = match.zones.length === 1 ? 'Your team' : t === teamOf(match, d.me) ? 'Your team' : 'The enemy';
+      const sum = (xs: number[]) => xs.reduce((n, x) => n + x, 0);
+      text(cy - 90 + t * 110, `${team}, ${KEEP_NAMES[t]}`, 22, '#c7b377');
+      text(cy - 58 + t * 110, `Worldstone ${Math.max(0, b.king.hp)} of ${b.king.maxHp}   Kills ${zone.state.kills}   Leaks ${sum(b.leaks)}   Sends ${sum(b.sendsMade)}`, 19, '#e8e0c8');
+      text(cy - 32 + t * 110, b.races.map((r, seat) => `${this.nameOf(slotOf(match, t, seat))}: ${this.gameData.classes[r]?.name ?? r}`).join('   '), 16, '#a8a088');
+    });
+    parts.push(...stoneButton(this, cx, cy + 190, 'Return to menu', () => (d.online ? this.leaveOnline() : this.quitToMenu()), { width: 300 }).map((o) => (o as Phaser.GameObjects.Image).setDepth(6003)));
+    return true;
+  }
+
+  private battleEndShown = false;
 
   private drawOnlineHud(): void {
     const driver = this.driver!;

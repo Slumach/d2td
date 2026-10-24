@@ -1,11 +1,12 @@
 // The scoreboard on Tab, in the manner of D2's party panel: a dark sheet in a bronze frame,
 // a row per player in their colour with kills, alive weight against the limit, gold, towers
-// and wave. Solo, team and FFA alike. Reads the match, writes nothing.
+// and wave. Solo, team and FFA alike; in Battle Mode each player's race, team, kills, leaks,
+// sends, workers and towers. Reads the match, writes nothing.
 
 import Phaser from 'phaser';
 
 import { aliveLimitOf } from '../sim/sim.ts';
-import { ringOf, seatOf, type Match } from '../sim/match.ts';
+import { ringOf, seatOf, teamOf, type Match } from '../sim/match.ts';
 import { FONT } from './ui.ts';
 
 export interface ScoreRow {
@@ -43,6 +44,43 @@ export function scoreRows(match: Match, me: number, nameOf: (slot: number) => st
   });
 }
 
+/** A battle's rows: every player in seat order, the columns BATTLE_COLUMNS name. */
+export function battleRows(match: Match, me: number, nameOf: (slot: number) => string, colourOf: (slot: number) => number): TableRow[] {
+  return Array.from({ length: match.players }, (_, p) => {
+    const sim = match.zones[ringOf(match, p)]!;
+    const seat = seatOf(match, p);
+    const b = sim.state.battle!;
+    const race = match.data.classes[b.races[seat]!]?.name ?? b.races[seat]!;
+    return {
+      name: nameOf(p),
+      colour: colourOf(p),
+      you: p === me,
+      out: sim.state.status === 'lost',
+      values: [race, String(teamOf(match, p) + 1), String(sim.state.killsBy[seat] ?? 0), String(b.leaks[seat] ?? 0), String(b.sendsMade[seat] ?? 0), String(b.workers[seat] ?? 0), String(sim.state.towers.filter((t) => t.owner === seat && t.legendOf === undefined).length)],
+    };
+  });
+}
+
+export interface TableRow {
+  name: string;
+  colour: number;
+  you: boolean;
+  out: boolean;
+  /** The cells after the name, in the columns' order. */
+  values: string[];
+}
+
+export const BATTLE_COLUMNS: { title: string; x: number; align: 'left' | 'right' }[] = [
+  { title: 'Player', x: 24, align: 'left' },
+  { title: 'Race', x: 280, align: 'left' },
+  { title: 'Team', x: 470, align: 'right' },
+  { title: 'Kills', x: 570, align: 'right' },
+  { title: 'Leaks', x: 670, align: 'right' },
+  { title: 'Sends', x: 770, align: 'right' },
+  { title: 'Workers', x: 870, align: 'right' },
+  { title: 'Towers', x: 960, align: 'right' },
+];
+
 const BRONZE = 0x8c7448;
 const GOLD = '#c7b377';
 const WHITE = '#d8d4c8';
@@ -63,6 +101,7 @@ export class Scoreboard {
   private readonly bg: Phaser.GameObjects.Graphics;
   private rows: Phaser.GameObjects.Text[][] = [];
   private shown = false;
+  private columns = COLUMNS;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -85,14 +124,22 @@ export class Scoreboard {
 
   /** Redraws the rows; cheap enough every frame while shown. */
   update(rows: ScoreRow[], title: string): void {
+    this.table(COLUMNS, rows.map((r) => ({ ...r, values: [String(r.kills), `${r.alive} / ${r.aliveLimit}`, String(r.gold), String(r.towers), r.wave] })), title);
+  }
+
+  /** Any table of player rows under these columns (the first is the name). */
+  table(columns: typeof COLUMNS, rows: TableRow[], title: string): void {
     if (!this.shown) return;
-    if (this.rows.length !== rows.length) this.build(rows.length, title);
+    if (this.rows.length !== rows.length || this.columns !== columns) {
+      this.columns = columns;
+      this.build(rows.length, title);
+    }
     rows.forEach((r, i) => {
       const cells = this.rows[i]!;
       const colour = r.out ? GREY : WHITE;
       const name = `${r.name}${r.you ? '  (you)' : ''}${r.out ? '  out' : ''}`;
-      const values = [name, String(r.kills), `${r.alive} / ${r.aliveLimit}`, String(r.gold), String(r.towers), r.wave];
-      cells.forEach((c, j) => c.setText(values[j]!).setColor(j === 0 && !r.out ? `#${r.colour.toString(16).padStart(6, '0')}` : colour));
+      const values = [name, ...r.values];
+      cells.forEach((c, j) => c.setText(values[j] ?? '').setColor(j === 0 && !r.out ? `#${r.colour.toString(16).padStart(6, '0')}` : colour));
     });
   }
 
@@ -116,10 +163,10 @@ export class Scoreboard {
       return t;
     };
     text(this.cx, this.top + 14, title, 26, GOLD, 'center');
-    for (const c of COLUMNS) text(left + c.x, this.top + 56, c.title, 18, GOLD, c.align);
+    for (const c of this.columns) text(left + c.x, this.top + 56, c.title, 18, GOLD, c.align);
     for (let i = 0; i < count; i++) {
       const y = this.top + 96 + i * ROW;
-      this.rows.push(COLUMNS.map((c) => text(left + c.x, y, '', 20, WHITE, c.align)));
+      this.rows.push(this.columns.map((c) => text(left + c.x, y, '', 20, WHITE, c.align)));
     }
   }
 }

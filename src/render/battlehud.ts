@@ -136,6 +136,7 @@ export class BattleHud {
       `Gold ${gold}, +${base + (bs.income[seat] ?? 0)} a wave`,
       `Souls ${souls}, +${(bs.workers[seat] ?? 0) * rules.worker.soulsPerWave} a wave`,
       `Workers ${bs.workers[seat]} of ${rules.worker.max}`,
+      ...(bs.races.length > 1 ? [`Team income +${bs.income.reduce((n, x) => n + base + x, 0)} a wave`] : []),
     ];
     this.lines.setText(lines.join('\n'));
     let y = PANEL.y + 8 + this.lines.height + 8;

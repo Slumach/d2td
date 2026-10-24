@@ -3,6 +3,7 @@
   "level": "Blood Moor",
   "gold": "item_gold",
   "cow": { "portal": "object_townportal", "level": "Moo Moo Farm" },
+  "battle": { "send": "player_townportal_cast", "kingHit": "quest_hellforge_smash", "tyrael": "quest_radament_holybolt_1", "victory": "cursor_questdone" },
   "ui": { "click": "cursor_button_click", "hover": "cursor_select", "music": "jukebox_music_group1" },
   "volumePct": { "music": 30, "ambience": 45, "sfx": 70 }
 }

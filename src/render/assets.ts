@@ -34,6 +34,8 @@ export interface MapManifest {
   /** By act number, then field or lair. */
   acts: Record<string, Record<string, BakedMap>>;
   prefabs: Record<string, { image: string; anchorX: number; anchorY: number }>;
+  /** Battle Mode's battlefields: by keep, then by lane count. Their grounds load when first shown. */
+  battle?: Record<string, Record<string, BakedMap>>;
 }
 
 export interface IconIndex {
@@ -45,6 +47,8 @@ const ICON_FOLDERS = Object.keys(sprites.heroes);
 const iconIndexKey = (folder: string) => `icons:${folder}`;
 
 export const SUMMON_IDS = sprites.summons.ids;
+/** Battle Mode's workers: D2's hirelings, Act 1's Rogue to Act 5's Barbarian. */
+export const HIRELING_IDS = Object.keys((sprites as { hirelings?: { ids: Record<string, number> } }).hirelings?.ids ?? {});
 
 /**
  * A monster's atlas: its monstats art (`base`) in its rank's palette, or a superunique's
@@ -116,6 +120,7 @@ export function preloadAssets(scene: Phaser.Scene): void {
   for (const su of SUPERUNIQUE_ART) atlas(`mon:${su.class}:su_${su.id}`, `monsters/${su.class}/su_${su.id}.json`, `monsters/${su.class}/`);
   for (const id of SUMMON_IDS) atlas(`mon:${id}:normal`, `monsters/${id}/normal.json`, `monsters/${id}/`);
   for (const id of new Set(Object.values(legends).map((l) => l.monster))) atlas(`mon:${id}:normal`, `monsters/${id}/normal.json`, `monsters/${id}/`);
+  for (const id of HIRELING_IDS) atlas(`mon:${id}:normal`, `monsters/${id}/normal.json`, `monsters/${id}/`);
   for (const [cls, h] of Object.entries(HEROES)) {
     for (const line of Object.keys(h.lines)) {
       for (const look of HERO_LOOKS) atlas(`hero:${cls}:${line}:${look}`, `hero/${cls}/${line}-${look}.json`, `hero/${cls}/`);

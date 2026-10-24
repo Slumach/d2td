@@ -57,6 +57,8 @@ export interface SoundManifest {
   cow: { portal: string[]; music: string | null };
   /** The menus: button click and hover, and the title music. */
   ui: { click: string[]; hover: string[]; music: string | null };
+  /** Battle Mode: a send made, a leak reaching the Worldstone, Tyrael's strike, a won match. */
+  battle?: { send: string[]; kingHit: string[]; tyrael: string[]; victory: string[] };
   volumePct: { music: number; ambience: number; sfx: number };
 }
 
@@ -136,6 +138,7 @@ export function soundJob(source: DataSource): SpriteJob {
     items: {},
     cow: { portal: resolve(soundsJson.cow.portal), music: cowEnv ? (resolve(column(cowEnv, 'Song'), 'global/music/')[0] ?? null) : null },
     ui: { click: resolve(soundsJson.ui.click), hover: resolve(soundsJson.ui.hover), music: resolve(soundsJson.ui.music, 'global/music/')[0] ?? null },
+    battle: { send: resolve(soundsJson.battle.send), kingHit: resolve(soundsJson.battle.kingHit), tyrael: resolve(soundsJson.battle.tyrael), victory: resolve(soundsJson.battle.victory) },
     volumePct: soundsJson.volumePct,
   };
   const itemTables = ['weapons.txt', 'armor.txt', 'misc.txt'].map((t) => readTable(source, t));
