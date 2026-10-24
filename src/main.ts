@@ -10,6 +10,7 @@ import { startGame } from './render/start.ts';
 //   ?speed=4   run the sim 4 times as fast
 //   ?wave=26   start the run at that wave of the campaign (to look at a later act)
 //   ?menu      the launcher's menus on a stub of the Electron API, to look at them in a browser
+//   ?battle    Battle Mode against bots (?battle=coop for co-op; &team=2 players a team, &race=paladin)
 const params = new URLSearchParams(window.location.search);
 // The cursor and font come from the extraction; before first setup they simply are not there
 await loadFeel();
@@ -25,5 +26,15 @@ if (window.d2td) {
     plan: params.get('plan') ?? undefined,
     speed: Number(params.get('speed') ?? 1),
     startWave: Number(params.get('wave') ?? 1),
+    ...(params.has('battle') ? { battle: battleFromUrl(params) } : {}),
   });
+}
+
+/** ?battle: this player in the first seat, bots in the rest. */
+function battleFromUrl(p: URLSearchParams) {
+  const mode = p.get('battle') === 'coop' ? ('coop' as const) : ('battle' as const);
+  const teamSize = Math.max(1, Math.min(4, Number(p.get('team') ?? 1)));
+  const slots = teamSize * (mode === 'battle' ? 2 : 1);
+  const race = p.get('race') ?? 'random';
+  return { mode, setup: { teamSize, races: Array.from({ length: slots }, (_, i) => (i === 0 ? race : 'random')), bots: Array.from({ length: slots - 1 }, (_, i) => i + 1) } };
 }

@@ -28,6 +28,8 @@ const MODE_TEXT: Record<MatchMode, { name: string; about: string }> = {
   team: { name: 'Team', about: 'One ring, an arc each (up to four players). Monsters lap the ring until someone kills them, kill gold goes to the killer, and the team loses when 100 are alive at once.' },
   ffa: { name: 'Free for all', about: 'Everyone gets their own ring and the same waves. Let 100 pile up on yours and you are out; the last ring standing wins.' },
   solo: { name: 'Solo', about: '' },
+  battle: { name: 'Battle', about: 'Two teams, a lane each, a king at the back. Build your race, hire workers for Souls, and send monsters down the other team\'s lanes. First king to fall loses.' },
+  coop: { name: 'Co-op', about: 'One team, a lane each, against 21 waves with sends arriving on a timer. Keep the Worldstone standing.' },
 };
 
 type Phase = 'code' | 'connecting' | 'lobby';

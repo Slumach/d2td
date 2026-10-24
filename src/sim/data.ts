@@ -13,6 +13,7 @@ import { findRow, int, monumodConstant, str, type TableRow, type Tables } from '
 import { buildItemData, type ItemData } from './items/data.ts';
 
 export type { TableRow, Tables } from './tables.ts';
+import type { BattleData, BattleJson } from './battle.ts';
 
 export { DIFFICULTIES, DIFFICULTY_NAMES, baseMonsterId, levelVariantId, variantId, type DifficultyName } from './difficulty.ts';
 
@@ -311,6 +312,8 @@ export interface BalanceJson {
     }
   >;
   skillOverrides: Record<string, Partial<HitFilter>>;
+  /** Battle Mode (src/sim/battle.ts): its waves, economy, workers, sends and king. */
+  battle?: BattleJson;
 }
 
 /** Everything authored by us, as opposed to the game's tables. */
@@ -558,6 +561,10 @@ export interface GameData {
   itemDurabilityDamagePct: number;
   /** skills.txt skill name to its Id, for items that name a skill by number. */
   skillIds: Record<string, string>;
+  /** Battle Mode's rules and waves, when balance.json has them. */
+  battle?: BattleData;
+  /** No kill drops anything (a battlefield: no items in Battle Mode). */
+  noLoot?: boolean;
   /**
    * skills.txt skill name to the tab it sits on, as items' +skill tab stats count tabs: 0 to
    * 20, three a class in itemtypes.txt class order (Amazon 0 to 2, Sorceress 3 to 5: fire,
@@ -986,6 +993,36 @@ export function endlessWave(balance: BalanceJson, monsters: MonstersJson, defOf:
     hpPct: compoundPct(100 + e.hpPctPerWave, n),
     damagePct: compoundPct(100 + e.damagePctPerWave, n),
   };
+}
+
+/**
+ * Battle Mode's waves (balance.json battle.waves): each a stream of one monster or an act
+ * boss, built as the campaign builds its waves, every monster at the wave's level on its
+ * table difficulty, its HP the wave's percent.
+ */
+export function battleWaves(balance: BalanceJson, defOf: DefOf): WaveDef[] {
+  const b = balance.battle;
+  if (!b) return [];
+  const bal: BalanceJson = { ...balance, waves: { ...balance.waves, streamTicks: b.streamTicks } };
+  return b.waves.map((e, i) => {
+    const entry: WaveJson = e.boss ? { boss: e.boss, ...(e.superunique ? { superunique: e.superunique } : {}) } : { monster: e.monster!, kind: e.kind ?? 'swarm', ...(e.superunique ? { superunique: e.superunique } : {}) };
+    const { kind, groups, lead } = buildWave({ balance: bal, defOf, difficulty: e.difficulty, act: e.act, entry, championPack: e.champions === true, levelOf: () => e.level });
+    // The boss carries its own percent, so the sends that join its wave keep the wave's
+    for (const g of groups) if (g.rank === 'boss' && e.bossHpPct !== undefined) g.hpPct = e.bossHpPct;
+    return {
+      kind,
+      area: e.area ?? '',
+      difficulty: e.difficulty,
+      act: e.act,
+      actWave: i + 1,
+      actWaves: b.waves.length,
+      final: kind === 'boss',
+      number: i + 1,
+      level: lead.level,
+      groups,
+      hpPct: e.hpPct,
+    };
+  });
 }
 
 /** Each boss wave's boss HP percent: a straight line by wave index from the first boss wave to the last. */
@@ -1531,6 +1568,7 @@ export function buildGameData(
     skillTabs,
     skillVariant,
     itemSkill,
+    ...(design.balance.battle ? { battle: { rules: design.balance.battle, waves: battleWaves(design.balance, defOf) } } : {}),
     ...(extendWaves ? { extendWaves } : {}),
   };
 }

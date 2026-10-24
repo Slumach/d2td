@@ -101,6 +101,20 @@ export class Keeper {
     this.save();
   }
 
+  /** Battle Mode: a finished match on the profile's record (won true, lost false, a draw undefined). */
+  recordBattle(won: boolean | undefined, wave: number): void {
+    const go = () => {
+      const r = this.profile!.battle;
+      if (won === true) r.wins++;
+      else if (won === false) r.losses++;
+      else r.draws++;
+      r.bestWave = Math.max(r.bestWave, wave);
+      this.save();
+    };
+    if (this.loaded && this.profile) go();
+    else void this.load().then(go);
+  }
+
   /** The game is left (quit, lost, won, disconnected): everything in it comes home. */
   leave(sim: Sim | undefined, seat: number): void {
     const p = this.profile;

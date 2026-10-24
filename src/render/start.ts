@@ -11,6 +11,7 @@ import { LAUNCHER_KEY, SetupScene } from '../launcher/SetupScene.ts';
 import type { DesignData } from '../sim/data.ts';
 import { startAutoplay } from './autoplay.ts';
 import { GameScene } from './GameScene.ts';
+import type { LocalBattle } from './driver.ts';
 import { PauseScene } from './PauseScene.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from './layout.ts';
 import { ZombieWalkScene } from './ZombieWalkScene.ts';
@@ -31,6 +32,8 @@ export interface StartOptions {
   startWave?: number;
   /** 0 to 100. */
   volume?: number;
+  /** Browser preview: Battle Mode against bots instead of the campaign. */
+  battle?: LocalBattle;
   /** Inside Electron: setup and the main menu come before the game. */
   launcher?: LauncherApi;
   parent?: string;
@@ -83,6 +86,7 @@ export function startGame(opts: StartOptions = {}): Phaser.Game {
         g.registry.set('speed', Math.max(1, Math.min(16, opts.speed ?? 1)));
         if (opts.startWave && opts.startWave > 1) g.registry.set('startWave', Math.floor(opts.startWave));
         if (opts.launcher) g.registry.set(LAUNCHER_KEY, opts.launcher);
+        if (opts.battle) g.registry.set('battle', opts.battle);
       },
     },
   });

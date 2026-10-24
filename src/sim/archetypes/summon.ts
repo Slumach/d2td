@@ -19,7 +19,7 @@ import { actorGear, aliveWithin, damageAgainst, dealDamage, distSq, findTarget, 
 import { geared } from '../items/tower.ts';
 import { archetypeOf } from './registry.ts';
 import { UNITS_PER_TILE, d2FramesToTicks, idiv, isqrt } from '../fixed.ts';
-import { ahead, nearestPathDist, positionAt, wrap } from '../map.ts';
+import { ahead, along, nearestPathDist, positionAt } from '../map.ts';
 import { rollInt } from '../rng.ts';
 import type { Corpse, Element, Monster, Sim, Summon, Tower } from '../state.ts';
 import { findRow, int, str } from '../tables.ts';
@@ -59,7 +59,7 @@ const SPREAD = (UNITS_PER_TILE * 4) / 10;
 function rangedSpot(sim: Sim, tower: Tower, index: number): { dist: number; x: number; y: number } {
   const base = nearestPathDist(sim.map, tower);
   const step = Math.ceil(index / 2) * (index % 2 === 1 ? 1 : -1);
-  const dist = wrap(sim.map, base + step * SPREAD);
+  const dist = along(sim.map, base, step * SPREAD);
   const p = positionAt(sim.map, dist);
   const d = Math.max(1, isqrt(distSq(p, tower)));
   const off = Math.min(SIDE_OFFSET, d);

@@ -256,8 +256,11 @@ export function killMonster(sim: Sim, monster: Monster): void {
   const by = monster.lastTower ? s.towers.find((t) => t.id === monster.lastTower) : undefined;
   const gear = by ? gearOf(sim, by) : NO_GEAR;
   // Find Item's aura on the monster adds to the killer's gold find
-  const gold = bounty(sim, monster) + idiv(bounty(sim, monster) * (gear.goldFindPct + (monsterFx(sim, monster).goldPct ?? 0)), 100);
+  const found = bounty(sim, monster) + idiv(bounty(sim, monster) * (gear.goldFindPct + (monsterFx(sim, monster).goldPct ?? 0)), 100);
   const killer = Math.min(monster.lastHit, s.gold.length - 1);
+  // Battle Mode: the race's gold percent, the lever between races (balance.json battle.races)
+  const race = s.battle?.races[killer];
+  const gold = race ? idiv(found * (sim.data.battle?.rules.races[race]?.goldPct ?? 100), 100) : found;
   s.gold[killer]! += gold;
   sim.paid.push({ x: monster.x, y: monster.y, gold, player: killer, hp: monster.maxHp });
   s.kills++;

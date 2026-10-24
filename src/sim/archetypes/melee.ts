@@ -65,6 +65,8 @@ export const melee: ArchetypeModule<MeleeDef> = {
 
   act(sim, tower, skill, lvl, buff) {
     const { swings, damagePct, elementalPct } = skill.levels[lvl]!;
+    // Battle Mode: a lane is walked once, so melee reaches at least balance.json battle.meleeReachTenths
+    const reach = sim.state.battle ? Math.max(skill.rangeUnits, idiv((sim.data.battle?.rules.meleeReachTenths ?? 0) * 1000, 10)) : skill.rangeUnits;
     const elements = ELEMENTS.filter((e) => e === (skill.convert ?? 'phys') || (elementalPct[e] ?? 0) > 0);
     // The gear's added damage can hurt what the weapon cannot
     const hurting = buff.gear ? ELEMENTS.filter((e) => elements.includes(e) || buff.gear!.adds[e]) : elements;
@@ -72,11 +74,11 @@ export const melee: ArchetypeModule<MeleeDef> = {
     const physical = skill.convert ?? 'phys';
     const inReach = (m: Monster) => hurting.some((e) => canHurt(sim, m, e, ALL));
     for (let i = 0; i < swings; i++) {
-      const first = findTarget(sim, tower, skill.rangeUnits, inReach);
+      const first = findTarget(sim, tower, reach, inReach);
       if (!first) break;
       swung = true;
       // Whirlwind sweeps everything in reach; other skills hit the tower's target
-      const targets = skill.hitsAll ? sim.state.monsters.filter((m) => m.hp > 0 && inReach(m) && within(tower, m, skill.rangeUnits)) : [first];
+      const targets = skill.hitsAll ? sim.state.monsters.filter((m) => m.hp > 0 && inReach(m) && within(tower, m, reach)) : [first];
       for (const target of targets) {
       const gear = buff.gear;
       const roll = rollInt(sim.state.rng, skill.weapon.min, skill.weapon.max);

@@ -96,7 +96,16 @@ export type CommandBody =
   /** Sells one of the player's drops where it lies, at the capped sell price. */
   | { type: 'sellDrop'; dropId: number }
   /** The trade window: handled by the match, which spans rings (src/sim/items/trade.ts). */
-  | TradeCommand;
+  | TradeCommand
+  /** Battle Mode (src/sim/battle.ts): hire a worker into this player's back row, for Souls each wave. */
+  | { type: 'hire' }
+  /** Battle Mode: a send (balance.json battle.sends) onto an enemy lane's next wave. The match handles it: it crosses teams. */
+  | { type: 'send'; send: string; lane: number }
+  /** Battle Mode: gold into the team's king: the Worldstone's life, its regeneration or Tyrael's hits. */
+  | { type: 'king'; upgrade: KingUpgrade };
+
+export type KingUpgrade = 'hp' | 'regen' | 'tyrael';
+export const KING_UPGRADES: readonly KingUpgrade[] = ['hp', 'regen', 'tyrael'];
 
 /** D2R-style loot filter: the default keeps magic and better, socketed and superior items, gems and runes; 'all' keeps everything. */
 export type LootFilter = 'default' | 'all';
@@ -344,6 +353,30 @@ export interface SimState {
   belts: (Item | null)[][];
   /** Each player's loot filter (src/sim/items/loot.ts passesFilter). */
   lootFilters: LootFilter[];
+  /** Battle Mode only: this team's king, workers, Souls and income (src/sim/battle.ts). */
+  battle?: BattleSimState;
+}
+
+/**
+ * One team's side of a battle, kept on its battlefield's sim: the king the team shares, and
+ * each seat's race, workers, Souls and income. Every array is by seat (the lane's player).
+ */
+export interface BattleSimState {
+  /** The Worldstone's life (whole points, not 1/256) and the upgrade levels the team has bought. */
+  king: { hp: number; maxHp: number; hpLevel: number; regenLevel: number; tyraelLevel: number };
+  tyraelCooldown: number;
+  /** The class each seat plays: it builds only that class's towers. */
+  races: string[];
+  workers: number[];
+  souls: number[];
+  /** Gold paid at the end of every wave: the base income and what the seat's sends added. */
+  income: number[];
+  /** For the scoreboard: sends made, monsters that leaked from the seat's lane, and the king damage they did. */
+  sendsMade: number[];
+  leaks: number[];
+  leakDamage: number[];
+  /** Sends that join this team's next wave: the send, the lane it walks and the sender (match slot). */
+  queued: { send: string; lane: number; from: number }[];
 }
 
 /** An aura source this tick, kept for the renderer's radius rings. */
@@ -380,6 +413,9 @@ export interface Sim {
    * what it paid its killer, gold find and Find Item included. Not state: cleared every step.
    */
   paid: PaidKill[];
+  /** Battle Mode: what reached the king this tick and what Tyrael struck, for the renderer. Not state. */
+  kingHits?: { x: number; y: number; damage: number }[];
+  tyraelHits?: { x: number; y: number }[];
 }
 
 export interface PaidKill {

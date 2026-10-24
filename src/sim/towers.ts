@@ -173,14 +173,25 @@ function removeTower(sim: Sim, id: number): void {
   s.summons = s.summons.filter((u) => u.towerId !== id);
 }
 
-/** What `player`'s next tower costs: buildCost, the same for every tower however many they own. */
-export function buildCostFor(sim: Sim, _player: number): number {
-  return sim.data.economy.buildCost;
+/**
+ * What `player`'s next tower costs: buildCost, the same for every tower however many they own.
+ * In Battle Mode each tower they own raises it by balance.json battle.buildCostPctPerTower, so
+ * a lane goes up the tiers rather than wide (a legend counts once).
+ */
+export function buildCostFor(sim: Sim, player: number): number {
+  const base = sim.data.economy.buildCost;
+  const pct = sim.state.battle ? (sim.data.battle?.rules.buildCostPctPerTower ?? 0) : 0;
+  if (pct <= 0) return base;
+  let cost = base;
+  for (const t of sim.state.towers) if (t.owner === player && t.legendOf === undefined) cost = idiv(cost * (100 + pct), 100);
+  return cost;
 }
 
 export function build(sim: Sim, player: number, x: number, y: number, cls: string, skill?: string): void {
   const s = sim.state;
   const cost = buildCostFor(sim, player);
+  // Battle Mode: a player builds only their race's towers
+  if (s.battle && s.battle.races[player] !== cls) return;
   if (!sim.data.classes[cls] || !canBuild(sim, x, y, player) || !pay(sim, player, cost)) return;
   const center = tileCenter({ x, y });
   const tower: Tower = {

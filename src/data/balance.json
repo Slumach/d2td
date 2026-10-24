@@ -175,5 +175,129 @@
   },
   "skillOverrides": {
     "holy-bolt": { "fullDamageTo": "undead", "otherDamagePct": 40 }
+  },
+  "battle": {
+    "comment": "Battle Mode (src/sim/battle.ts): Legion TD style, two teams with a lane each and a king at the back. Ticks are 1/20 s; gold, Souls and king life are whole points.",
+    "streamTicks": 360,
+    "bossSpeedPct": 40,
+    "meleeReachTenths": 25,
+    "firstBuildTicks": 600,
+    "buildTicks": 400,
+    "fightMaxTicks": 2400,
+    "startingGold": 1000,
+    "startingSouls": 0,
+    "buildCostPctPerTower": 20,
+    "bountyPerLevel": 3,
+    "income": [250, 300, 360, 430, 520, 620, 750, 900, 1100, 1300, 1600, 1900, 2300, 2800, 3300, 4000, 4800, 5800, 7000, 8400, 10000],
+    "sendIncomePerSoul": 15,
+    "worker": { "cost": 250, "costPerWorker": 25, "soulsPerWave": 2, "max": 12 },
+    "king": {
+      "hp": 150,
+      "regenPerWave": 0,
+      "damagePerWeight": 2,
+      "upgrades": {
+        "hp": { "cost": 500, "costPctPerLevel": 150, "add": 20, "maxLevel": 10 },
+        "regen": { "cost": 400, "costPctPerLevel": 150, "add": 2, "maxLevel": 10 },
+        "tyrael": { "cost": 600, "costPctPerLevel": 150, "add": 5, "maxLevel": 10 }
+      }
+    },
+    "tyrael": { "rateTicks": 20, "rangeTenths": 70, "hitPct": 15, "bossHitPct": 2 },
+    "races": {
+      "paladin": { "goldPct": 100 },
+      "sorceress": { "goldPct": 100 },
+      "necromancer": { "goldPct": 100 },
+      "amazon": { "goldPct": 100 },
+      "barbarian": { "goldPct": 100 },
+      "druid": { "goldPct": 100 },
+      "assassin": { "goldPct": 100 }
+    },
+    "waves": [
+      { "monster": "fallen1", "kind": "swarm", "act": 1, "difficulty": 0, "level": 2, "hpPct": 250, "area": "Blood Moor" },
+      { "monster": "quillrat1", "kind": "swarm", "act": 1, "difficulty": 0, "level": 3, "hpPct": 350, "area": "Blood Moor" },
+      { "monster": "zombie1", "kind": "tank", "act": 1, "difficulty": 0, "level": 4, "hpPct": 378, "area": "Den of Evil" },
+      { "monster": "goatman1", "kind": "tank", "act": 1, "difficulty": 0, "level": 6, "hpPct": 267, "area": "Stony Field" },
+      { "monster": "skeleton1", "kind": "tank", "act": 1, "difficulty": 0, "level": 8, "hpPct": 161, "champions": true, "area": "Burial Grounds" },
+      { "boss": "andariel", "act": 1, "difficulty": 0, "level": 12, "hpPct": 100, "bossHpPct": 12, "area": "Catacombs" },
+      { "monster": "sandraider1", "kind": "swarm", "act": 2, "difficulty": 0, "level": 14, "hpPct": 62, "area": "Rocky Waste" },
+      { "monster": "baboon1", "kind": "tank", "act": 2, "difficulty": 0, "level": 16, "hpPct": 210, "area": "Far Oasis" },
+      { "monster": "mummy1", "kind": "tank", "act": 2, "difficulty": 0, "level": 18, "hpPct": 196, "champions": true, "area": "Halls of the Dead" },
+      { "boss": "duriel", "act": 2, "difficulty": 0, "level": 22, "hpPct": 265, "bossHpPct": 7, "area": "Tal Rasha's Tomb" },
+      { "monster": "fetish3", "kind": "swarm", "act": 3, "difficulty": 0, "level": 24, "hpPct": 358, "area": "Flayer Jungle" },
+      { "monster": "thornhulk1", "kind": "tank", "act": 3, "difficulty": 0, "level": 26, "hpPct": 326, "area": "Spider Forest" },
+      { "monster": "frogdemon1", "kind": "tank", "act": 3, "difficulty": 0, "level": 28, "hpPct": 130, "champions": true, "area": "Great Marsh" },
+      { "boss": "mephisto", "act": 3, "difficulty": 0, "level": 32, "hpPct": 191, "bossHpPct": 22, "area": "Durance of Hate" },
+      { "monster": "regurgitator1", "kind": "tank", "act": 4, "difficulty": 0, "level": 34, "hpPct": 282, "area": "Outer Steppes" },
+      { "monster": "fingermage1", "kind": "swarm", "act": 4, "difficulty": 0, "level": 36, "hpPct": 153, "champions": true, "area": "River of Flame" },
+      { "boss": "diablo", "act": 4, "difficulty": 0, "level": 40, "hpPct": 220, "bossHpPct": 38, "area": "Chaos Sanctuary" },
+      { "monster": "minion1", "kind": "swarm", "act": 5, "difficulty": 0, "level": 42, "hpPct": 317, "area": "Bloody Foothills" },
+      { "monster": "imp1", "kind": "swarm", "act": 5, "difficulty": 0, "level": 44, "hpPct": 1504, "area": "Frigid Highlands" },
+      { "monster": "deathmauler1", "kind": "tank", "act": 5, "difficulty": 0, "level": 46, "hpPct": 1323, "champions": true, "area": "Crystalline Passage" },
+      { "boss": "baal", "act": 5, "difficulty": 0, "level": 50, "hpPct": 1323, "bossHpPct": 9, "area": "Throne of Destruction" }
+    ],
+    "sends": [
+      { "id": "cowking", "name": "The Cow King", "kind": "superunique", "monster": "thecowking", "cost": 2, "costPctPerWave": 10, "fromWave": 1, "hpPct": 30 },
+      { "id": "corpsefire", "kind": "superunique", "monster": "corpsefire", "cost": 4, "costPctPerWave": 10, "fromWave": 1, "hpPct": 100 },
+      { "id": "bishibosh", "kind": "superunique", "monster": "bishibosh", "cost": 5, "costPctPerWave": 10, "fromWave": 2, "hpPct": 100 },
+      { "id": "rakanishu", "kind": "superunique", "monster": "rakanishu", "cost": 6, "costPctPerWave": 10, "fromWave": 3, "hpPct": 100 },
+      {
+        "id": "champions-fallen",
+        "name": "Champion Fallen",
+        "kind": "champions",
+        "monster": "fallen1",
+        "count": 3,
+        "mods": ["extraFast"],
+        "cost": 4,
+        "costPctPerWave": 10,
+        "fromWave": 2,
+        "hpPct": 100
+      },
+      { "id": "countess", "kind": "superunique", "monster": "countess", "cost": 10, "costPctPerWave": 10, "fromWave": 6, "hpPct": 100 },
+      { "id": "radament", "kind": "superunique", "monster": "radament", "cost": 12, "costPctPerWave": 10, "fromWave": 7, "hpPct": 100 },
+      { "id": "fireeye", "kind": "superunique", "monster": "fireeye", "cost": 11, "costPctPerWave": 10, "fromWave": 7, "hpPct": 100 },
+      {
+        "id": "champions-mummy",
+        "name": "Champion Mummies",
+        "kind": "champions",
+        "monster": "mummy1",
+        "count": 3,
+        "mods": ["stoneSkin"],
+        "cost": 10,
+        "costPctPerWave": 10,
+        "fromWave": 8,
+        "hpPct": 100
+      },
+      { "id": "pindleskin", "kind": "superunique", "monster": "pindleskin", "cost": 20, "costPctPerWave": 10, "fromWave": 13, "hpPct": 100 },
+      { "id": "nihlathak", "kind": "superunique", "monster": "nihlathak", "cost": 22, "costPctPerWave": 10, "fromWave": 14, "hpPct": 100 },
+      {
+        "id": "ancients",
+        "name": "The Ancients",
+        "kind": "superunique",
+        "monster": ["talic", "madawc", "korlic"],
+        "cost": 36,
+        "costPctPerWave": 10,
+        "fromWave": 16,
+        "hpPct": 100
+      },
+      {
+        "id": "champions-bloodlord",
+        "name": "Champion Blood Lords",
+        "kind": "champions",
+        "monster": "bloodlord1",
+        "count": 3,
+        "mods": ["extraStrong", "magicResistant"],
+        "cost": 18,
+        "costPctPerWave": 10,
+        "fromWave": 13,
+        "hpPct": 100
+      },
+      { "id": "andariel", "kind": "boss", "monster": "andariel", "cost": 40, "costPctPerWave": 5, "fromWave": 8, "hpPct": 12 },
+      { "id": "duriel", "kind": "boss", "monster": "duriel", "cost": 55, "costPctPerWave": 5, "fromWave": 11, "hpPct": 12 },
+      { "id": "mephisto", "kind": "boss", "monster": "mephisto", "cost": 75, "costPctPerWave": 5, "fromWave": 14, "hpPct": 12 },
+      { "id": "diablo", "kind": "boss", "monster": "diablo", "cost": 100, "costPctPerWave": 5, "fromWave": 17, "hpPct": 12 },
+      { "id": "baal", "kind": "boss", "monster": "baal", "cost": 130, "costPctPerWave": 5, "fromWave": 19, "hpPct": 12 }
+    ],
+    "coop": {
+      "sends": [[], [], ["cowking"], ["corpsefire"], ["bishibosh"], [], ["rakanishu"], ["countess"], ["fireeye"], [], ["radament", "champions-mummy"], ["countess"], ["champions-mummy"], [], ["pindleskin"], ["nihlathak"], [], ["ancients"], ["champions-bloodlord", "pindleskin"], ["ancients", "nihlathak"], []]
+    }
   }
 }

@@ -30,7 +30,8 @@
     "payload-check": "tsx tools/payload-check.ts",
     "mp-soak": "tsx tools/mp-soak.ts",
     "waves": "tsx tools/waves.ts",
-    "report": "tsx tools/report.ts"
+    "report": "tsx tools/report.ts",
+    "battle": "tsx tools/battle.ts"
   },
   "dependencies": {
     "@jamiephan/casclib": "0.3.0",

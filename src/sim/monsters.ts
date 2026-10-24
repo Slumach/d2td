@@ -4,7 +4,8 @@ import { gearOf } from './items/tower.ts';
 import { blockerAhead } from './archetypes/summon.ts';
 import { dealRaw, distSq, monsterFx } from './combat.ts';
 import { idiv } from './fixed.ts';
-import { ahead, positionAt, wrap } from './map.ts';
+import { ahead, laneOf, positionAt, wrap } from './map.ts';
+import { leak } from './battle.ts';
 import { rollInt } from './rng.ts';
 import type { Monster, MonsterMod, Rank, Sim, Summon } from './state.ts';
 
@@ -130,6 +131,8 @@ function resurrect(sim: Sim, shaman: Monster): boolean {
 
 export function speedOf(sim: Sim, m: Monster): number {
   let speed = sim.data.monsters[m.def]!.speed;
+  // Battle Mode: an act boss walks its one lane at a share of its pace (balance.json battle.bossSpeedPct)
+  if (sim.state.battle && m.rank === 'boss') speed = idiv(speed * sim.data.battle!.rules.bossSpeedPct, 100);
   for (const mod of m.mods) speed += idiv(speed * sim.data.rules.mods[mod].speedPct, 100);
   const chill = m.chillTicks > 0 ? sim.data.rules.chillPct : 0;
   const slow = Math.min(90, Math.max(m.slowPct, chill, monsterFx(sim, m).slowPct));
@@ -213,8 +216,17 @@ export function updateMonsters(sim: Sim): void {
   }
 }
 
-/** Moves a monster `step` units on around the ring. */
+/** Moves a monster `step` units on around the ring; on a battle lane, to its end and the king. */
 function walk(sim: Sim, m: Monster, step: number): void {
+  if (sim.map.open) {
+    const end = sim.map.arcs[laneOf(sim.map, m.dist)]!.end ?? sim.map.length;
+    if (m.dist + step >= end - 1) {
+      m.walked += Math.max(0, end - 1 - m.dist);
+      m.dist = end - 1;
+      leak(sim, m);
+      return;
+    }
+  }
   m.dist = wrap(sim.map, m.dist + step);
   m.walked += step;
 }

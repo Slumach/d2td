@@ -3,7 +3,7 @@
 
 import { restoreMatch, type Checkpoint, type TimedPlayerCommand } from '../sim/checkpoint.ts';
 import type { GameData } from '../sim/data.ts';
-import { createMatch, stepMatch, type Match } from '../sim/match.ts';
+import { createMatch, stepMatch, type BattleSetup, type Match } from '../sim/match.ts';
 import { TICKS_PER_SECOND } from '../sim/fixed.ts';
 import type { Command } from '../sim/state.ts';
 import type { Lockstep } from '../net/lockstep.ts';
@@ -26,6 +26,12 @@ export interface Driver {
   issue(command: Command): void;
 }
 
+/** A battle against the match's own bots: the mode, and the lobby's setup (slot 0 is the player). */
+export interface LocalBattle {
+  mode: 'battle' | 'coop';
+  setup: BattleSetup;
+}
+
 /** Single player: a solo match on the frame clock. Commands run on the next tick. */
 export class LocalDriver implements Driver {
   readonly match: Match;
@@ -36,9 +42,14 @@ export class LocalDriver implements Driver {
   private pending: Command[] = [];
   private accumulator = 0;
 
-  /** A fresh solo run, or one carried on from a checkpoint. */
-  constructor(data: GameData, seed: number, resume?: Checkpoint) {
-    this.match = resume ? restoreMatch(data, resume) : createMatch(data, seed, 'solo', 1);
+  /** A fresh solo run, one carried on from a checkpoint, or a battle against bots. */
+  constructor(data: GameData, seed: number, resume?: Checkpoint, battle?: LocalBattle) {
+    if (battle) {
+      const teams = battle.mode === 'battle' ? 2 : 1;
+      const slots = battle.setup.teamSize * teams;
+      this.match = createMatch(data, seed, battle.mode, slots, battle.setup);
+      this.players = Array.from({ length: slots }, (_, p) => ({ slot: p, name: p === 0 ? 'You' : `Bot ${p}` }));
+    } else this.match = resume ? restoreMatch(data, resume) : createMatch(data, seed, 'solo', 1);
     this.log = resume ? [...resume.log] : [];
   }
 

@@ -95,6 +95,8 @@ export interface HudNumbers {
   actFrac: number;
   /** The next wave's tooltip, or undefined after the last. */
   nextWave?: { title: string; body: string };
+  /** What the life globe's number says, when it is not the alive weight (Battle Mode: the Worldstone). */
+  lifeLabel?: string;
 }
 
 export interface SlotItem {
@@ -128,6 +130,8 @@ export interface SkillSlot {
 
 export interface HudCallbacks {
   onCallWave: () => void;
+  /** False hides Send Wave (Battle Mode: the match starts every wave). */
+  sendWave?: boolean;
   onInventory: () => void;
   onAutomap: () => void;
   onParty: () => void;
@@ -221,7 +225,7 @@ export class D2Hud {
     }
     this.goldText = scene.add.text(gp.x, gp.y + gsize * 0.3, '', { fontFamily: FONT, fontSize: '17px', color: '#e8c060' }).setOrigin(0.5).setDepth(DEPTH.frame).setShadow(1, 1, '#000000', 2);
 
-    stoneButton(scene, GAME_WIDTH - 158, 44, 'Send Wave', on.onCallWave, { width: 280 });
+    if (on.sendWave !== false) stoneButton(scene, GAME_WIDTH - 158, 44, 'Send Wave', on.onCallWave, { width: 280 });
   }
 
   private has(name: string): boolean {
@@ -279,7 +283,7 @@ export class D2Hud {
 
   update(n: HudNumbers): void {
     // Life over the life globe: what is alive against the limit; kills over the mana globe
-    this.killsText.setText(`Alive: ${n.alive} / ${n.aliveLimit}`);
+    this.killsText.setText(n.lifeLabel ?? `Alive: ${n.alive} / ${n.aliveLimit}`);
     this.aliveText.setText(`Kills: ${n.kills}`);
     this.goldText.setText(n.gold.toLocaleString('en-US'));
     this.stageText.setText(n.wave);

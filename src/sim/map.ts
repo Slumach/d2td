@@ -32,6 +32,8 @@ export interface Arc {
   start: number;
   /** Ring distance where its monsters spawn: the middle of its side, halfway from its corner to the next. */
   spawn: number;
+  /** A battle lane's end: the king. Its monsters leak there instead of walking on. */
+  end?: number;
 }
 
 export interface GameMap {
@@ -47,6 +49,16 @@ export interface GameMap {
   blocked: boolean[];
   /** arcTiles[y * width + x] is the arc whose wedge holds the tile (whose player may build there). */
   arcTiles: number[];
+  /**
+   * Battle Mode (lanes): the path is open, one straight lane per arc laid end to end in ring
+   * distance, each ending at the king. Nothing wraps; a monster at its lane's end leaks.
+   */
+  open?: boolean;
+  /** Battle Mode: the back-row tiles each lane's workers stand on, in hiring order. */
+  workerSlots?: Point[][];
+  /** Battle Mode: the king's tile (the Worldstone) and Tyrael's beside it. */
+  king?: Point;
+  tyrael?: Point;
 }
 
 /** A tile turned 90 degrees clockwise (on screen, sim +x right and +y down) about the grid centre, `times` times. */
@@ -177,15 +189,97 @@ export function arcAt(map: GameMap, x: number, y: number): number {
   return map.arcTiles[y * map.width + x] ?? 0;
 }
 
-/** A ring distance wrapped into [0, length). */
+/** A ring distance wrapped into [0, length); on open lanes, held inside them. */
 export function wrap(map: GameMap, dist: number): number {
+  if (map.open) return Math.max(0, Math.min(map.length - 1, dist));
   return ((dist % map.length) + map.length) % map.length;
 }
 
 /** How far ahead `to` lies from `from` along the ring, in (-length/2, length/2]: negative is behind. */
 export function ahead(map: GameMap, from: number, to: number): number {
+  if (map.open) return laneOf(map, from) === laneOf(map, to) ? to - from : map.length;
   const d = wrap(map, to - from);
   return d > map.length / 2 ? d - map.length : d;
+}
+
+/** The lane (arc) a distance lies on, for open lanes; 0 on the ring. */
+export function laneOf(map: GameMap, dist: number): number {
+  if (!map.open) return 0;
+  for (let k = map.arcs.length - 1; k >= 0; k--) if (dist >= map.arcs[k]!.start) return k;
+  return 0;
+}
+
+/** `dist` moved `offset` along the path, kept on the lane it started on (or wrapped round the ring). */
+export function along(map: GameMap, dist: number, offset: number): number {
+  if (!map.open) return wrap(map, dist + offset);
+  const arc = map.arcs[laneOf(map, dist)]!;
+  return Math.max(arc.start, Math.min((arc.end ?? map.length) - 1, dist + offset));
+}
+
+/** Battle lanes (src/sim/battle.ts): lane geometry on the ring's grid, so the renderer's world is the same size. */
+export const LANE = {
+  /** Path column plus four buildable columns each side. */
+  width: 9,
+  /** Rows: the lane's buildable ground, then the workers' back row, then the keep where the lanes meet. */
+  firstRow: 1,
+  lastBuildRow: 29,
+  workerRows: [31, 32] as const,
+  bendRow: 33,
+  king: { x: 20, y: 39 },
+  tyrael: { x: 22, y: 38 },
+};
+
+/**
+ * A team's battlefield: `lanes` straight lanes side by side down the grid (sim +y), one per
+ * player, each a path with buildable ground on both sides, a back row for its workers, and
+ * a bend into the keep where every lane meets the king. The lanes lie end to end in ring
+ * distance, so a monster's distance says its lane; nothing wraps.
+ */
+export function createLaneMap(lanes: number): GameMap {
+  const size = MAP_SIZE;
+  if (lanes < 1 || lanes > ARC_COUNT) throw new Error(`A battlefield takes 1 to ${ARC_COUNT} lanes, not ${lanes}`);
+  const span = lanes * LANE.width + (lanes - 1);
+  const left = idiv(size - span, 2);
+  const half = idiv(LANE.width, 2);
+  const cols = Array.from({ length: lanes }, (_, k) => left + k * (LANE.width + 1) + half);
+  const segments: PathSegment[] = [];
+  const arcs: Arc[] = [];
+  const pathTiles = new Array<boolean>(size * size).fill(false);
+  let start = 0;
+  cols.forEach((cx) => {
+    const corners = [
+      { x: cx, y: 0 },
+      { x: cx, y: LANE.bendRow },
+      { x: LANE.king.x, y: LANE.king.y - 1 },
+    ];
+    const laneStart = start;
+    for (let i = 1; i < corners.length; i++) {
+      const from = tileCenter(corners[i - 1]!);
+      const to = tileCenter(corners[i]!);
+      const length = isqrt((to.x - from.x) ** 2 + (to.y - from.y) ** 2);
+      if (length === 0) continue;
+      segments.push({ from, to, start, length });
+      start += length;
+      for (const t of tileWalk(corners[i - 1]!, corners[i]!)) pathTiles[t.y * size + t.x] = true;
+    }
+    arcs.push({ start: laneStart, spawn: laneStart, end: start });
+  });
+  // Buildable: each lane's columns from its first row to its last build row, off the path
+  const arcTiles = new Array<number>(size * size).fill(0);
+  const blocked = new Array<boolean>(size * size).fill(true);
+  const workerSlots: Point[][] = cols.map(() => []);
+  cols.forEach((cx, k) => {
+    for (let x = cx - half; x <= cx + half; x++) {
+      for (let y = 0; y < size; y++) arcTiles[y * size + x] = k;
+      for (let y = LANE.firstRow; y <= LANE.lastBuildRow; y++) if (!pathTiles[y * size + x]) blocked[y * size + x] = false;
+    }
+    // Workers stand in the back row, nearest the path first
+    for (const y of LANE.workerRows) {
+      for (let d = 1; d <= half; d++) for (const x of [cx - d, cx + d]) workerSlots[k]!.push({ x, y });
+    }
+  });
+  for (let i = 0; i < size * size; i++) if (pathTiles[i]) blocked[i] = false;
+  return { width: size, height: size, segments, length: start, arcs, pathTiles, blocked, arcTiles, open: true, workerSlots, king: { ...LANE.king }, tyrael: { ...LANE.tyrael } };
 }
 
 /** Ring distance of the path point closest to `p`, by projecting onto each segment. */

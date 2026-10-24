@@ -3,12 +3,13 @@
 // (Host or Join), Continue when there is a save, Options, Exit. Single Player opens a page
 // in the manner of D2's character select: the player's profile (name, the stash's worth,
 // the best wave reached) with Play and Continue. Options opens D2R's options panel for
-// volume, name and the D2R folder. Without the frontend art (an extraction from before it
-// existed) the plain look stands in.
+// volume, name and the D2R folder. Battle Mode opens its own page: the battle record, the
+// mode (a battle or co-op), team size and race, then Play against bots, Host or Join.
+// Without the frontend art (an extraction from before it existed) the plain look stands in.
 
 import Phaser from 'phaser';
 
-import type { SoloStart } from '../render/GameScene.ts';
+import type { BattleStart, SoloStart } from '../render/GameScene.ts';
 import { FONT, button } from '../render/ui.ts';
 import { clearCheckpoint, loadCheckpoint } from '../render/saves.ts';
 import type { Checkpoint } from '../sim/checkpoint.ts';
@@ -33,7 +34,19 @@ const LOGO_SCALE = 1.25;
 const BUTTONS_TOP = 470;
 const BUTTON_STEP = 92;
 
-type Page = 'main' | 'character' | 'newgame' | 'multiplayer' | 'options' | 'update';
+type Page = 'main' | 'character' | 'newgame' | 'multiplayer' | 'options' | 'update' | 'battle';
+
+/** Battle Mode's lobby choices, kept while the menu is open. */
+export interface BattleChoice {
+  mode: 'battle' | 'coop';
+  teamSize: number;
+  /** A class id, or 'random'. */
+  race: string;
+}
+
+/** The classes a battle player may pick, in the game's order. */
+export const RACES = ['paladin', 'sorceress', 'necromancer', 'amazon', 'barbarian', 'druid', 'assassin'];
+const RACE_NAMES: Record<string, string> = { random: 'Random', paladin: 'Paladin', sorceress: 'Sorceress', necromancer: 'Necromancer', amazon: 'Amazon', barbarian: 'Barbarian', druid: 'Druid', assassin: 'Assassin' };
 
 /** The item tables the character page needs to price the stash (GameScene loads the rest). */
 const ITEM_TABLES: (keyof Tables)[] = [
@@ -57,6 +70,8 @@ export class MenuScene extends Phaser.Scene {
   /** The profile, for the character page. */
   private profile: Profile | undefined;
   private items: ItemData | undefined;
+  /** Battle Mode's choices on its page. */
+  private battle: BattleChoice = { mode: 'battle', teamSize: 1, race: 'random' };
 
   constructor() {
     super('Menu');
@@ -146,6 +161,7 @@ export class MenuScene extends Phaser.Scene {
     if (this.page === 'character') return this.drawCharacter(d2);
     if (this.page === 'newgame') return this.drawNewGame(d2);
     if (this.page === 'update') return this.drawUpdate(d2);
+    if (this.page === 'battle') return this.drawBattle(d2);
     const saved = this.saved;
     const items: [string, () => void][] =
       this.page === 'multiplayer'
@@ -156,17 +172,62 @@ export class MenuScene extends Phaser.Scene {
           ]
         : [
             ['Single Player', () => this.go('character')],
+            ['Battle Mode', () => this.go('battle')],
             ['Multiplayer', () => this.go('multiplayer')],
             ...(saved ? [[`Continue: ${stageName(saved.difficulty, saved.act)}`, () => this.startGame(saved)] as [string, () => void]] : []),
             ['Options', () => this.go('options')],
             ['Update', () => this.go('update')],
             ['Exit', () => this.api.quit()],
           ];
+    // Seven buttons close up so the last stays on screen
+    const step = Math.min(BUTTON_STEP, Math.floor((GAME_HEIGHT - 70 - BUTTONS_TOP) / Math.max(1, items.length - 1)));
     items.forEach(([label, onClick], i) => {
-      const y = BUTTONS_TOP + i * BUTTON_STEP;
+      const y = BUTTONS_TOP + i * step;
       if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 330 }));
       else this.parts.push(...button(this, CX - 180, y - 18, { label, onClick, width: 360 }));
     });
+  }
+
+  /**
+   * Battle Mode: the profile's battle record, the choices (a battle or co-op, players a
+   * team, race), and Play against bots, Host and Join. Bots fill every seat no player takes.
+   */
+  private drawBattle(d2: boolean): void {
+    const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
+    const b = this.battle;
+    const r = this.profile?.battle;
+    const top = BUTTONS_TOP - 70;
+    add(this.add.rectangle(CX, top + 30, 620, 130, 0x000000, 0.75).setStrokeStyle(1, 0x7a6440).setDepth(3000));
+    add(this.add.text(CX, top - 10, 'Battle Mode', { ...TEXT, fontSize: '28px', color: '#c7b377' }).setOrigin(0.5).setDepth(3001));
+    const record = r ? `Won ${r.wins}, lost ${r.losses}${r.draws ? `, drawn ${r.draws}` : ''}; best wave ${r.bestWave || 'none yet'}` : 'Reading the profile...';
+    add(this.add.text(CX, top + 28, record, TEXT).setOrigin(0.5).setDepth(3001));
+    const about = b.mode === 'battle' ? 'Two teams, a lane each; first Worldstone to fall loses' : 'One team against 21 waves, sends on a timer';
+    add(this.add.text(CX, top + 60, about, MUTED).setOrigin(0.5).setDepth(3001));
+    const size = `${b.teamSize}v${b.teamSize}`;
+    const items: [string, () => void][] = [
+      [b.mode === 'battle' ? `Mode: Battle ${size}` : `Mode: Co-op, ${b.teamSize} ${b.teamSize === 1 ? 'player' : 'players'}`, () => ((this.battle = { ...b, mode: b.mode === 'battle' ? 'coop' : 'battle' }), this.draw())],
+      ['Players a team: ' + b.teamSize, () => ((this.battle = { ...b, teamSize: (b.teamSize % 4) + 1 }), this.draw())],
+      [`Race: ${RACE_NAMES[b.race] ?? b.race}`, () => ((this.battle = { ...b, race: ['random', ...RACES][(['random', ...RACES].indexOf(b.race) + 1) % (RACES.length + 1)]! }), this.draw())],
+      ['Play against bots', () => this.startBattle()],
+      ['Host online', () => this.scene.start('Lobby', { role: 'host', battle: this.battle })],
+      ['Join online', () => this.scene.start('Lobby', { role: 'join' })],
+      ['Back', () => this.go('main')],
+    ];
+    items.forEach(([label, onClick], i) => {
+      const y = BUTTONS_TOP + 60 + i * 66;
+      if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 400 }));
+      else this.parts.push(...button(this, CX - 200, y - 18, { label, onClick, width: 400 }));
+    });
+  }
+
+  /** A battle with this player in the first seat and bots in every other. */
+  private startBattle(): void {
+    menuMusic(this, false);
+    const b = this.battle;
+    const slots = b.teamSize * (b.mode === 'battle' ? 2 : 1);
+    const races = Array.from({ length: slots }, (_, p) => (p === 0 && b.race !== 'random' ? b.race : 'random'));
+    const bots = Array.from({ length: slots - 1 }, (_, i) => i + 1);
+    this.scene.start('Game', { battle: { mode: b.mode, setup: { teamSize: b.teamSize, races, bots } } } satisfies BattleStart);
   }
 
   /**

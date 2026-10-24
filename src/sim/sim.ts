@@ -11,9 +11,10 @@
 import { archetypeOf } from './archetypes/index.ts';
 import type { SkillDef, TowerBuff } from './archetypes/types.ts';
 import { activeSkill, computeAuras, EMPTY_FIELD } from './auras.ts';
-import type { GameData, WaveDef } from './data.ts';
+import type { GameData, WaveDef, WaveGroup } from './data.ts';
+import { hire, tyraelStrikes, upgradeKing } from './battle.ts';
 import { TICKS_PER_SECOND, idiv } from './fixed.ts';
-import { ARC_COUNT, createMap } from './map.ts';
+import { createMap, type GameMap } from './map.ts';
 import { decayCorpses, spawnMonsters, updateMonsters } from './monsters.ts';
 import { createRng } from './rng.ts';
 import type { Command, Sim, TimedCommand, Tower } from './state.ts';
@@ -35,16 +36,19 @@ export interface SimOptions {
    * players than arcs the rest go round, so the whole ring is always someone's.
    */
   players?: number;
+  /** The ground: the ring by default, a battlefield's lanes in Battle Mode (map.ts createLaneMap). */
+  map?: GameMap;
 }
 
 export function createSim(data: GameData, seed: number, opts: SimOptions = {}): Sim {
   const players = opts.players ?? 1;
-  if (players < 1 || players > ARC_COUNT) throw new Error(`A ring takes 1 to ${ARC_COUNT} players, not ${players}`);
+  const map = opts.map ?? createMap();
+  if (players < 1 || players > map.arcs.length) throw new Error(`A ring takes 1 to ${map.arcs.length} players, not ${players}`);
   return {
     data,
-    map: createMap(),
+    map,
     players,
-    arcOwners: Array.from({ length: ARC_COUNT }, (_, k) => k % players),
+    arcOwners: Array.from({ length: map.arcs.length }, (_, k) => k % players),
     fx: EMPTY_FIELD,
     actor: 0,
     actorTower: 0,
@@ -83,11 +87,15 @@ export function createSim(data: GameData, seed: number, opts: SimOptions = {}): 
 export function step(sim: Sim, commands: readonly Command[]): void {
   const s = sim.state;
   sim.paid = [];
+  if (s.battle) {
+    sim.kingHits = [];
+    sim.tyraelHits = [];
+  }
   if (s.status === 'playing') {
     for (const command of commands) applyCommand(sim, command);
     // Waves run on a fixed timer, whether the last one is dead or not; an open cow portal
-    // takes the timer for its three waves
-    if (s.tick >= s.nextWaveTick) {
+    // takes the timer for its three waves. A battlefield's waves are the match's to start.
+    if (!s.battle && s.tick >= s.nextWaveTick) {
       if (cowWavesDue(sim)) startCowWave(sim);
       else startWave(sim);
     }
@@ -96,6 +104,7 @@ export function step(sim: Sim, commands: readonly Command[]): void {
     updateMonsters(sim);
     updateSummons(sim);
     updateTowers(sim);
+    if (s.battle) tyraelStrikes(sim);
     updateMissiles(sim);
     decayCorpses(sim);
     collectCleared(sim);
@@ -136,6 +145,10 @@ function applyCommand(sim: Sim, command: Command): void {
     return;
   }
   if (command.type === 'cowPortal') return openCowPortal(sim, player, command.uid);
+  if (command.type === 'hire') return hire(sim, player);
+  if (command.type === 'king') return upgradeKing(sim, player, command.upgrade);
+  // Sends cross teams: the match handles them
+  if (command.type === 'send') return;
   switch (command.type) {
     case 'loadInventory':
       return loadInventory(sim, player, command.items, command.belt);
@@ -230,7 +243,7 @@ export function earlySendBonus(sim: Sim): number {
  * ring every player's arc spawns the whole wave at its spawn point, the middle of its side;
  * alone, the whole wave comes from arc 0's (the top side's middle).
  */
-function startWave(sim: Sim): void {
+export function startWave(sim: Sim, extra: readonly { lane: number; groups: WaveGroup[] }[] = []): void {
   const s = sim.state;
   const waveDef = waveAt(sim, s.wave);
   s.nextWaveTick = s.tick + sim.data.economy.waveTicks;
@@ -239,9 +252,11 @@ function startWave(sim: Sim): void {
   let count = 0;
   for (let p = 0; p < sim.players; p++) {
     let offset = 1;
-    waveDef.groups.forEach((group, g) => {
-      // Alone, everything comes from the middle of the top side (arc 0, the marked spawn); on a shared ring each player's arc
-      const arc = sim.players === 1 ? 0 : p;
+    // Alone, everything comes from the middle of the top side (arc 0, the marked spawn); on a shared ring each player's arc
+    const arc = sim.players === 1 ? 0 : p;
+    // A battle send walks behind its lane's wave
+    const groups = [...waveDef.groups, ...extra.filter((e) => e.lane === arc).flatMap((e) => e.groups)];
+    groups.forEach((group) => {
       const dist = sim.map.arcs[arc]!.spawn;
       offset += group.delayTicks ?? 0;
       for (let i = 0; i < group.count; i++) {
@@ -327,6 +342,11 @@ export function aliveLimitOf(sim: Sim): number {
 
 function checkEnd(sim: Sim): void {
   const s = sim.state;
+  // A battlefield falls with its king; the match decides the rest
+  if (s.battle) {
+    if (s.battle.king.hp <= 0) s.status = 'lost';
+    return;
+  }
   if (s.alive >= aliveLimitOf(sim)) {
     s.status = 'lost';
   } else if (!sim.data.extendWaves && s.wave >= sim.data.waves.length && s.monsters.length === 0 && s.spawns.length === 0) {

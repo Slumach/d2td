@@ -19,7 +19,7 @@ import { effectsOn, helps, projected, reachOf, terms } from './aurainfo.ts';
 import { GroundDrops } from './drops.ts';
 import { isAura, standardDps } from '../sim/dps.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE } from '../sim/fixed.ts';
-import { aliveOf, arcOwner, ringOf, seatOf, type MatchMode } from '../sim/match.ts';
+import { aliveOf, arcOwner, ringOf, seatOf, slotOf, teamOf, type BattleSetup, type MatchMode } from '../sim/match.ts';
 import { meets } from '../sim/towers.ts';
 import { geared } from '../sim/items/tower.ts';
 import { ARC_COUNT, arcAt, isBlocked, isPathTile, positionAt } from '../sim/map.ts';
@@ -76,7 +76,8 @@ import { Keeper } from './keeper.ts';
 import { arcOfSeat } from '../sim/cow.ts';
 import { tradeOf } from '../sim/items/trade.ts';
 import { angle64, spriteDirection } from './directions.ts';
-import { LocalDriver, NetDriver, type Driver } from './driver.ts';
+import { LocalDriver, NetDriver, type Driver, type LocalBattle } from './driver.ts';
+import { BattleHud, KEEP_NAMES } from './battlehud.ts';
 import { facingFromVector, type Facing8 } from './facing.ts';
 import { ISO_H, ISO_W, ORIGIN, WORLD_WIDTH, ellipseOf, project, screenVector, tileAtWorld, tileDiamond } from './iso.ts';
 import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, PANEL_TOP } from './layout.ts';
@@ -155,11 +156,18 @@ export interface OnlineStart {
   host: boolean;
   /** Carry on from the host's checkpoint. */
   resume?: Checkpoint;
+  /** Battle and co-op: the lobby's teams, races and bots. */
+  battle?: BattleSetup;
 }
 
 /** A single-player run: a new campaign, or one carried on from its checkpoint. */
 export interface SoloStart {
   resume?: Checkpoint;
+}
+
+/** Battle Mode against the match's own bots, from the main menu. */
+export interface BattleStart {
+  battle: LocalBattle;
 }
 
 /** The grey-box ground, for a run without the extracted maps: field, then boss lair. */
@@ -268,6 +276,11 @@ export class GameScene extends Phaser.Scene {
   /** The class tab the build menu shows. */
   /** The build tab chosen; every class the game data carries has one, in its order. */
   private buildClass = 'paladin';
+  /** Battle Mode: its HUD, the keep's sprites, the local battle to play again, and whether the result is on the profile. */
+  private battleHud: BattleHud | undefined;
+  private keepParts: Phaser.GameObjects.GameObject[] = [];
+  private localBattle: LocalBattle | undefined;
+  private battleRecorded = false;
 
   constructor() {
     super('Game');
@@ -312,6 +325,13 @@ export class GameScene extends Phaser.Scene {
     const sim = match.zones[ringOf(match, player)]!;
     const arc = sim.arcOwners.indexOf(seatOf(match, player));
     const a = sim.map.arcs[Math.max(0, arc)]!;
+    if (sim.map.open) {
+      // A battle lane: its middle rows
+      const p = positionAt(sim.map, a.start + 15 * UNITS_PER_TILE);
+      const at = project(p.x, p.y);
+      this.camera.centreOn(at.x, at.y);
+      return;
+    }
     // The middle of its long straight, pulled a little into the interior
     const p = positionAt(sim.map, a.start + sim.map.length / ARC_COUNT / 2);
     const mid = { x: (p.x + (sim.map.width * UNITS_PER_TILE) / 2) / 2, y: (p.y + (sim.map.height * UNITS_PER_TILE) / 2) / 2 };
@@ -319,8 +339,18 @@ export class GameScene extends Phaser.Scene {
     this.camera.centreOn(at.x, at.y);
   }
 
-  create(start?: OnlineStart | SoloStart): void {
+  create(start?: OnlineStart | SoloStart | BattleStart): void {
+    // The browser preview's ?battle starts the first game as a battle
+    const preview = this.registry.get('battle') as LocalBattle | undefined;
+    if ((!start || Object.keys(start).length === 0) && preview) {
+      start = { battle: preview };
+      this.registry.remove('battle');
+    }
     this.driver = undefined;
+    this.battleHud = undefined;
+    this.keepParts = [];
+    this.localBattle = undefined;
+    this.battleRecorded = false;
     this.halted = '';
     this.groundGfx = undefined;
     this.mapParts = [];
@@ -343,7 +373,8 @@ export class GameScene extends Phaser.Scene {
         data: this.gameData,
         seed: this.seed,
         mode: start.mode,
-        players: start.players.length,
+        players: start.battle ? start.battle.teamSize * (start.mode === 'battle' ? 2 : 1) : start.players.length,
+        ...(start.battle ? { battle: start.battle } : {}),
         me: start.you,
         send: (m) => session.send(m),
         ...(start.resume ? { resume: start.resume } : {}),
@@ -353,18 +384,28 @@ export class GameScene extends Phaser.Scene {
       // The host keeps the multiplayer save
       if (start.host) this.saves = 'mp';
       session.listen((e) => this.onNet(e, lockstep));
+    } else if (start && 'battle' in start) {
+      // A battle against bots: a fresh seed each time, nothing saved
+      this.seed = (Date.now() % 2_000_000_000) + 1;
+      this.localBattle = start.battle;
+      this.driver = new LocalDriver(this.gameData, this.seed, undefined, start.battle);
+      this.view = 0;
     } else {
       if (start?.resume) this.seed = start.resume.seed;
       this.driver = new LocalDriver(this.gameData, this.seed, start?.resume);
       this.view = 0;
       this.saves = 'solo';
     }
+    const battle = this.driver.match.state.battle;
+    // A battle player builds only their race
+    if (battle) this.buildClass = battle.races[this.driver.me] ?? this.buildClass;
     this.waveSeen = this.sim.state.wave;
     this.keeper = new Keeper(this.registry.get('launcher') as LauncherApi | undefined, this.gameData.items);
-    this.keeper.begin((c) => this.issue(c));
+    // Battle Mode carries no items: the profile only takes its record
+    if (!battle) this.keeper.begin((c) => this.issue(c));
     // The loot filter from Options; the default needs no command
     const filter = (this.registry.get('lootFilter') as LootFilter | undefined) ?? 'default';
-    if (filter !== 'default') this.issue({ type: 'lootFilter', mode: filter });
+    if (filter !== 'default' && !battle) this.issue({ type: 'lootFilter', mode: filter });
     this.icons = iconIndex(this);
     createAnimations(this);
     this.fx = this.camera.asWorld(() => new SkillFx(this, DEPTH.effects));
@@ -391,13 +432,14 @@ export class GameScene extends Phaser.Scene {
     this.d2 = hudArt
       ? new D2Hud(this, hudArt, {
           onCallWave: () => this.issue({ type: 'callWave' }),
+          sendWave: !battle,
           onInventory: () => this.toggleInventory(),
           onAutomap: () => this.minimap.toggle(),
           onParty: () => this.scoreboard.toggle(),
           onMenu: () => this.openMenu(),
         })
       : undefined;
-    this.inventory = hudArt && ItemPanels.available(this, hudArt) ? new ItemPanels(this, hudArt, this.itemHost(), this.d2?.beltSpots() ?? []) : undefined;
+    this.inventory = !battle && hudArt && ItemPanels.available(this, hudArt) ? new ItemPanels(this, hudArt, this.itemHost(), this.d2?.beltSpots() ?? []) : undefined;
     // The plain HUD and panel backgrounds sit over the map, so tall scenery never paints across them
     if (!this.d2) this.add.graphics().setDepth(DEPTH.chrome).fillStyle(0x1a1a14).fillRect(0, 0, GAME_WIDTH, HUD_HEIGHT).fillRect(0, PANEL_TOP, GAME_WIDTH, GAME_HEIGHT - PANEL_TOP);
     this.camera.asWorld(() => {
@@ -410,6 +452,12 @@ export class GameScene extends Phaser.Scene {
     // FFA: the rings lie side by side, so panning on past an edge shows the next player's
     this.camera.onEdge = (dir) => {
       const match = this.driver?.match;
+      // Battle: the other team's battlefield lies past either edge
+      if (match?.state.battle) {
+        if (match.zones.length < 2) return false;
+        this.watch((this.view + dir + 2) % 2);
+        return true;
+      }
       if (!match || match.state.mode !== 'ffa' || match.players < 2) return false;
       this.watch((this.view + dir + match.players) % match.players);
       return true;
@@ -436,10 +484,24 @@ export class GameScene extends Phaser.Scene {
     this.hud2 = this.add.text(16, 38, '', { ...text, fontSize: '17px', color: '#b8b090' }).setDepth(3000);
     this.notice = this.add.text(GAME_WIDTH / 2, HUD_HEIGHT + 16, '', { ...text, fontSize: '20px', backgroundColor: '#000000a0', padding: { x: 12, y: 6 } }).setOrigin(0.5, 0).setDepth(5500).setVisible(false);
     // The spawn mark toasts, so it waits for the notice text to exist (0.2.3 threw here on launch)
-    if (this.sim.players === 1) this.markSpawn();
+    if (battle) this.markLanes();
+    else if (this.sim.players === 1) this.markSpawn();
     else this.markArcs();
     this.info = this.add.text(16, PANEL_TOP + 8, '', { ...text, fontSize: '20px' }).setDepth(3000);
     this.tooltip = createTooltip(this, 16, PANEL_TOP - 8);
+    if (battle) {
+      this.battleHud = new BattleHud(this, {
+        match: () => this.driver!.match,
+        me: () => this.driver!.me,
+        nameOf: (slot) => this.nameOf(slot),
+        issue: (c) => this.issue(c),
+        monsterName: (id) => (this.gameData.monsters[id]?.name ?? id).replace(/([a-z])([A-Z])/g, '$1 $2'),
+        tooltip: this.tooltip,
+      });
+      this.stageText.setVisible(false);
+      this.aliveText.setVisible(false);
+      this.toast(`You play the ${this.gameData.classes[this.buildClass]?.name ?? this.buildClass}. Build beside your lane before the first wave.`);
+    }
     if (this.d2) {
       // D2 shows no status line: lives, gold and the wave live in the panel; hints sit just above it
       this.hud.setVisible(false);
@@ -454,7 +516,7 @@ export class GameScene extends Phaser.Scene {
       .setDepth(6000)
       .setVisible(false)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => (this.driver?.online ? this.leaveOnline() : this.restartRun()));
+      .on('pointerdown', () => (this.driver?.online ? this.leaveOnline() : this.localBattle ? this.quitToMenu() : this.restartRun()));
 
     this.input.mouse?.disableContextMenu();
     // Keys 1 to n: on a team ring, look at that player's arc; in FFA, watch their ring
@@ -604,6 +666,57 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Battle Mode: each lane's player named at its top in their colour, and the keep at the
+   * back: the Worldstone, with Tyrael beside it.
+   */
+  private markLanes(): void {
+    const d = this.driver;
+    if (!d) return;
+    const { map } = this.sim;
+    const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
+    this.camera.asWorld(() => {
+      map.arcs.forEach((arc, k) => {
+        const owner = arcOwner(d.match, this.view, k);
+        const colour = PLAYER_COLOURS[owner % PLAYER_COLOURS.length]!;
+        const top = positionAt(map, arc.start + UNITS_PER_TILE);
+        const at = project(top.x, top.y);
+        const race = d.match.state.battle?.races[owner];
+        const label = `${this.nameOf(owner)}${race ? `, ${this.gameData.classes[race]?.name ?? race}` : ''}`;
+        this.keepParts.push(
+          this.add.text(Math.round(at.x), Math.round(at.y) - 16, label, { fontFamily: FONT, fontSize: '13px', color: hex(colour), stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setDepth(DEPTH.overlay),
+        );
+      });
+    });
+    this.drawKeep();
+  }
+
+  /** The keep where the lanes meet: Tyrael beside the Worldstone. */
+  private drawKeep(): void {
+    const { map } = this.sim;
+    if (!map.king || !map.tyrael) return;
+    this.camera.asWorld(() => {
+      const k = project((map.king!.x + 0.5) * UNITS_PER_TILE, (map.king!.y + 0.5) * UNITS_PER_TILE);
+      // The Worldstone: a tall crystal until its own art is extracted
+      const g = this.add.graphics().setDepth(DEPTH.units + k.y / 1000);
+      g.fillStyle(0x6040a0, 0.9).fillTriangle(k.x - 14, k.y, k.x + 14, k.y, k.x, k.y - 70);
+      g.fillStyle(0xa080f0, 0.8).fillTriangle(k.x - 6, k.y - 4, k.x + 8, k.y - 4, k.x + 1, k.y - 60);
+      g.lineStyle(2, 0xd0c0ff, 0.9).strokeTriangle(k.x - 14, k.y, k.x + 14, k.y, k.x, k.y - 70);
+      this.keepParts.push(g);
+      const t = project((map.tyrael!.x + 0.5) * UNITS_PER_TILE, (map.tyrael!.y + 0.5) * UNITS_PER_TILE);
+      const key = monsterKey('tyrael1', 'normal');
+      if (this.textures.exists(key)) {
+        const s = this.sprite(key, Math.round(t.x), Math.round(t.y)).setDepth(DEPTH.units + t.y / 1000);
+        const anim = this.modeKey(key, 'NU', 'sw');
+        if (anim) s.play(anim);
+        this.keepParts.push(s);
+        this.tyraelSprite = s;
+      }
+    });
+  }
+
+  private tyraelSprite: Phaser.GameObjects.Sprite | undefined;
+
   /** Alone, the monsters' one spawn is marked on the ground until the first wave: the place to build near. */
   private markSpawn(): void {
     const sp = positionAt(this.sim.map, this.sim.map.arcs[0]!.spawn);
@@ -623,7 +736,7 @@ export class GameScene extends Phaser.Scene {
 
   private tileAt(p: Phaser.Input.Pointer): { x: number; y: number } | undefined {
     if (this.d2 ? this.d2.covers(p.x, p.y) : p.y < HUD_HEIGHT || p.y >= PANEL_TOP) return undefined;
-    if (this.inventory?.covers(p.x, p.y) || this.minimap.covers(p.x, p.y)) return undefined;
+    if (this.inventory?.covers(p.x, p.y) || this.minimap.covers(p.x, p.y) || this.battleHud?.covers(p.x, p.y)) return undefined;
     const w = this.camera.worldPoint(p.x, p.y);
     return tileAtWorld(w.x, w.y);
   }
@@ -659,6 +772,14 @@ export class GameScene extends Phaser.Scene {
   /** Pause menu: throw the run away and go back to the launcher's main menu. */
   quitToMenu(): void {
     if (this.driver?.online) return this.leaveOnline();
+    if (this.localBattle) {
+      this.clearViews();
+      this.driver = undefined;
+      this.battleHud?.destroy();
+      this.scene.stop('Pause');
+      this.scene.start('Menu');
+      return;
+    }
     this.restartRun();
     this.scene.start('Menu');
   }
@@ -809,6 +930,12 @@ export class GameScene extends Phaser.Scene {
     this.clearViews();
     this.mapShown = '-';
     this.redrawGround();
+    if (this.driver?.match.state.battle) {
+      for (const o of this.keepParts) o.destroy();
+      this.keepParts = [];
+      this.tyraelSprite = undefined;
+      this.markLanes();
+    }
   }
 
   private nameOf(slot: number): string {
@@ -1545,6 +1672,7 @@ export class GameScene extends Phaser.Scene {
    */
   private stage(): { act: number; lair: boolean; cow?: boolean; label: string } {
     const s = this.sim.state;
+    if (this.driver?.match.state.battle) return { act: 5, lair: false, label: KEEP_NAMES[this.view] ?? '' };
     const wave = this.sim.data.waves[Math.max(0, s.wave - 1)];
     // The Secret Cow Level is Moo Moo Farm, an Act 1 field, while its portal is open
     if (s.cow) return { act: 1, lair: false, cow: true, label: 'Moo Moo Farm' };
@@ -1561,6 +1689,13 @@ export class GameScene extends Phaser.Scene {
    * extracted), and the grey box shows instead.
    */
   private drawBakedMap(stage: { act: number; lair: boolean; cow?: boolean }): boolean {
+    // A battlefield is drawn on its own ground, never an act's ring
+    if (this.sim.map.open) {
+      for (const o of this.mapParts) o.destroy();
+      this.mapParts = [];
+      this.mapShown = '';
+      return false;
+    }
     const manifest = this.cache.json.get(MAP_KEY) as MapManifest | undefined;
     const name = stage.cow ? 'cow' : stage.lair ? 'lair' : 'field';
     const baked = manifest?.acts[String(stage.act)]?.[name];
@@ -1664,6 +1799,7 @@ export class GameScene extends Phaser.Scene {
 
   private drawHud(): void {
     const { state, data } = this.sim;
+    if (this.battleHud) return this.drawBattleHud();
     if (this.driver?.online) return this.drawOnlineHud();
     this.drawAlive(state.alive);
     this.hud.setText(`Gold ${this.gold}   Wave ${state.wave}   Kills ${state.kills}`);
@@ -1672,6 +1808,41 @@ export class GameScene extends Phaser.Scene {
     if (state.status !== 'playing' && !this.endOverlay.visible) {
       const why = state.status === 'won' ? 'Victory' : `Defeat: ${aliveLimitOf(this.sim)} alive on the ring`;
       this.endOverlay.setText(`${why}\nwave ${state.wave}, ${state.kills} kills\nclick to play again`).setVisible(true);
+    }
+  }
+
+  /** Battle Mode: the kings, the phase and the panel, the globes on your king, and the result at the end. */
+  private drawBattleHud(): void {
+    const d = this.driver!;
+    const match = d.match;
+    const b = match.state.battle!;
+    this.battleHud!.update();
+    const own = match.zones[ringOf(match, d.me)]!;
+    const king = own.state.battle!.king;
+    this.hud2.setText('');
+    if (this.d2) {
+      const n = this.hudNumbers(king.maxHp);
+      const rules = match.data.battle!.rules;
+      const left = b.phase === 'build' ? (b.phaseTick - match.state.tick) / Math.max(1, b.wave === 0 ? rules.firstBuildTicks : rules.buildTicks) : 0;
+      this.d2.update({ ...n, gold: own.state.gold[seatOf(match, d.me)] ?? 0, alive: king.maxHp - Math.max(0, king.hp), aliveLimit: king.maxHp, lifeLabel: `Worldstone: ${Math.max(0, king.hp)} / ${king.maxHp}`, wave: `Wave ${b.wave} of ${match.data.battle!.waves.length}`, timer: '', timerFrac: Math.max(0, Math.min(1, left)), actFrac: b.wave / match.data.battle!.waves.length, nextWave: this.nextWaveTip(b.wave) });
+    }
+    if (match.state.status === 'over' && !this.endOverlay.visible && !this.halted) {
+      const won = match.state.winners.includes(d.me);
+      const draw = match.state.winners.length === 0 && match.state.mode === 'battle';
+      const kings = match.zones.map((z) => z.state.battle!.king.hp);
+      const fell = kings.some((hp) => hp <= 0);
+      const title =
+        match.state.mode === 'coop'
+          ? won ? 'The Worldstone stands' : 'The Worldstone has fallen'
+          : draw ? 'A draw' : won ? (fell ? "Victory: the enemy's Worldstone fell" : 'Victory on life') : fell ? 'Defeat: your Worldstone fell' : 'Defeat on life';
+      const yours = kings[teamOf(match, d.me)] ?? 0;
+      this.endOverlay.setText(`${title}
+wave ${b.wave}, your Worldstone at ${Math.max(0, yours)}
+click to return to the menu`).setFontSize(40).setVisible(true);
+      if (!this.battleRecorded) {
+        this.battleRecorded = true;
+        this.keeper?.recordBattle(draw ? undefined : won, b.wave);
+      }
     }
   }
 
@@ -1816,7 +1987,9 @@ export class GameScene extends Phaser.Scene {
 
     if (sel?.kind === 'tile') {
       this.info.setText(`Build a tower (${buildCostFor(sim, this.seat)}g): its class and T1 skill fix its line`);
+      const battleRace = this.driver?.match.state.battle?.races[this.driver.me];
       for (const [cls, c] of Object.entries(sim.data.classes)) {
+        if (battleRace && cls !== battleRace) continue;
         for (const line of Object.values(c.lines)) {
           const skill = line.tiers[0]![0]!;
           specs.push(
@@ -1845,8 +2018,9 @@ export class GameScene extends Phaser.Scene {
       const cls = sim.data.classes[this.buildClass] ? this.buildClass : Object.keys(sim.data.classes)[0]!;
       const c = sim.data.classes[cls]!;
       this.info.setText(`Build a ${c.name} tower (${buildCostFor(sim, this.seat)} gold): its first skill fixes its line`);
+      const battleRace = this.driver?.match.state.battle?.races[this.driver.me];
       d2.setTabs(
-        Object.keys(sim.data.classes).map((id) => ({
+        Object.keys(sim.data.classes).filter((id) => !battleRace || id === battleRace).map((id) => ({
           label: sim.data.classes[id]!.name,
           chosen: id === cls,
           onClick: () => {

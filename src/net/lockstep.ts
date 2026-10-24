@@ -5,7 +5,7 @@
 
 import { restoreMatch, type Checkpoint, type TimedPlayerCommand } from '../sim/checkpoint.ts';
 import type { GameData } from '../sim/data.ts';
-import { createMatch, matchHash, stepMatch, type Match, type MatchMode, type PlayerCommand } from '../sim/match.ts';
+import { createMatch, matchHash, stepMatch, type BattleSetup, type Match, type MatchMode, type PlayerCommand } from '../sim/match.ts';
 import type { Command } from '../sim/state.ts';
 import { HASH_EVERY, type ClientMessage } from './protocol.ts';
 
@@ -19,6 +19,8 @@ export interface LockstepOptions {
   send: (message: ClientMessage) => void;
   /** Carry on from the host's checkpoint instead of a fresh match. */
   resume?: Checkpoint;
+  /** Battle and co-op: the lobby's teams, races and bots. */
+  battle?: BattleSetup;
 }
 
 export class Lockstep {
@@ -32,7 +34,7 @@ export class Lockstep {
   readonly log: TimedPlayerCommand[];
 
   constructor(opts: LockstepOptions) {
-    this.match = opts.resume ? restoreMatch(opts.data, opts.resume) : createMatch(opts.data, opts.seed, opts.mode, opts.players);
+    this.match = opts.resume ? restoreMatch(opts.data, opts.resume) : createMatch(opts.data, opts.seed, opts.mode, opts.players, opts.battle);
     this.log = opts.resume ? [...opts.resume.log] : [];
     this.me = opts.me;
     this.send = opts.send;

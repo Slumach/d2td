@@ -86,6 +86,7 @@ function tierPct(sim: Sim, monster: Monster): number {
 
 /** What a killed monster drops, onto the ground. */
 export function dropLoot(sim: Sim, monster: Monster): void {
+  if (sim.data.noLoot) return;
   const s = sim.state;
   const def = sim.data.monsters[monster.def];
   if (!def) return;

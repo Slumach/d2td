@@ -25,10 +25,21 @@ export interface Profile {
   belt: (Item | null)[];
   /** The furthest wave reached, for the character screen. */
   bestWave: number;
+  /** Battle Mode's record: matches won and lost (draws count as neither), and the furthest wave a match reached. */
+  battle: BattleRecord;
 }
 
+export interface BattleRecord {
+  wins: number;
+  losses: number;
+  draws: number;
+  bestWave: number;
+}
+
+const NO_BATTLES: BattleRecord = { wins: 0, losses: 0, draws: 0, bestWave: 0 };
+
 export function emptyProfile(): Profile {
-  return { version: 1, inventory: [], stash: [[]], inPlay: [], belt: [null, null, null, null], bestWave: 0 };
+  return { version: 1, inventory: [], stash: [[]], inPlay: [], belt: [null, null, null, null], bestWave: 0, battle: { ...NO_BATTLES } };
 }
 
 /** The first free spot in a w x h grid, column by column from the top left. */
@@ -97,7 +108,15 @@ export function parseProfile(json: string | null, data: ItemData): Profile {
     inPlay: Array.isArray(raw['inPlay']) ? raw['inPlay'].flatMap((v) => item(v) ?? []) : [],
     belt: [0, 1, 2, 3].map((k) => (Array.isArray(raw['belt']) ? (item(raw['belt'][k]) ?? null) : null)),
     bestWave: Number.isInteger(raw['bestWave']) ? (raw['bestWave'] as number) : 0,
+    battle: battleRecord(raw['battle']),
   };
+}
+
+/** A battle record read back: every count a whole number, nothing missing. */
+function battleRecord(v: unknown): BattleRecord {
+  const r = (v ?? {}) as Partial<Record<keyof BattleRecord, unknown>>;
+  const n = (x: unknown) => (Number.isInteger(x) && (x as number) >= 0 ? (x as number) : 0);
+  return { wins: n(r.wins), losses: n(r.losses), draws: n(r.draws), bestWave: n(r.bestWave) };
 }
 
 export async function loadProfile(launcher: LauncherApi | undefined, data: ItemData): Promise<Profile> {
