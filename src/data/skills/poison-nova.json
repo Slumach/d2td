@@ -3,6 +3,7 @@
   "skill": "Poison Nova",
   "archetype": "splash",
   "damageType": "pois",
+  "tierBonus": 1370,
   "rangeTenths": 30,
   "rateTicks": 30,
   "splash": { "delivery": "nova", "edgeDamagePct": 100 }

@@ -136,7 +136,7 @@
     "name": "Javazon",
     "attack": {
       "skill": "lightning-fury",
-      "minTier": 2
+      "minTier": 3
     },
     "partner": {
       "skill": "critical-strike",
@@ -147,7 +147,7 @@
     "name": "Fishyzon",
     "attack": {
       "skill": "plague-javelin",
-      "minTier": 3
+      "minTier": 2
     },
     "partner": {
       "skill": "multiple-shot",

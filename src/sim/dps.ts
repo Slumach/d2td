@@ -17,7 +17,10 @@
 // hits the target once; a splash hits it once per cast (the sub-missile only if its
 // filter allows plain monsters); a zone hits every tickTicks while it lasts; melee is
 // weapon damage with the skill's percent and elemental adds, times swings; a control
-// aura pulses its damage. Summons, corpse skills and pulses (a percent of current HP)
+// aura pulses its damage. A poison skill counts no more than one dose over its length,
+// since a new dose replaces the old rather than stacking (combat.ts poison): counting each
+// throw's whole dose once put a T1 Poison Javelin at 2,803 where one target takes 61, and
+// lifted the javelin tiers above it to match. Summons, corpse skills and pulses (a percent of current HP)
 // have no standard-target number and score 0.
 
 import type { DamageRange, HitFilter, SkillDef } from './archetypes/types.ts';
@@ -39,6 +42,14 @@ function interval(skill: SkillDef, lvl: number, attackSpeedPct = 0, ignoreDelay 
 }
 
 export function standardDps(skill: SkillDef, lvl: number, ignoreDelay = false): number {
+  const dps = rawDps(skill, lvl, ignoreDelay);
+  const ticks = skill.damageType === 'pois' ? (skill.poisonTicks[lvl] ?? 0) : 0;
+  const l = ('levels' in skill ? skill.levels[lvl] : undefined) as Partial<DamageRange> | undefined;
+  if (ticks <= 0 || l?.min === undefined || l.max === undefined) return dps;
+  return Math.min(dps, idiv(avg(l as DamageRange) * PER, ticks));
+}
+
+function rawDps(skill: SkillDef, lvl: number, ignoreDelay: boolean): number {
   const per = (damage: number) => idiv(damage * PER, interval(skill, lvl, 0, ignoreDelay));
   switch (skill.archetype) {
     case 'projectile': {

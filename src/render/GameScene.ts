@@ -130,19 +130,6 @@ const DEPTH = { ground: 1, rings: 2, corpses: 3, units: 10, overlay: 1500, effec
 const PLAYER_COLOURS = [0xc8a040, 0x4a84d8, 0xc84a3a, 0x60b060, 0xa070e0, 0x50c0c0];
 /** The alive bar across the top of the screen. */
 const ALIVE_BAR = { width: 440, height: 16, y: 10 };
-/** Dev: ?debug logs every sprite the scene creates. */
-/**
- * The panel's damage per second: standardDps, but a poison skill no more than one dose over its
- * length, since a new dose replaces the old rather than stacking (combat.ts poison). Counting each
- * throw's whole dose at once showed a T1 Poison Javelin at 4,709 where one target takes 62.
- */
-function panelDps(skill: SkillDef, lvl: number, ignoreDelay = false): number {
-  const dps = standardDps(skill, lvl, ignoreDelay);
-  const ticks = skill.damageType === 'pois' ? (skill.poisonTicks[lvl] ?? 0) : 0;
-  const l = ('levels' in skill ? skill.levels[lvl] : undefined) as { min?: number; max?: number } | undefined;
-  if (ticks <= 0 || l?.min === undefined || l.max === undefined) return dps;
-  return Math.min(dps, Math.trunc((((l.min + l.max) / 2) * 1000) / ticks));
-}
 
 /** What a summon tower's panel calls its summons, by monster. */
 const SUMMON_NOUNS: Record<string, [string, string]> = {
@@ -154,6 +141,7 @@ const SUMMON_NOUNS: Record<string, [string, string]> = {
   dopplezon: ['decoy', 'decoys'],
   shadowmaster: ['shadow master', 'shadow masters'],
 };
+/** Dev: ?debug logs every sprite the scene creates. */
 const DEBUG = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug');
 
 
@@ -1970,9 +1958,9 @@ export class GameScene extends Phaser.Scene {
       const buff = sim.fx.towers[tower.id];
       // An evolved tower fires both lines: its partner's casts count with its attack
       const partnerSkill = tower.evolved && tower.partnerSkill ? geared(sim, tower, sim.data.skills[tower.partnerSkill]!) : undefined;
-      const partnerDps = partnerSkill && !isAura(partnerSkill) ? panelDps(partnerSkill, tower.partnerLevel) : 0;
+      const partnerDps = partnerSkill && !isAura(partnerSkill) ? standardDps(partnerSkill, tower.partnerLevel) : 0;
       const recipe = tower.evolved ? sim.data.evolutions.find((r) => r.id === tower.evolved) : undefined;
-      const base = panelDps(active.skill, active.lvl, recipe?.ignoreSkillDelay === true) + partnerDps;
+      const base = standardDps(active.skill, active.lvl, recipe?.ignoreSkillDelay === true) + partnerDps;
       // 1/256 HP per 1000 ticks, at 20 ticks a second; the auras this tower stands in broken out
       const perSecond = (damagePct: number, speedPct: number) => Math.round((((base * TICKS_PER_SECOND) / 1000 / 256) * (100 + damagePct) * (100 + speedPct)) / 10000);
       const dps = perSecond(buff?.damagePct ?? 0, buff?.attackSpeedPct ?? 0);
