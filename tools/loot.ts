@@ -90,7 +90,7 @@ function target(set: LootSet, data: ReturnType<typeof buildGameData>): { text: s
   const tier = (k: number) => camp + (k - 1) * data.waves.filter((w) => w.tier === 1).length + 1;
   switch (set) {
     case 'none':
-      return { text: 'Hell Act 1 or 2', lo: first(2, 1), hi: first(2, 3) - 1 };
+      return { text: 'waves 55 to 65', lo: 55, hi: 65 };
     case 'nm':
       return { text: 'reaches Hell Act 4 or 5', lo: first(2, 4), hi: camp };
     case 'hell':
