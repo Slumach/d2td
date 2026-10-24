@@ -13,7 +13,7 @@ import Phaser from 'phaser';
 import { HD_SCALE } from '../launcher/frontend.ts';
 import { freeIn, STASH_H, STASH_W } from '../launcher/profile.ts';
 import type { ItemData, Slot } from '../sim/items/data.ts';
-import { canWear, type Item } from '../sim/items/item.ts';
+import { wearProblem, type Item } from '../sim/items/item.ts';
 import { fitsAt } from '../sim/items/inventory.ts';
 import { freeSpot, INV_H, INV_W, type InvItem } from '../sim/items/loot.ts';
 import { sellPrice } from '../sim/items/price.ts';
@@ -729,7 +729,8 @@ export class ItemPanels {
     if (source.from === 'belt') return this.host.toast('Gems and runes go in sockets');
     const others = { ...tower.gear };
     delete others[slot];
-    if (!canWear(this.host.data, item, slot, tower.cls, others)) return this.host.toast(wearRefusal(this.host.data, item, slot, tower));
+    const problem = wearProblem(this.host.data, item, slot, tower.cls, others);
+    if (problem) return this.host.toast(wearRefusal(this.host.data, item, slot, problem));
     if (source.from === 'stash') this.host.keeper.sendOut(item, sim.state.tick);
     this.host.issue({ type: 'equip', towerId: tower.id, slot, item });
     this.placed();
@@ -858,13 +859,22 @@ const SLOT_NAMES: Record<Slot, string> = {
 const CLASS_ONLY: Record<string, string> = { ama: 'Amazon', sor: 'Sorceress', nec: 'Necromancer', pal: 'Paladin', bar: 'Barbarian', dru: 'Druid', ass: 'Assassin' };
 
 /** Why an item will not go on a tower, in a few words. */
-function wearRefusal(data: ItemData, item: Item, slot: Slot, tower: Tower): string {
+function wearRefusal(data: ItemData, item: Item, slot: Slot, problem: NonNullable<ReturnType<typeof wearProblem>>): string {
   const b = data.bases[item.code];
-  if (!b || !b.slots.includes(slot)) return `That does not go in the ${SLOT_NAMES[slot].toLowerCase()} slot`;
-  if (b.classOnly) return `Only ${CLASS_ONLY[b.classOnly] ?? 'another class'} towers can use that`;
-  if (slot === 'shield') return 'Two-handed weapons leave no hand for a shield';
-  if (b.twoHanded) return 'Take the shield off first: it is two-handed';
-  return `The ${tower.cls} tower cannot use that`;
+  switch (problem) {
+    case 'slot':
+      return `That does not go in the ${SLOT_NAMES[slot].toLowerCase()} slot`;
+    case 'class':
+      return `Only ${CLASS_ONLY[b?.classOnly ?? ''] ?? 'another class'} towers can use that`;
+    case 'bow':
+      return 'Only Amazon towers can fire bows and crossbows';
+    case 'thrown':
+      return 'No tower throws weapons';
+    case 'twoHandedWorn':
+      return 'Two-handed weapons leave no hand for a shield';
+    case 'shieldWorn':
+      return 'Take the shield off first: it is two-handed';
+  }
 }
 
 /** Where D2 draws sockets on an item of a size: centred columns and rows, cell units. */

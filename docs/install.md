@@ -50,6 +50,7 @@ A new version of the game may need a few more files from Diablo II: Resurrected.
 - Monsters drop items. Click a name on the ground to pick it up; whatever is left goes into your inventory when the wave is over, if there is room.
 - Press **I** to open the inventory and the stash. Click an item to pick it up and click where it should go; right-click puts it back.
 - To give a tower an item, click the tower, open the inventory, and put the item in one of the ten slots of the figure at the top.
+- No tower throws a weapon, and only Amazon towers wear bows and crossbows (her bow skills fire them). A tower's weapon at each tier gets better on its own; a weapon you give it replaces that.
 - Put a gem, rune or jewel on an item with an empty socket to socket it. The four belt slots on the control panel hold gems and runes ready to socket.
 - Drop an item on **Sell** to sell it. Smith's Hammer, put on an item, adds a socket. Right-click Wirt's Leg to open the Secret Cow Level, if you dare.
 - Your items and stash are kept between games, even if you close the game in the middle of one. They are in `%APPDATA%\D2 Tower Defense\profile.json`; copy that file to keep a backup.

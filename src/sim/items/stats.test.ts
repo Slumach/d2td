@@ -206,9 +206,10 @@ describe('the item stats that act on monsters', () => {
     expect(melee(sim.data.skillVariant('vengeance', 0, plain)).weapon).toEqual(t3.weapon);
   });
 
-  it('refuses missile weapons on every tower: nothing here shoots a bow', () => {
+  it('refuses bows on towers with no bow skills, and takes them on the Amazon', () => {
     const sim = testSim();
     expect(canWear(sim.data.items, item('tbw', []), 'weapon', 'paladin', {})).toBe(false);
+    expect(canWear(sim.data.items, item('tbw', []), 'weapon', 'amazon', {})).toBe(true);
     expect(canWear(sim.data.items, item('tsw', []), 'weapon', 'paladin', {})).toBe(true);
   });
 

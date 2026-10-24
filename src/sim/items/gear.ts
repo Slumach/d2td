@@ -40,7 +40,7 @@
 
 import type { ImplicitGear, ItemConversions } from '../data.ts';
 import type { Element } from '../state.ts';
-import { CLASS_CODES, SLOTS, type ItemBase, type ItemData, type Slot } from './data.ts';
+import { CLASS_CODES, isType, SLOTS, type ItemBase, type ItemData, type Slot } from './data.ts';
 import { idiv } from '../fixed.ts';
 import { itemStats, propertyStats, type Item, type Quality, type StatRoll } from './item.ts';
 
@@ -104,9 +104,11 @@ export interface TowerGear {
   stunChancePct: number;
   /**
    * The worn weapon's damage for melee towers, whole HP: its base damage (ethereal +50%)
-   * plus the gear's flat +min and +max damage. Enhanced damage is damagePct, on top.
+   * plus the gear's flat +min and +max damage. Enhanced damage is damagePct, on top. A bow or
+   * crossbow (missile: true) is the Amazon's: her bow skills fire it, and no tower swings it.
    */
   weapon?: { min: number; max: number };
+  missile?: boolean;
 }
 
 export const NO_GEAR: TowerGear = {
@@ -287,6 +289,7 @@ export function towerGear(
     const [addMin, addMax] = g.adds.phys ?? [0, 0];
     const min = Math.max(1, eth(weaponBase.minDamage) + addMin);
     g.weapon = { min, max: Math.max(min, eth(weaponBase.maxDamage) + addMax) };
+    if (isType(data, weaponBase, 'miss')) g.missile = true;
     // rangeadder counts D2 subtiles; a sim tile is two of them
     g.rangeTenths = weaponBase.rangeAdder * 5;
   }

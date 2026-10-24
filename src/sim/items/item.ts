@@ -323,18 +323,26 @@ export function itemName(data: ItemData, item: Item): string {
   return baseName;
 }
 
-/** Whether an item can be worn in a slot by a tower of a class, given what the tower already wears. */
-/** itemtypes.txt types no tower can use: missile and thrown weapons (no tower shoots or throws; a melee skill needs a melee weapon, as in D2). */
-const NO_TOWER_WEAPON = ['miss', 'thro', 'jave', 'taxe', 'tkni'];
+/** itemtypes.txt types no tower can use: thrown weapons (no tower throws; a melee skill needs a melee weapon, as in D2). */
+const NO_TOWER_WEAPON = ['thro', 'jave', 'taxe', 'tkni'];
+/** Bows and crossbows: only the Amazon's towers wear them, for her bow skills. */
+const BOW_CLASSES = ['amazon'];
 
-export function canWear(data: ItemData, item: Item, slot: Slot, towerClass: string, worn: Partial<Record<Slot, Item>>): boolean {
+/** Why a tower cannot wear an item in a slot, or undefined when it can, given what it already wears. */
+export function wearProblem(data: ItemData, item: Item, slot: Slot, towerClass: string, worn: Partial<Record<Slot, Item>>): 'slot' | 'class' | 'bow' | 'thrown' | 'twoHandedWorn' | 'shieldWorn' | undefined {
   const base = data.bases[item.code];
-  if (!base || !base.slots.includes(slot)) return false;
-  if (base.classOnly && base.classOnly !== CLASS_CODES[towerClass]) return false;
-  if (slot === 'weapon' && NO_TOWER_WEAPON.some((t) => isType(data, base, t))) return false;
+  if (!base || !base.slots.includes(slot)) return 'slot';
+  if (base.classOnly && base.classOnly !== CLASS_CODES[towerClass]) return 'class';
+  if (slot === 'weapon' && isType(data, base, 'miss') && !BOW_CLASSES.includes(towerClass)) return 'bow';
+  if (slot === 'weapon' && NO_TOWER_WEAPON.some((t) => isType(data, base, t))) return 'thrown';
   // Two-handed weapons need the shield hand free, and a shield needs a one-handed weapon
-  if (slot === 'shield' && worn.weapon && data.bases[worn.weapon.code]?.twoHanded) return false;
-  if (slot === 'weapon' && base.twoHanded && worn.shield) return false;
-  return true;
+  if (slot === 'shield' && worn.weapon && data.bases[worn.weapon.code]?.twoHanded) return 'twoHandedWorn';
+  if (slot === 'weapon' && base.twoHanded && worn.shield) return 'shieldWorn';
+  return undefined;
+}
+
+/** Whether an item can be worn in a slot by a tower of a class, given what the tower already wears. */
+export function canWear(data: ItemData, item: Item, slot: Slot, towerClass: string, worn: Partial<Record<Slot, Item>>): boolean {
+  return wearProblem(data, item, slot, towerClass, worn) === undefined;
 }
 

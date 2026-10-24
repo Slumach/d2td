@@ -1505,8 +1505,8 @@ export function buildGameData(
     const ladder = ladders.find((l) => l.skill === (json.castBy ?? id));
     const levels = (ladder?.levels ?? json.skillLevels ?? (json.castBy ? jsonById.get(json.castBy)?.skillLevels : undefined) ?? []).map((l) => l + plus);
     let def = resolveSkill(tables, json, design, weaponFor(id), levels, reach);
-    // A worn weapon replaces the class weapon before the tier bonus, which multiplies whatever the tower swings
-    if (weapon && def.archetype === 'melee') def = { ...def, weapon: { min: weapon.min * 256, max: weapon.max * 256 } };
+    // A worn weapon replaces the class weapon (a worn bow the class bow) before the tier bonus, which multiplies whatever the tower swings or fires
+    if (weapon && (def.archetype === 'melee' || (def.archetype === 'projectile' && def.weapon))) def = { ...def, weapon: { min: weapon.min * 256, max: weapon.max * 256 } };
     if (ladder) def = withTierBonus(def, ladder.tierBonus);
     def = withDamageBonus(def, bonus);
     skills[key] = { ...def, id: key };
