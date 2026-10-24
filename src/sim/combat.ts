@@ -219,6 +219,24 @@ export function dealRaw(sim: Sim, monster: Monster, amount: number): void {
   if (monster.hp <= 0) killMonster(sim, monster);
 }
 
+/** Crushing blow never takes more than this many times the hit's own damage. */
+export const CRUSHING_BLOW_CAP = 25;
+
+/**
+ * Crushing blow, by D2's rules: on its chance, a quarter of the monster's life before the hit
+ * (an eighth for champions, uniques and bosses), halved for a ranged attack, less its physical
+ * resistance and nothing on a physical immune. It is capped at CRUSHING_BLOW_CAP times the
+ * hit's own damage (before resistance), so endless monsters' life cannot make it the whole kill.
+ */
+export function crushingBlow(sim: Sim, monster: Monster, gear: TowerGear, hpBefore: number, hit: number, ranged: boolean): void {
+  if (gear.crushingBlowPct <= 0 || monster.hp <= 0 || rollInt(sim.state.rng, 0, 99) >= gear.crushingBlowPct) return;
+  const resist = effectiveResist(sim, monster, 'phys');
+  if (resist >= 100) return;
+  const share = (monster.rank === 'normal' ? 4 : 8) * (ranged ? 2 : 1);
+  const blow = Math.min(idiv(hpBefore, share), hit * CRUSHING_BLOW_CAP);
+  dealRaw(sim, monster, idiv(blow * (100 - resist), 100));
+}
+
 /** Applies the tower's aura damage bonus to a rolled amount. */
 export function withBonus(amount: number, damagePct: number): number {
   return amount + idiv(amount * damagePct, 100);

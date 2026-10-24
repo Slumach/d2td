@@ -3,7 +3,7 @@
 // target. Shots with no target of their own fly past: a volley shreds a crowd, not a boss.
 // Pierce on the tower's items lets a bolt that hit fly on in a straight line.
 
-import { canHurt, findTarget, strike, withBonus } from '../combat.ts';
+import { actorGear, canHurt, crushingBlow, findTarget, strike, withBonus } from '../combat.ts';
 import { flyOn, homeToward, pierceOn, spawnMissile, targetOf } from '../missiles.ts';
 import { rollInt } from '../rng.ts';
 import type { Element, Monster } from '../state.ts';
@@ -81,8 +81,11 @@ export const projectile: ArchetypeModule<ProjectileDef> = {
       const range = skill.levels[missile.level]!;
       // A bow skill's arrow: the weapon at its share with the skill's percent, then the skill's own damage
       const weapon = skill.weapon ? idiv(rollInt(sim.state.rng, skill.weapon.min, skill.weapon.max) * skill.weaponPct, 100) : 0;
-      const amount = withBonus(weapon, range.damagePct) + rollInt(sim.state.rng, range.min, range.max);
-      strike(sim, m, withBonus(amount, missile.damagePct), skill.damageType as Element, skill.filter, skill, missile.level, missile);
+      const amount = withBonus(withBonus(weapon, range.damagePct) + rollInt(sim.state.rng, range.min, range.max), missile.damagePct);
+      const hpBefore = m.hp;
+      strike(sim, m, amount, skill.damageType as Element, skill.filter, skill, missile.level, missile);
+      // An arrow is a ranged weapon attack: the bow's crushing blow rides on it, halved
+      if (skill.weapon) crushingBlow(sim, m, actorGear(sim), hpBefore, amount, true);
     };
     // A bolt that pierced flies on in a straight line
     if (missile.targetId === 0) return flyOn(sim, missile, skill.missileSpeed, hit);

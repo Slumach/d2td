@@ -123,11 +123,11 @@ describe('the item stats that act on monsters', () => {
     const tower = placeTower(sim, 6, 4, 'sacrifice');
     wear(tower, { gloves: item('thl', [{ stat: 'item_crushingblow', value: 100 }]) });
     // Stone Skin on Normal: 50% physical resistance, so crushing blow takes an eighth
-    const m = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000, mods: ['stoneSkin'] });
+    const m = addMonster(sim, 'zombie1', BESIDE, { hp: 100_000, mods: ['stoneSkin'] });
     freeze(m);
     step(sim, []);
-    expect(m.hp).toBeLessThanOrEqual(875_000);
-    expect(m.hp).toBeGreaterThan(800_000);
+    expect(m.hp).toBeLessThanOrEqual(87_500);
+    expect(m.hp).toBeGreaterThan(80_000);
 
     const lost = (stats: StatRoll[]) => {
       const s2 = testSim();

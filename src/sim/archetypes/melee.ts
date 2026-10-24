@@ -2,7 +2,7 @@
 // connect). Weapon damage comes from weapons.txt, the skill adds a damage percent, extra
 // swings (Zeal) and elemental damage as a percent of the weapon roll (Vengeance).
 
-import { bleed, canHurt, damageAgainst, dealDamage, dealRaw, effectiveResist, findTarget, poison, withBonus, within } from '../combat.ts';
+import { bleed, canHurt, crushingBlow, damageAgainst, dealDamage, findTarget, poison, withBonus, within } from '../combat.ts';
 import { idiv } from '../fixed.ts';
 import { rollInt } from '../rng.ts';
 import type { TowerGear } from '../items/gear.ts';
@@ -86,8 +86,9 @@ export const melee: ArchetypeModule<MeleeDef> = {
       const versus = gear ? (def.demon ? gear.demonDamagePct : 0) + (def.undead ? gear.undeadDamagePct : 0) : 0;
       const deadly = gear && gear.deadlyStrikePct > 0 && rollInt(sim.state.rng, 0, 99) < gear.deadlyStrikePct ? 2 : 1;
       const hpBefore = target.hp;
-      dealDamage(sim, target, withBonus(roll, damagePct + buff.damagePct + versus) * deadly, physical, ALL);
-      if (gear) onHit(sim, tower, target, gear, hpBefore);
+      const hit = withBonus(roll, damagePct + buff.damagePct + versus) * deadly;
+      dealDamage(sim, target, hit, physical, ALL);
+      if (gear) onHit(sim, tower, target, gear, hpBefore, hit);
       for (const e of elements) {
         if (e === 'phys') continue;
         dealDamage(sim, target, withBonus(idiv(roll * elementalPct[e]!, 100), buff.damagePct), e, ALL);
@@ -101,12 +102,11 @@ export const melee: ArchetypeModule<MeleeDef> = {
 };
 
 /**
- * A melee tower's gear on a hit: its added elemental damage, then crushing blow (a quarter
- * of the monster's life before the hit, an eighth for uniques and bosses, less its physical
- * resistance, nothing on a physical immune), open wounds and freeze, and its chance to cast
+ * A melee tower's gear on a hit: its added elemental damage, then crushing blow (combat.ts
+ * crushingBlow, against the swing's physical hit), open wounds and freeze, and its chance to cast
  * skills (slow and stun ride on every tower's hit, combat.ts). Bosses are never frozen.
  */
-function onHit(sim: Sim, tower: Tower, target: Monster, gear: TowerGear, hpBefore: number): void {
+function onHit(sim: Sim, tower: Tower, target: Monster, gear: TowerGear, hpBefore: number, hit: number): void {
   for (const e of ELEMENTS) {
     const add = gear.adds[e];
     if (e === 'phys' || !add || target.hp <= 0) continue;
@@ -118,11 +118,7 @@ function onHit(sim: Sim, tower: Tower, target: Monster, gear: TowerGear, hpBefor
   // Chance to cast on striking rolls whether or not the blow killed
   for (const c of gear.castOnHit) if (rollInt(sim.state.rng, 0, 99) < c.chancePct) castItemSkill(sim, tower, c.skill, c.level);
   if (target.hp <= 0) return;
-  if (gear.crushingBlowPct > 0 && rollInt(sim.state.rng, 0, 99) < gear.crushingBlowPct) {
-    const resist = effectiveResist(sim, target, 'phys');
-    const share = target.rank === 'unique' || target.rank === 'boss' ? 8 : 4;
-    if (resist < 100) dealRaw(sim, target, idiv(idiv(hpBefore, share) * (100 - resist), 100));
-  }
+  crushingBlow(sim, target, gear, hpBefore, hit, false);
   if (target.hp <= 0) return;
   if (gear.openWoundsPct > 0 && rollInt(sim.state.rng, 0, 99) < gear.openWoundsPct) bleed(sim, target, openWoundsDamage(gear.openWoundsLevel), OPEN_WOUNDS_TICKS);
   if (gear.freezeTicks > 0 && target.rank !== 'boss') target.freezeTicks = Math.max(target.freezeTicks, gear.freezeTicks);

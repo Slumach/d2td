@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { activeSkill } from '../auras.ts';
+import { CRUSHING_BLOW_CAP } from '../combat.ts';
 import { baseSkillId } from '../data.ts';
 import { attackInterval, step } from '../sim.ts';
 import type { Tower } from '../state.ts';
@@ -90,10 +91,27 @@ describe('gear on towers', () => {
     const sim = testSim();
     const tower = placeTower(sim, 6, 4, 'sacrifice');
     wear(tower, { gloves: item('thl', [{ stat: 'item_crushingblow', value: 100 }]) });
-    const m = addMonster(sim, 'zombie1', BESIDE, { hp: 1_000_000 });
+    const m = addMonster(sim, 'zombie1', BESIDE, { hp: 100_000 });
     freeze(m);
     step(sim, []);
-    expect(m.hp).toBeLessThanOrEqual(750_000);
+    expect(m.hp).toBeLessThanOrEqual(75_000);
+  });
+
+  it("crushes an eighth of a champion's life, and never more than 25 times the hit", () => {
+    const lost = (rank: 'normal' | 'champion', hp: number, crush: number) => {
+      const sim = testSim();
+      const tower = placeTower(sim, 6, 4, 'sacrifice');
+      wear(tower, { gloves: item('thl', [{ stat: 'item_crushingblow', value: crush }]) });
+      const m = addMonster(sim, 'zombie1', BESIDE, { hp, rank });
+      freeze(m);
+      step(sim, []);
+      return hp - m.hp;
+    };
+    const hit = lost('normal', 100_000, 0);
+    expect(lost('champion', 100_000, 100) - hit).toBe(12_500);
+    // A life whose quarter is far past the cap: the blow is 25 times the hit
+    expect(lost('normal', 1_000_000_000, 100)).toBeLessThanOrEqual(hit * (CRUSHING_BLOW_CAP + 1));
+    expect(lost('normal', 1_000_000_000, 100)).toBeGreaterThan(hit * (CRUSHING_BLOW_CAP - 5));
   });
 
   it('adds elemental damage to a melee hit', () => {

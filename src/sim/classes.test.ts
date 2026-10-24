@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { DESIGN } from '../data/design.ts';
 import { hasTables, loadTables } from '../../tools/lib/load-tables.ts';
 import type { DebuffDef } from './archetypes/types.ts';
-import { buildGameData, type GameData } from './data.ts';
+import { buildGameData, MAX_TOWER_LEVEL, type GameData } from './data.ts';
+import { isAura, standardDps } from './dps.ts';
+import { TICKS_PER_SECOND } from './fixed.ts';
 import { createSim, step } from './sim.ts';
 import { addMonster, freeze, placeTower, ticks } from './testkit.ts';
 
@@ -11,6 +13,18 @@ const BESIDE = 3000;
 let cached: GameData | undefined;
 const real = () => (cached ??= buildGameData(loadTables(), DESIGN, 30));
 const sim = () => createSim(real(), 1);
+
+/** The lowest and highest level-5 standard DPS of every other measured attack skill at a tier. */
+function band(tier: number, except: string): [number, number] {
+  const data = real();
+  const top = MAX_TOWER_LEVEL - 1;
+  const values = Object.values(data.classes)
+    .flatMap((c) => Object.values(c.lines).flatMap((l) => l.tiers[tier - 1] ?? []))
+    .filter((id) => id !== except && !isAura(data.skills[id]!))
+    .map((id) => standardDps(data.skills[id]!, top))
+    .filter((v) => v > 0);
+  return [Math.min(...values), Math.max(...values)];
+}
 
 // The four later classes have no fixture rows: they are tested on the real tables
 describe.skipIf(!hasTables())('the Barbarian and the Assassin (real tables)', () => {
@@ -74,5 +88,58 @@ describe.skipIf(!hasTables())('the Barbarian and the Assassin (real tables)', ()
     expect(tower.charge).toBeGreaterThanOrEqual(3);
     expect(real().skills['phoenix-strike']!.charges).toEqual(['phoenix-meteor', 'phoenix-lightning', 'phoenix-ice']);
     expect(m.hp).toBeLessThan(100_000_000);
+  });
+});
+
+describe.skipIf(!hasTables())('the Amazon and the Druid (real tables)', () => {
+  it('the Javelin line climbs as D2 does: Poison Javelin, Plague Javelin, Lightning Fury', () => {
+    expect(real().classes['amazon']!.lines['javelin']!.tiers).toEqual([['poison-javelin'], ['plague-javelin'], ['lightning-fury']]);
+    const fury = standardDps(real().skills['lightning-fury']!, MAX_TOWER_LEVEL - 1);
+    const [lo, hi] = band(3, 'lightning-fury');
+    expect(fury).toBeGreaterThanOrEqual(lo);
+    expect(fury).toBeLessThanOrEqual(hi);
+  });
+
+  it('a poison skill measures one dose over its length, since a new dose replaces the old', () => {
+    const javelin = real().skills['poison-javelin']!;
+    const top = MAX_TOWER_LEVEL - 1;
+    const l = (javelin as { levels: { min: number; max: number }[] }).levels[top]!;
+    expect(standardDps(javelin, top)).toBe(Math.trunc(((l.min + l.max) >> 1) * 1000 / javelin.poisonTicks[top]!));
+  });
+
+  it("Firestorm's flames burn every tick they touch, and a level 5 T1 Firestorm sits in the T1 band", () => {
+    const firestorm = real().skills['firestorm']!;
+    expect(firestorm.archetype).toBe('zone');
+    const top = MAX_TOWER_LEVEL - 1;
+    const dps = standardDps(firestorm, top);
+    const [lo, hi] = band(1, 'firestorm');
+    expect(dps).toBeGreaterThanOrEqual(lo);
+    expect(dps).toBeLessThanOrEqual(hi);
+    // In the sim: a frozen target in the flames loses about that much a second
+    const s = sim();
+    placeTower(s, 6, 5, 'firestorm', { level: MAX_TOWER_LEVEL });
+    const m = addMonster(s, 'zombie1', BESIDE, { hp: 100_000_000 });
+    freeze(m);
+    ticks(s, 40);
+    const before = m.hp;
+    const seconds = 20;
+    ticks(s, seconds * TICKS_PER_SECOND);
+    const measured = (before - m.hp) / seconds;
+    const expected = (dps * TICKS_PER_SECOND) / 1000;
+    expect(measured).toBeGreaterThan(expected * 0.8);
+    expect(measured).toBeLessThan(expected * 1.2);
+  });
+
+  it("a bow's crushing blow rides on its arrows, halved for a ranged attack", () => {
+    const firstHit = (crush: number) => {
+      const s = sim();
+      const bow = placeTower(s, 6, 5, 'magic-arrow');
+      if (crush) bow.gear = { gloves: { uid: 'g', code: 'thl', quality: 'magic', ilvl: 30, sockets: 0, socketed: [], stats: [{ stat: 'item_crushingblow', value: crush }] } };
+      const m = addMonster(s, 'zombie1', BESIDE, { hp: 100_000 });
+      freeze(m);
+      for (let i = 0; i < 100 && m.hp === 100_000; i++) step(s, []);
+      return 100_000 - m.hp;
+    };
+    expect(firstHit(100) - firstHit(0)).toBe(12_500);
   });
 });
