@@ -128,7 +128,7 @@
     "plague-javelin": { "fly": "plaguejavelin", "impact": ["plaguejavcloud"] },
     "battle-cry": { "ring": "battlecry" },
     "war-cry": { "ring": "warcry", "castOverlay": "warcry" },
-    "firestorm": { "fly": "firestorm", "castOverlay": "druid_fire_cast_1" },
+    "firestorm": { "zone": "firestorm", "castOverlay": "druid_fire_cast_1" },
     "fissure": { "zone": "erruption crack 1", "castOverlay": "druid_fire_cast_2" },
     "volcano": { "zone": "volcano", "castOverlay": "druid_fire_cast_2" },
     "arctic-blast": { "fly": "arcticblast1", "castOverlay": "arctic_blast_cast" },

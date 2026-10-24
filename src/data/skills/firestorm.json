@@ -1,7 +1,7 @@
 {
   "id": "firestorm",
   "skill": "Firestorm",
-  "archetype": "projectile",
+  "archetype": "zone",
   "damageType": "fire",
   "skillLevels": [
     1,
@@ -12,7 +12,11 @@
   ],
   "rangeTenths": 40,
   "rateTicks": 20,
-  "projectile": {
-    "countCalc": "calc1"
+  "zone": {
+    "missile": "firestorm",
+    "perFrame": true,
+    "countCalc": "calc1",
+    "radiusTenths": 10,
+    "tickTicks": 1
   }
 }
