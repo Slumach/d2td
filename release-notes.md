@@ -1,3 +1,10 @@
+0.3.16
+
+- The Amazon's Javelin line climbs in D2's order: Poison Javelin, then Plague Javelin, then Lightning Fury at the top. Lightning Fury is much weaker than it was at T2 and sits with the other top-tier towers. The Fishyzon evolves from a T2 Plague Javelin; the Javazon needs a T3 Lightning Fury.
+- Poison towers are measured by the damage they really deal (a dose replaces the last one instead of stacking). Poison Nova gains a little to keep its place.
+- Firestorm works: its flames lie under the target and burn for every moment they touch it, as in D2. A level 5 Firestorm deals about 70 damage a second instead of 2. Fissure starts a level higher to stay ahead of it.
+- Crushing blow follows D2's rules: an eighth of a champion's life (a quarter for normal monsters), and it now works on bows at half strength. It never takes more than 25 times the hit's own damage, so it no longer carries a Barbarian through endless on its own.
+
 0.3.15
 
 - Decoy and Shadow Master show: they are drawn as the Amazon and the Assassin, as in D2. Lightning and Death Sentry traps animate instead of standing frozen.
