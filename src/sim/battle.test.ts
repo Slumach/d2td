@@ -358,6 +358,16 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     for (const r of races(11)) expect(Object.keys(real().classes)).toContain(r);
   });
 
+  it('the long game plays waves 22 to 30 from Nightmare, Diablo on 26 and Baal on 30', () => {
+    const m = createMatch(real(), 2, 'battle', 2, { teamSize: 1, races: ['paladin', 'paladin'], bots: [], options: { pick: 'all', sends: 1, mirror: false, easy: false, long: true, champions: true } });
+    const waves = m.zones[0]!.data.waves;
+    expect(waves).toHaveLength(30);
+    expect(waves.slice(21).every((w) => w.difficulty === 1)).toBe(true);
+    const bosses = waves.flatMap((w, i) => (w.kind === 'boss' ? [`${i + 1}:${w.groups.at(-1)!.monster.split('@')[0]}`] : []));
+    expect(bosses.slice(-2)).toEqual(['26:diablo', '30:baal']);
+    expect(createMatch(real(), 2, 'battle', 2, { teamSize: 1 }).zones[0]!.data.waves).toHaveLength(21);
+  });
+
   it('the game setup: mirror and random picks, easy waves and king, multiplied sends, no champions', () => {
     const base = { teamSize: 2, races: ['paladin', 'druid', 'sorceress', 'amazon'], bots: [] };
     const mirror = createMatch(real(), 2, 'battle', 4, { ...base, options: { pick: 'all', sends: 1, mirror: true, easy: false, long: false, champions: true } });

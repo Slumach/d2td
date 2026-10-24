@@ -187,7 +187,7 @@
     "evolveCost": 20000,
     "legendCost": 60000,
     "bountyPerLevel": 3,
-    "income": [250, 300, 360, 430, 520, 620, 750, 900, 1100, 1300, 1600, 1900, 2300, 2800, 3300, 4000, 4800, 5800, 7000, 8400, 10000],
+    "income": [250, 300, 360, 430, 520, 620, 750, 900, 1100, 1300, 1600, 1900, 2300, 2800, 3300, 4000, 4800, 5800, 7000, 8400, 10000, 11500, 13000, 15000, 17000, 19500, 22000, 25000, 28000, 32000],
     "sendIncomePerShard": 15,
     "worker": { "cost": 250, "costPerWorker": 25, "shardsPerSecond": 100, "max": 12 },
     "fighter": { "lifePct": 400, "tierPct": [100, 220, 500, 1000, 2000], "engageTenths": 12, "kingHoldTenths": 25 },
@@ -234,6 +234,17 @@
       { "monster": "imp1", "kind": "swarm", "act": 5, "difficulty": 0, "level": 44, "hpPct": 1504, "area": "Frigid Highlands" },
       { "monster": "deathmauler1", "kind": "tank", "act": 5, "difficulty": 0, "level": 46, "hpPct": 1323, "champions": true, "area": "Crystalline Passage" },
       { "boss": "baal", "act": 5, "difficulty": 0, "level": 50, "hpPct": 1323, "bossHpPct": 9, "area": "Throne of Destruction" }
+    ],
+    "longWaves": [
+      { "monster": "zombie1", "kind": "tank", "act": 1, "difficulty": 1, "level": 52, "hpPct": 450, "area": "Blood Moor" },
+      { "monster": "sandraider1", "kind": "swarm", "act": 2, "difficulty": 1, "level": 54, "hpPct": 500, "area": "Rocky Waste" },
+      { "monster": "fetish3", "kind": "swarm", "act": 3, "difficulty": 1, "level": 56, "hpPct": 560, "area": "Flayer Jungle" },
+      { "monster": "regurgitator1", "kind": "tank", "act": 4, "difficulty": 1, "level": 58, "hpPct": 620, "champions": true, "area": "Outer Steppes" },
+      { "boss": "diablo", "act": 4, "difficulty": 1, "level": 60, "hpPct": 700, "bossHpPct": 8, "area": "Chaos Sanctuary" },
+      { "monster": "minion1", "kind": "swarm", "act": 5, "difficulty": 1, "level": 62, "hpPct": 760, "area": "Bloody Foothills" },
+      { "monster": "deathmauler1", "kind": "tank", "act": 5, "difficulty": 1, "level": 64, "hpPct": 840, "champions": true, "area": "Crystalline Passage" },
+      { "monster": "imp1", "kind": "swarm", "act": 5, "difficulty": 1, "level": 66, "hpPct": 920, "area": "Frigid Highlands" },
+      { "boss": "baal", "act": 5, "difficulty": 1, "level": 70, "hpPct": 1000, "bossHpPct": 8, "area": "Throne of Destruction" }
     ],
     "sends": [
       { "id": "cowking", "name": "The Cow King", "kind": "superunique", "monster": "thecowking", "cost": 2, "costPctPerWave": 10, "fromWave": 1, "hpPct": 30 },

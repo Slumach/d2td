@@ -9,6 +9,7 @@ import Phaser from 'phaser';
 import { LOBBY_MODES, type LobbyPlayer } from '../net/protocol.ts';
 import { stageName } from '../sim/data.ts';
 import type { Checkpoint } from '../sim/checkpoint.ts';
+import { DEFAULT_OPTIONS, type BattleOptions } from '../sim/battle.ts';
 import { battleSetupFor, MAX_LOBBY, MAX_TEAM_PLAYERS, type MatchMode } from '../sim/match.ts';
 import { RACES, type BattleChoice } from './MenuScene.ts';
 import { loadCheckpoint } from '../render/saves.ts';
@@ -55,6 +56,7 @@ export class LobbyScene extends Phaser.Scene {
   private upnp: UpnpStatus | 'trying' = 'trying';
   /** Eternal Conflict: players a team (the host's), and the choices the host came in with from the Eternal Conflict page. */
   private teamSize = 1;
+  private options: BattleOptions = DEFAULT_OPTIONS;
   private preset: BattleChoice | undefined;
 
   constructor() {
@@ -104,12 +106,13 @@ export class LobbyScene extends Phaser.Scene {
         if (p && m.host) {
           this.preset = undefined;
           this.session.send({ t: 'mode', mode: p.mode });
-          this.session.send({ t: 'battle', teamSize: p.teamSize, race: p.race });
+          this.session.send({ t: 'battle', teamSize: p.teamSize, race: p.race, options: p.options });
         }
       } else if (m.t === 'lobby') {
         this.players = m.players;
         this.mode = m.mode;
         this.teamSize = m.teamSize ?? this.teamSize;
+        this.options = m.options ?? this.options;
       } else if (m.t === 'reject') {
         this.message = m.reason;
       } else if (m.t === 'start') {
@@ -229,7 +232,7 @@ export class LobbyScene extends Phaser.Scene {
     }
 
     const humans = this.players.map((p) => ({ race: p.race ?? 'random', team: p.team ?? 0 }));
-    const seats = battle ? battleSetupFor(this.mode as 'battle' | 'coop', this.teamSize, humans) : undefined;
+    const seats = battle ? battleSetupFor(this.mode as 'battle' | 'coop', this.teamSize, humans, this.options) : undefined;
     if (this.isHost && battle && !seats) {
       add(this.add.text(LEFT, y + 6, `${this.players.length} players do not fit ${this.mode === 'battle' ? 'two teams' : 'one team'} of ${this.teamSize}: raise the team size.`, TEXT));
     } else if (this.isHost && battle) {
@@ -269,6 +272,11 @@ export class LobbyScene extends Phaser.Scene {
       add(this.add.text(LEFT, y, `${this.teamSize}`, TEXT));
       y += 34;
     }
+    // The game setup, as the host set it on the Eternal Conflict page
+    const o = this.options;
+    const flags = [o.pick === 'random' ? 'random races' : 'all pick', `X${o.sends} sends`, o.mirror ? 'mirror mode' : '', o.easy ? 'easy mode' : '', o.long ? 'long game (waves 22 to 30)' : '', !o.champions ? 'no champions' : ''].filter(Boolean);
+    add(this.add.text(LEFT, y, `Game setup: ${flags.join(', ')}${this.isHost ? '   (set on the Eternal Conflict page before hosting)' : ''}`, MUTED));
+    y += 34;
     const race = mine?.race ?? 'random';
     const all = ['random', ...RACES];
     this.parts.push(...button(this, LEFT, y, { label: `Your race: ${raceName(race)}`, onClick: () => this.session.send({ t: 'battle', race: all[(all.indexOf(race) + 1) % all.length]! }), width: 340 }));

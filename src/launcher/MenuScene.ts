@@ -20,7 +20,8 @@ import type { Tables } from '../sim/tables.ts';
 import { emptyProfile, loadProfile, saveProfile, type Profile } from './profile.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
 import type { LauncherApi, LauncherState, UpdateCheck, UpdateEvent } from './api.ts';
-import { burningLogo, frontendManifest, menuMusic, optionsPanel, preloadFrontend, smoothHd, stoneButton } from './frontend.ts';
+import { burningLogo, checkbox, frontendManifest, menuMusic, optionsPanel, preloadFrontend, smoothHd, stoneButton } from './frontend.ts';
+import { DEFAULT_OPTIONS, type BattleOptions } from '../sim/battle.ts';
 import { shortPath } from './paths.ts';
 import { TextField } from './TextField.ts';
 import { LAUNCHER_KEY } from './SetupScene.ts';
@@ -42,6 +43,8 @@ export interface BattleChoice {
   teamSize: number;
   /** A class id, or 'random'. */
   race: string;
+  /** The game setup screen's switches. */
+  options: BattleOptions;
 }
 
 /** The classes a battle player may pick, in the game's order. */
@@ -71,7 +74,7 @@ export class MenuScene extends Phaser.Scene {
   private profile: Profile | undefined;
   private items: ItemData | undefined;
   /** Eternal Conflict's choices on its page. */
-  private battle: BattleChoice = { mode: 'battle', teamSize: 1, race: 'random' };
+  private battle: BattleChoice = { mode: 'battle', teamSize: 1, race: 'random', options: { ...DEFAULT_OPTIONS } };
   private hintTip: Tooltip | undefined;
 
   constructor() {
@@ -156,7 +159,7 @@ export class MenuScene extends Phaser.Scene {
     this.clear();
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
     const d2 = frontendManifest(this) !== undefined;
-    for (const o of this.logo) (o as unknown as Phaser.GameObjects.Components.Visible).setVisible(this.page !== 'options');
+    for (const o of this.logo) (o as unknown as Phaser.GameObjects.Components.Visible).setVisible(this.page !== 'options' && this.page !== 'battle');
     add(this.add.text(16, GAME_HEIGHT - 28, `v${this.state.version}   non-commercial fan project, not affiliated with Blizzard`, { ...MUTED, fontSize: '14px' }).setDepth(3100));
 
     if (this.page === 'options') return this.drawOptions(d2);
@@ -191,35 +194,87 @@ export class MenuScene extends Phaser.Scene {
   }
 
   /**
-   * Eternal Conflict: the profile's battle record, the choices (a battle or co-op, players a
-   * team, race), and Play against bots, Host and Join. Bots fill every seat no player takes.
+   * Eternal Conflict's game setup screen, as Legion's: D2R's options panel with the profile's
+   * record, the mode (a conflict or co-op), players a team and your race, then the switches
+   * in three columns (random races or all pick, mirror mode; the send multiplier; easy mode,
+   * the long game, no champions), each a D2R checkbox, and Start against bots, Host or Join.
    */
   private drawBattle(d2: boolean): void {
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
     const b = this.battle;
+    const o = b.options;
     const r = this.profile?.battle;
-    const top = BUTTONS_TOP - 70;
-    add(this.add.rectangle(CX, top + 30, 620, 130, 0x000000, 0.75).setStrokeStyle(1, 0x7a6440).setDepth(3000));
-    add(this.add.text(CX, top - 10, 'Eternal Conflict', { ...TEXT, fontSize: '28px', color: '#c7b377' }).setOrigin(0.5).setDepth(3001));
-    const record = r ? `Eternal Conflict record: won ${r.wins}, lost ${r.losses}${r.draws ? `, drawn ${r.draws}` : ''}; best wave ${r.bestWave || 'none yet'}` : 'Reading the profile...';
-    add(this.add.text(CX, top + 28, record, TEXT).setOrigin(0.5).setDepth(3001));
-    const about = b.mode === 'battle' ? 'Heaven against Hell, Legion style: first king to fall loses' : 'One team against the waves, sends on a timer';
-    add(this.add.text(CX, top + 60, about, MUTED).setOrigin(0.5).setDepth(3001));
-    const size = `${b.teamSize}v${b.teamSize}`;
+    const height = 860;
+    const panel = d2 ? optionsPanel(this, CX, GAME_HEIGHT / 2 - 20, height, 'optionsBg') : undefined;
+    if (panel) add(panel);
+    const w = panel ? panel.displayWidth : 900;
+    const top = GAME_HEIGHT / 2 - 20 - height / 2;
+    const left = CX - w / 2 + w * 0.1;
+    const inner = w * 0.8;
+    const set = (patch: Partial<BattleChoice>) => {
+      this.battle = { ...this.battle, ...patch };
+      this.draw();
+    };
+    const setOpt = (patch: Partial<BattleOptions>) => set({ options: { ...o, ...patch } });
+    const med = (x: number, y: number, label: string, onClick: () => void, width: number, chosen = false) => {
+      if (d2) {
+        const parts = stoneButton(this, x + width / 2, y + 16, label, onClick, { size: 'med', width, fontSize: 15 });
+        if (!chosen) for (const p of parts) (p as Phaser.GameObjects.Image).setAlpha?.(0.6);
+        this.parts.push(...parts);
+      } else this.parts.push(...button(this, x, y, { label, onClick, width, colour: chosen ? '#6a3020' : '#3a2c1c' }));
+    };
+
+    let y = top + 54;
+    add(this.add.text(CX, y, 'Eternal Conflict', { ...TEXT, fontSize: '34px', color: '#c7b377' }).setOrigin(0.5).setDepth(3101));
+    y += 36;
+    add(this.add.text(CX, y, 'Heaven against Hell, Legion style: game setup', MUTED).setOrigin(0.5).setDepth(3101));
+    y += 28;
+    const record = r ? `Your record: won ${r.wins}, lost ${r.losses}${r.draws ? `, drawn ${r.draws}` : ''}; best wave ${r.bestWave || 'none yet'}` : 'Reading the profile...';
+    add(this.add.text(CX, y, record, { ...MUTED, fontSize: '15px' }).setOrigin(0.5).setDepth(3101));
+    y += 40;
+
+    // The match: mode, team size, your race
+    const col = inner / 3;
+    add(this.add.text(left, y, 'Mode', MUTED).setDepth(3101));
+    add(this.add.text(left + col, y, 'Players a team', MUTED).setDepth(3101));
+    add(this.add.text(left + 2 * col, y, 'Your race', MUTED).setDepth(3101));
+    y += 28;
+    med(left, y, 'Conflict', () => set({ mode: 'battle' }), 118, b.mode === 'battle');
+    med(left + 124, y, 'Co-op', () => set({ mode: 'coop' }), 110, b.mode === 'coop');
+    for (let n = 1; n <= 4; n++) med(left + col + (n - 1) * 58, y, `${n}`, () => set({ teamSize: n }), 52, n === b.teamSize);
+    const all = ['random', ...RACES];
+    med(left + 2 * col, y, RACE_NAMES[b.race] ?? b.race, () => set({ race: all[(all.indexOf(b.race) + 1) % all.length]! }), 200, true);
+    y += 60;
+
+    // The switches, Legion's three columns
+    const rows: [number, number, string, boolean, () => void, string][] = [
+      [0, 0, 'Random races', o.pick === 'random', () => setOpt({ pick: 'random' }), 'Every race rolled from the seed'],
+      [0, 1, 'All pick', o.pick === 'all', () => setOpt({ pick: 'all' }), 'Picked races are kept'],
+      [0, 2, 'Mirror mode', o.mirror, () => setOpt({ mirror: !o.mirror }), 'Both teams play the same races'],
+      [1, 0, 'X1 Normal mode', o.sends === 1, () => setOpt({ sends: 1 }), 'Sends are not multiplied'],
+      [1, 1, 'X2 Double trouble', o.sends === 2, () => setOpt({ sends: 2 }), 'Sends walk twice over'],
+      [1, 2, 'X3 Triple threat', o.sends === 3, () => setOpt({ sends: 3 }), 'Sends walk three times over'],
+      [1, 3, 'X4 Quadruple chaos', o.sends === 4, () => setOpt({ sends: 4 }), 'Sends walk four times over'],
+      [2, 0, 'Easy mode', o.easy, () => setOpt({ easy: !o.easy }), 'Weaker waves, a stronger king'],
+      [2, 1, 'Long game', o.long, () => setOpt({ long: !o.long }), 'Waves 22 to 30 are played too'],
+      [2, 2, 'No champions', !o.champions, () => setOpt({ champions: !o.champions }), 'No champion packs walk'],
+    ];
+    for (const [c, row, label, on, toggle, hint] of rows) {
+      this.parts.push(...checkbox(this, left + c * col, y + row * 62, label, on, toggle, { sub: hint, fontSize: 17 }));
+    }
+    y += 4 * 62 + 10;
+
     const items: [string, () => void][] = [
-      [b.mode === 'battle' ? `Mode: Eternal Conflict ${size}` : `Mode: Co-op, ${b.teamSize} ${b.teamSize === 1 ? 'player' : 'players'}`, () => ((this.battle = { ...b, mode: b.mode === 'battle' ? 'coop' : 'battle' }), this.draw())],
-      ['Players a team: ' + b.teamSize, () => ((this.battle = { ...b, teamSize: (b.teamSize % 4) + 1 }), this.draw())],
-      [`Race: ${RACE_NAMES[b.race] ?? b.race}`, () => ((this.battle = { ...b, race: ['random', ...RACES][(['random', ...RACES].indexOf(b.race) + 1) % (RACES.length + 1)]! }), this.draw())],
-      ['Play against bots', () => this.startBattle()],
+      ['Start game', () => this.startBattle()],
       ['Host online', () => this.scene.start('Lobby', { role: 'host', battle: this.battle })],
       ['Join online', () => this.scene.start('Lobby', { role: 'join' })],
       ['Back', () => this.go('main')],
     ];
-    // Seven choices: the medium stones, which stack without overlapping
+    const bw = 200;
     items.forEach(([label, onClick], i) => {
-      const y = BUTTONS_TOP + 75 + i * 60;
-      if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { size: 'med', width: 350, fontSize: 18 }));
-      else this.parts.push(...button(this, CX - 190, y - 18, { label, onClick, width: 380 }));
+      const x = CX + (i - (items.length - 1) / 2) * (bw + 14);
+      if (d2) this.parts.push(...stoneButton(this, x, top + height - 70, label, onClick, { size: 'med', width: bw, fontSize: 16 }));
+      else this.parts.push(...button(this, x - bw / 2, y, { label, onClick, width: bw }));
     });
   }
 
@@ -230,7 +285,7 @@ export class MenuScene extends Phaser.Scene {
     const slots = b.teamSize * (b.mode === 'battle' ? 2 : 1);
     const races = Array.from({ length: slots }, (_, p) => (p === 0 && b.race !== 'random' ? b.race : 'random'));
     const bots = Array.from({ length: slots - 1 }, (_, i) => i + 1);
-    this.scene.start('Game', { battle: { mode: b.mode, setup: { teamSize: b.teamSize, races, bots } } } satisfies BattleStart);
+    this.scene.start('Game', { battle: { mode: b.mode, setup: { teamSize: b.teamSize, races, bots, options: { ...b.options } } } } satisfies BattleStart);
   }
 
   /**

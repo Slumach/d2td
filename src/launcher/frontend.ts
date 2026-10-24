@@ -148,6 +148,62 @@ export function stoneButton(scene: Phaser.Scene, x: number, y: number, label: st
   return [img, text];
 }
 
+export interface CheckboxOptions {
+  enabled?: boolean;
+  /** A line in italics' place under the label, as Legion's setup screen explains each option. */
+  sub?: string;
+  fontSize?: number;
+}
+
+/**
+ * D2R's checkbox (the loot filter's: unchecked, hover, pressed, disabled, then the same four
+ * checked) with an Exocet label to its right; the box and the label both toggle it. Without
+ * the art, a drawn box stands in.
+ */
+export function checkbox(scene: Phaser.Scene, x: number, y: number, label: string, checked: boolean, onToggle: (on: boolean) => void, opts: CheckboxOptions = {}): Phaser.GameObjects.GameObject[] {
+  const m = frontendManifest(scene);
+  const enabled = opts.enabled ?? true;
+  const size = 32;
+  const out: Phaser.GameObjects.GameObject[] = [];
+  const sheet = m?.checkbox && scene.textures.exists(frontendKey('checkbox')) ? m.checkbox : undefined;
+  const frame = (state: number) => (checked ? 4 : 0) + state;
+  let box: Phaser.GameObjects.Image | Phaser.GameObjects.Graphics;
+  if (sheet) {
+    box = scene.add.image(x + size / 2, y + size / 2, frontendKey('checkbox'), frame(enabled ? 0 : 3)).setDisplaySize(size, size).setDepth(3100);
+    scene.textures.get(frontendKey('checkbox')).setFilter(Phaser.Textures.FilterMode.LINEAR);
+  } else {
+    const g = scene.add.graphics().setDepth(3100);
+    g.lineStyle(2, 0x8c7448, 1).strokeRect(x + 4, y + 4, size - 8, size - 8);
+    if (checked) g.lineStyle(3, 0xe8c060, 1).lineBetween(x + 9, y + 16, x + 14, y + 22).lineBetween(x + 14, y + 22, x + 24, y + 9);
+    box = g;
+  }
+  const text = scene.add.text(x + size + 10, y + size / 2, label, { fontFamily: FONT, fontSize: `${opts.fontSize ?? 18}px`, color: enabled ? '#e4dccb' : '#6e6658' }).setOrigin(0, 0.5).setDepth(3101).setShadow(1, 1, '#000000', 2);
+  out.push(box, text);
+  if (opts.sub) out.push(scene.add.text(x + size + 10, y + size + 2, opts.sub, { fontFamily: FONT, fontSize: '12px', color: '#a09880' }).setOrigin(0, 0).setDepth(3101).setShadow(1, 1, '#000000', 2));
+  if (!enabled) return out;
+  const hit = scene.add.zone(x, y - 2, size + 14 + text.width, size + 4).setOrigin(0).setDepth(3102).setInteractive({ useHandCursor: true });
+  out.push(hit);
+  const img = sheet ? (box as Phaser.GameObjects.Image) : undefined;
+  hit.on('pointerover', () => {
+    img?.setFrame(frame(1));
+    text.setColor('#fff4dc');
+    uiSound(scene, 'hover');
+  });
+  hit.on('pointerout', () => {
+    img?.setFrame(frame(0));
+    text.setColor('#e4dccb');
+  });
+  hit.on('pointerdown', (_p: Phaser.Input.Pointer, _x: number, _y: number, e: Phaser.Types.Input.EventData) => {
+    e.stopPropagation();
+    img?.setFrame(frame(2));
+  });
+  hit.on('pointerup', () => {
+    uiSound(scene, 'click');
+    onToggle(!checked);
+  });
+  return out;
+}
+
 /** The stone modal panel centred at (x, y), scaled to `width`. */
 export function stonePanel(scene: Phaser.Scene, x: number, y: number, width: number, height: number): Phaser.GameObjects.Image | undefined {
   const m = frontendManifest(scene);
