@@ -1,3 +1,12 @@
+0.4.0
+
+- Battle Mode, Legion TD style: two teams, a lane each, running into the team's Worldstone with Tyrael beside it. Harrogath under siege against the Pandemonium Fortress. Pick a race (any class, or random), build its towers beside your lane, and survive 21 waves from the Fallen to Baal. The first Worldstone to fall loses; after wave 21 the one with more life wins.
+- Workers in your back row (D2's hirelings) bring Souls each wave. Souls buy sends from D2's superuniques and champion packs, from the Cow King to the Ancients, and once a match each act boss, onto the enemy lane you choose. Every send raises your gold income for good.
+- Gold buys the Worldstone more life and regeneration and a harder strike for Tyrael, for the whole team.
+- 1v1 to 4v4 against bots from the main menu's Battle Mode page, or online: the host sets the team size, everyone picks a race and a team, and bots fill the empty seats. Co-op plays one team against the waves, sends arriving on a timer.
+- No items in Battle Mode. The profile keeps your wins, losses and best wave.
+- Setup extracts the two battlefields and the hirelings on the first start after the update.
+
 0.3.17
 
 - Fixed: the build menu only offered the Paladin, the Sorceress and the Necromancer. Every class has its tab now: the Amazon, the Barbarian, the Druid and the Assassin too.

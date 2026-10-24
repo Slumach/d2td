@@ -111,6 +111,9 @@ export function botCommands(match: Match, slot: number): Command[] {
   const options = towerOptions(sim, seat, race, mine, lines, recipe);
   options.sort((x, y) => y.score - x.score || x.cost - y.cost);
   const income = (rules.income[wave] ?? 0) + bs.income[seat]!;
+  // Under pressure (two enemies sending at its lane, or the king badly hurt) it buys damage now instead of saving
+  const lane = sim.arcOwners.indexOf(seat);
+  const pressed = new Set(bs.queued.filter((q) => q.lane === lane).map((q) => q.from)).size >= 2 || king.hp * 10 < king.maxHp * 6;
   for (const o of options) {
     if (o.cost <= gold) {
       out.push(o.command);
@@ -119,6 +122,7 @@ export function botCommands(match: Match, slot: number): Command[] {
       break;
     }
     // Worth saving for: within the temper's waves of income, an evolution within four
+    if (pressed) continue;
     if (o.cost <= gold + income * (o.command.type === 'evolve' ? 4 : temper.saveWaves)) break;
   }
 

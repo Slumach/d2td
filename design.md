@@ -716,6 +716,30 @@ Calls made for Stage 3:
 - **D2's sounds** (sounds.json battle, through sounds.txt): a send (the town portal's cast), a leak reaching your Worldstone (the Hellforge's smash), Tyrael's strike (the Paladin's holy bolt), a won match (quest done). A send at your team's lanes is also announced on screen; damage to the Worldstone floats over it in red.
 - **The end** is a D2 stone panel: the result in gold (red for a defeat), the wave, each team's Worldstone, kills, leaks and sends and who played what, and a stone button back to the menu. The match is put on the profile's battle record once.
 
+### Stage 5: balance pass
+
+Every race was evened with balance.json numbers, never a skill: each race's gold percent (battle.races goldPct, on its base income and kill gold), a second percent on top in team games (teamGoldPct), and for one race a damage percent (damagePct, on every hit its towers land). The king and its upgrades were set first, so matches end with a fallen king often enough to matter.
+
+- **The king.** At 150 life with +20 life upgrades at 150% a level, the bots bought their way out of every loss late on (2 of 448 1v1 matches ended with a king falling). Now 120 life, +15 a level at 175%, eight levels (battle.king). With the races evened, kings fall in about 1% of 1v1 matches and 9 to 12% of 2v2 ones; the rest go the distance and the king with more life wins. A race-uneven pairing (before the pass) ended with a fallen king in a quarter of matches, so falls are what a mismatch looks like.
+- **The bot under pressure.** In 2v2 both enemy bots send at the lane that leaks most, and a bot saving for a 10,000-gold tier with two towers lost its lane and its team's king. A bot now stops saving when sends from two enemies are queued at its lane or its king is under 60%. (Any queued send made it never save in 1v1, and the table blew apart: Barbarian 4%, Paladin 84%.)
+- **The Barbarian** could not be lifted with gold: its T1 towers deal a quarter of the other classes' at the same price (Double Swing 18 HP a second at level 5 against Holy Bolt's 83), because its melee is built around worn weapons and Battle Mode has none. At 160% gold it won 41% overall, then 29% to 31% once the other races settled, at 200% to 260% team gold 18% to 21% in 2v2. It takes a damage percent instead: 250% (180% and 220% won about 30%, 270% won 82%).
+- **The levers are knife-edged.** A race's results jump on small steps: the Paladin won 31% at 75% gold and 67% at 80%, 34% at 85% and 58% at 90%; one Necromancer pairing went from 44% to 22% on a 5-point step. The bots are deterministic and their buying turns on thresholds (a tier one wave sooner wins a lane). Tuning used sixteen seeds per pairing from both sides (896 1v1 matches a run); eight seeds disagreed with another eight by up to 17 points on a race.
+- **Final numbers** (balance.json battle.races): gold 88% Paladin, 165% Sorceress, 100% Necromancer, 120% Amazon, 100% Barbarian (damage 250%), 125% Druid, 75% Assassin; team gold on top 127%, 100%, 100%, 105%, 100%, 110%, 90%.
+
+1v1, sixteen seeds, each pairing from both sides (row's win rate against the column):
+
+| Race | Pal | Sor | Nec | Ama | Bar | Dru | Ass | Overall |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Paladin | | 47 | 66 | 63 | 41 | 50 | 47 | 52 |
+| Sorceress | 53 | | 66 | 56 | 56 | 38 | 59 | 55 |
+| Necromancer | 34 | 34 | | 53 | 50 | 59 | 72 | 51 |
+| Amazon | 38 | 44 | 47 | | 34 | 53 | 59 | 46 |
+| Barbarian | 59 | 44 | 50 | 66 | | 66 | 56 | 57 |
+| Druid | 50 | 63 | 41 | 47 | 34 | | 50 | 47 |
+| Assassin | 53 | 41 | 28 | 41 | 44 | 50 | | 43 |
+
+Every race is between 43% and 57% overall. Seven pairings of twenty-one fall outside 40 to 60 (the worst Necromancer against Assassin, 72 to 28): one percent a race cannot fix a pairing in both directions at once. 2v2 (each team one race, eight seeds): Paladin 44, Sorceress 49, Necromancer 53, Amazon 52, Barbarian 54, Druid 45, Assassin 53 overall, its pairings wider (19 to 81) on fewer seeds. Co-op with bots holds the Worldstone in 9 of 14 games (one or two players, seven seeds).
+
 ## Overnight decisions
 
 Calls made without asking, each the option closest to Diablo II's own rules.
@@ -747,6 +771,12 @@ Calls made without asking, each the option closest to Diablo II's own rules.
 - Oct 22 (day): the harness loot sets are built as "three clears at this magic find" by rolling every monster of those waves three times with the magic find, rather than by replaying three bot runs: the drops are the same rolls, the bots do not have to survive the stage to produce them, and nothing is lost to a full inventory.
 - Oct 22 (day): the harness bots treat a second copy of an aura another tower already projects as worth nothing (the field counts the same aura once), and once the alive weight passes 60 they stop saving and buy the best damage they can afford now.
 - Oct 22 (day): the harness's reference bot is MIXED3, the bot that plays every class, since Hell's immunities exist to stop one class; a single-class bot's death from Hell Act 3 on is not a miss.
+- Oct 24 (Battle Mode): a 1v1 against a bot came first, so the economy, sends and the battle bot were built inside Stage 1's commit; Stages 2 to 5 each committed what they added on top (their sections above say what).
+- Oct 24 (Battle Mode): each team's battlefield is one sim on the ring's 42 x 42 grid, its lanes arcs owned by their players, rather than a new map engine: building, gold, kill credit and the renderer's world stayed as they were.
+- Oct 24 (Battle Mode): bots run inside the match step on every client, so a lobby's empty seats cost nothing on the network and cannot desync.
+- Oct 24 (Battle Mode): the mode-level rules a lane needed (act bosses at 40% pace, melee reach 2.5 tiles, a 20% rising build price, battle prices for evolutions and legends) are balance.json battle numbers, not skill changes.
+- Oct 24 (Battle Mode): the Worldstone is drawn as the Throne of Destruction's crystals; the Worldstone Chamber's own spires stand 700 pixels tall and would hide the keep.
+- Oct 24 (Battle Mode): the Barbarian takes a damage percent where every other race takes only gold: gold alone could not lift it (Stage 5).
 
 ## Open questions
 

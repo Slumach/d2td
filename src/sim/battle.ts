@@ -94,8 +94,13 @@ export interface BattleJson {
   king: { hp: number; regenPerWave: number; damagePerWeight: number; upgrades: Record<KingUpgrade, KingUpgradeJson> };
   /** Tyrael strikes a leak in range every rateTicks for hitPct of its life (bossHitPct on bosses), magic, through every resistance. */
   tyrael: { rateTicks: number; rangeTenths: number; hitPct: number; bossHitPct: number };
-  /** Per race (class): percent on its base income and kill gold, the balance lever between races. */
-  races: Record<string, { goldPct: number }>;
+  /**
+   * Per race (class): percent on its base income and kill gold, the balance lever between
+   * races, and a second percent on top in a team game (two or more a side), which plays
+   * differently: two senders can pile onto one lane. damagePct (100 when absent) is on every
+   * hit its towers land, for a class whose towers lean on the items Battle Mode leaves out.
+   */
+  races: Record<string, { goldPct: number; teamGoldPct?: number; damagePct?: number }>;
   waves: BattleWaveJson[];
   sends: SendJson[];
   /** Co-op: the sends that arrive with each wave, by wave, onto lanes in turn. */
@@ -327,7 +332,9 @@ export function payWave(sim: Sim, wave: number): void {
 /** A race's percent on its gold. */
 export function racePct(sim: Sim, seat: number): number {
   const race = sim.state.battle?.races[seat];
-  return race ? (sim.data.battle?.rules.races[race]?.goldPct ?? 100) : 100;
+  const r = race ? sim.data.battle?.rules.races[race] : undefined;
+  if (!r) return 100;
+  return sim.players > 1 ? idiv(r.goldPct * (r.teamGoldPct ?? 100), 100) : r.goldPct;
 }
 
 /** True once a battlefield's wave is over: nothing alive or still to come. */

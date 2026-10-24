@@ -54,6 +54,16 @@ A new version of the game may need a few more files from Diablo II: Resurrected.
 - Drop an item on **Sell** to sell it. Smith's Hammer, put on an item, adds a socket. Right-click Wirt's Leg to open the Secret Cow Level, if you dare.
 - Your items and stash are kept between games, even if you close the game in the middle of one. They are in `%APPDATA%\D2 Tower Defense\profile.json`; copy that file to keep a backup.
 
+### Battle Mode
+
+Two teams race to break each other's Worldstone, Legion TD style. Click **Battle Mode** in the main menu, pick the mode (**Battle**, or **Co-op** against the waves alone), the players a team and your race, then **Play against bots**, **Host online** or **Join online**. Bots take every seat no player fills.
+
+- You play one class, your race, and build only its towers beside your own lane. The match has 21 waves, the same for both teams: 20 seconds to build, then the fight.
+- Whatever walks the whole lane reaches your team's Worldstone and hurts it. Tyrael, beside it, strikes what gets close. The first Worldstone to fall loses; after wave 21 the one with more life wins.
+- **Hire a worker** in the panel on the left: workers bring Souls at the end of every wave. Souls buy **sends**: monsters that join the other team's next wave down the lane you choose, and every send raises your gold income for good.
+- Gold also buys the Worldstone more life, life back each wave, and a harder strike for Tyrael, for the whole team.
+- Drag past the edge of the map to look at the other team. **Tab** shows every player's race, kills, leaks and sends. There are no items in Battle Mode; your wins and losses are kept on the Battle Mode page.
+
 ## Playing together
 
 One person hosts and everyone else joins. Everyone needs the same version of this game and the same version of Diablo II: Resurrected.
@@ -64,7 +74,7 @@ One person hosts and everyone else joins. Everyone needs the same version of thi
 - **Same network**: for people in your home, on the same Wi-Fi or router.
 - **Tailscale**: for friends who are on your Tailscale network.
 
-If there is no Internet code, a friend elsewhere can still join if you forward TCP port **47310** to your PC in your router's settings, or if you both use Tailscale (free for small groups). Pick **Team** or **Free for all**, wait for everyone to show up in the list, then click **Start**.
+If there is no Internet code, a friend elsewhere can still join if you forward TCP port **47310** to your PC in your router's settings, or if you both use Tailscale (free for small groups). Pick **Team**, **Free for all**, **Battle** or **Co-op**, wait for everyone to show up in the list, then click **Start**. In Battle and Co-op the host sets the players a team, everyone picks their race (and in Battle their team), and bots take the empty seats; up to eight can play a 4v4.
 
 **To join:** click **Multiplayer**, then **Join Game**, type or paste the code, and press **Join**. Then wait for the host to start.
 

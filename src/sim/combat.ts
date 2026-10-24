@@ -101,11 +101,21 @@ export function filtered(sim: Sim, monster: Monster, amount: number, filter: Hit
 export function damageAgainst(sim: Sim, monster: Monster, amount: number, element: Element, filter: HitFilter): number {
   const resist = effectiveResist(sim, monster, element);
   if (resist >= 100) return 0;
-  const dealt = idiv(filtered(sim, monster, amount, filter) * (100 - resist), 100);
+  const dealt = raceDamage(sim, idiv(filtered(sim, monster, amount, filter) * (100 - resist), 100));
   const gear = actorGear(sim);
   if (gear === NO_GEAR) return dealt;
   const elite = monster.rank === 'champion' || monster.rank === 'unique' ? gear.eliteDamagePct : 0;
   return idiv(dealt * Math.max(0, 100 + (gear.elementDamagePct[element] ?? 0) + elite), 100);
+}
+
+/**
+ * Battle Mode: a tower's hit takes its race's damage percent (balance.json battle.races
+ * damagePct), the lever for a class whose towers lean on the items Battle Mode leaves out.
+ */
+function raceDamage(sim: Sim, amount: number): number {
+  const race = sim.state.battle && sim.actorTower ? sim.state.battle.races[sim.actor] : undefined;
+  const pct = race ? (sim.data.battle?.rules.races[race]?.damagePct ?? 100) : 100;
+  return pct === 100 ? amount : idiv(amount * pct, 100);
 }
 
 /** True if a hit of this element and filter can hurt the monster at all. */
@@ -260,7 +270,9 @@ export function killMonster(sim: Sim, monster: Monster): void {
   const killer = Math.min(monster.lastHit, s.gold.length - 1);
   // Battle Mode: the race's gold percent, the lever between races (balance.json battle.races)
   const race = s.battle?.races[killer];
-  const gold = race ? idiv(found * (sim.data.battle?.rules.races[race]?.goldPct ?? 100), 100) : found;
+  const r = race ? sim.data.battle?.rules.races[race] : undefined;
+  const pct = r ? (sim.players > 1 ? idiv(r.goldPct * (r.teamGoldPct ?? 100), 100) : r.goldPct) : 100;
+  const gold = idiv(found * pct, 100);
   s.gold[killer]! += gold;
   sim.paid.push({ x: monster.x, y: monster.y, gold, player: killer, hp: monster.maxHp });
   s.kills++;
