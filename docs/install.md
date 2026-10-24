@@ -57,7 +57,7 @@ A new version of the game may need a few more files from Diablo II: Resurrected.
 
 ### Eternal Conflict
 
-Heaven against Hell, Legion style: two teams race to bring down each other's king. Click **Eternal Conflict** in the main menu, pick the mode (**Battle**, or **Co-op** against the waves alone), the players a team and your race, then **Play against bots**, **Host online** or **Join online**. Bots take every seat no player fills.
+Heaven against Hell, Legion style: two teams race to bring down each other's king. Click **Eternal Conflict** in the main menu for the game setup: the mode (**Conflict**, or **Co-op** against the waves alone), the players a team and your race, then the switches (random races or all pick, X1 to X4 sends, mirror mode, easy mode, the long game to wave 30, no champions), and **Start game** against bots, **Host online** or **Join online**. Bots take every seat no player fills.
 
 - You play one class, your race, and build only its towers on your own pad. The match has 21 waves, the same for both teams: 60 seconds to build before the first, then the fight, and the 20-second countdown to the next wave starts once every creep on both sides is dead.
 - Your towers are fighters: each has life, stands in the creeps' way and is hit by them. A fighter at zero life is down for the round and stands again at the next countdown. Once your pad is clear, your fighters run to the king to fight the leaks there. Whatever gets past reaches your team's king (Tyrael holds Harrogath, Baal the Fortress), stands at his feet and hits him; he strikes back. The first king to fall loses; after wave 21 the one with more life wins.

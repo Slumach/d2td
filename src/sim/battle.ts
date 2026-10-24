@@ -162,6 +162,8 @@ export interface BattleJson {
   sendPotency: { fromWave: number; hpPctPerWave: number };
   /** Easy mode: percent on every wave's HP, and on the king's life. */
   easy: { wavePct: number; kingPct: number };
+  /** Percent on every wave's HP by the team's size (one lane, two, three, four): more pads of fighters rally to one king. */
+  teamWavePct: number[];
   /** Co-op: the sends that arrive with each wave, by wave, onto lanes in turn. */
   coop: { sends: string[][] };
 }
@@ -187,16 +189,18 @@ const battleCache = new WeakMap<GameData, Map<string, GameData>>();
  * wave timer of its own (the match starts each wave), battle bounty and starting gold, no HP
  * curve and no loot.
  */
-export function battleData(data: GameData, options: BattleOptions = DEFAULT_OPTIONS): GameData {
+export function battleData(data: GameData, options: BattleOptions = DEFAULT_OPTIONS, seats = 1): GameData {
   const b = data.battle;
   if (!b) throw new Error('balance.json has no battle section');
-  const key = JSON.stringify([options.long, options.champions, options.easy]);
+  const teamPct = b.rules.teamWavePct[Math.min(b.rules.teamWavePct.length, Math.max(1, seats)) - 1] ?? 100;
+  const pct = idiv((options.easy ? b.rules.easy.wavePct : 100) * teamPct, 100);
+  const key = JSON.stringify([options.long, options.champions, pct]);
   let per = battleCache.get(data);
   if (!per) battleCache.set(data, (per = new Map()));
   const cached = per.get(key);
   if (cached) return cached;
   let waves = b.wavesFor(options.long, options.champions);
-  if (options.easy) waves = waves.map((w) => ({ ...w, hpPct: idiv((w.hpPct ?? 100) * b.rules.easy.wavePct, 100) }));
+  if (pct !== 100) waves = waves.map((w) => ({ ...w, hpPct: idiv((w.hpPct ?? 100) * pct, 100) }));
   const out: GameData = {
     ...data,
     waves,

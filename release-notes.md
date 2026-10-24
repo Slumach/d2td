@@ -1,3 +1,16 @@
+0.4.2
+
+- Battle Mode is now Eternal Conflict: Heaven against Hell, Legion style.
+- Your towers are fighters. Each has life (its class's own, growing with its skill's level and tier), stands in the creeps' way and is hit by them; at zero life it is down for the round and stands again at the next countdown. When your pad is clear your fighters run to the king and fight the leaks there.
+- Kings: Tyrael holds Harrogath and Baal the Pandemonium Fortress, each on a stone platform at the end of the road. Leaks stand at his feet and hit him; he strikes back. His upgrades are attack, life and regeneration, bought from his panel (click him) or the left panel. The Worldstone is gone.
+- Build pads: each player's ground is a pad with a drawn grid, a spawn gate at its top, and the creeps walking straight down through it. Both battlefields are on one map, the enemy's beside your own; drag across to watch them.
+- Legion's wave timing: 60 seconds before the first wave, then the 20-second countdown starts only when every creep on both sides is dead. The HUD shows the countdown while it runs and who is still fighting while it is not.
+- Souls are Worldstone shards, mined all match long: each worker adds a tenth of a shard a second, the pile beside your pad counts them, and the HUD shows the rate.
+- The HUD: the wave box top centre, the scoreboard on the right (value, income, shards, bounty, West and East alive, the kings' life), the send panel over the belt with each monster's own figure and its shard cost.
+- A game setup screen before a conflict: random races or all pick, X1 to X4 sends, mirror mode, easy mode, the long game (waves 22 to 30), no champions, with D2R's own checkboxes. The host's setup shows in the lobby.
+- The update page's changelog scrolls inside D2R's panel; the lobby wears the same panel and stone buttons.
+- Setup extracts the rebuilt battlefields, Baal's standing art, the classes' stats and the checkbox on the first start after the update.
+
 0.4.1
 
 - Fixed: Amazon towers could not wear a bow, and the message blamed a shield that was not there. Amazon towers now wear bows and crossbows, and her bow skills fire the bow she wears. When an item will not go on a tower, the message gives the real reason.

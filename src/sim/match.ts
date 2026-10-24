@@ -174,7 +174,7 @@ function createBattleMatch(data: GameData, seed: number, mode: 'battle' | 'coop'
 
 /** One team's battlefield: a lane per seat, each seat playing its race. */
 export function createBattlefield(data: GameData, seed: number, races: readonly string[], options: BattleOptions = DEFAULT_OPTIONS): Sim {
-  const bd = battleData(data, options);
+  const bd = battleData(data, options, races.length);
   const sim = createSim(bd, seed, { players: races.length, map: createLaneMap(races.length) });
   sim.state.battle = battleStart(bd, races, options);
   return sim;

@@ -801,6 +801,44 @@ The mode is called Eternal Conflict everywhere a player reads it (the menu, the 
 
 **Menus** (item 6). The update page is D2R's options panel: the version line, then the changelog in a window that scrolls on the wheel (a geometry mask over the notes, a thin bronze bar at the right for where you are), and the buttons in a row under it where they can no longer run under the text. The lobby wears the same panel and D2's medium stone buttons for every choice (the modes, the team sizes, race and team, Copy, Start, Leave), Exocet throughout, with the mode's description and the game setup line under it. The main menu's seven stone buttons and the Options panel were checked against references/ (D2R's own screens): both are D2R's art at D2R's 1080p size already; the only change is the long Eternal Conflict label at a smaller size so it sits inside its stone.
 
+**Balance and release** (item 7). The old race table was void: fighters change everything. The harness (npm run battle) was rerun with the new rules, and the races evened with balance.json numbers only, as before: every race's gold percent (battle.races goldPct), the team percent on top (teamGoldPct), and two new mode levers. First the kings: with fighters holding the pads, a king fell before wave 21 in about half of 1v1 bot matches at 600 life (the first run: 49% of all, 32% of mirrors), but in 2v2 almost never (12%), whatever his life (400 and 300 gave 11% and 12%): two pads of fighters rally to one king and the leaks die at his feet. So a team's waves are tougher by its size (battle.teamWavePct: 100, 155, 175 and 195 percent of every wave's HP for one to four a side), which put 2v2 at 45 to 56% of matches ending with a fallen king, 3v3 at 43% and 4v4 at 45% (two seeds each). Then the gold: a tuner moved every race's percent toward 50% a round from 100%, eight seeds a pairing from both sides, six rounds for 1v1 and five for 2v2; the levers are still knife-edged (the Necromancer's 1v1 rate went 58% to 63% on a five-point step; the 2v2 Amazon won 42% at 90 and 66% at 95), and sixteen seeds disagree with eight by up to twenty points on a race, so the final numbers are the sixteen-seed table's, nudged once.
+
+Final numbers (battle.races): gold 85% Paladin, 98% Sorceress, 128% Necromancer, 86% Amazon, 170% Barbarian, 66% Druid, 120% Assassin; team gold on top 100%, 102%, 122%, 99%, 150%, 80%, 90%. The Barbarian needs the most gold: its lines are melee and its fighters stand in front, so they take every hit; the Druid the least: its summons tank for its fire and wind lines, which never get hit.
+
+1v1, sixteen seeds, each pairing from both sides (row's win rate against the column):
+
+| Race | Pal | Sor | Nec | Ama | Bar | Dru | Ass | Overall |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Paladin | | 56 | 31 | 53 | 50 | 47 | 45 | 47 |
+| Sorceress | 44 | | 53 | 63 | 44 | 38 | 50 | 48 |
+| Necromancer | 69 | 47 | | 38 | 66 | 56 | 67 | 57 |
+| Amazon | 47 | 38 | 63 | | 63 | 41 | 48 | 50 |
+| Barbarian | 50 | 56 | 34 | 38 | | 50 | 69 | 49 |
+| Druid | 53 | 63 | 44 | 59 | 50 | | 19 | 48 |
+| Assassin | 55 | 50 | 33 | 52 | 31 | 81 | | 50 |
+
+Every race is between 47% and 57% overall; nine pairings of twenty-one fall outside 40 to 60 (the worst Druid against Assassin, 19 to 81: the Assassin's traps on the path burst the Druid's summons before its fire line fires). A king fell before wave 21 in 45% of all 1v1 matches and 50% of mirror matches (from wave 6; most on waves 10 to 12 and 19 to 20).
+
+2v2 (each team one race), sixteen seeds:
+
+| Race | Pal | Sor | Nec | Ama | Bar | Dru | Ass | Overall |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Paladin | | 31 | 56 | 41 | 56 | 41 | 53 | 46 |
+| Sorceress | 69 | | 56 | 28 | 63 | 47 | 56 | 53 |
+| Necromancer | 44 | 44 | | 41 | 41 | 47 | 42 | 43 |
+| Amazon | 59 | 72 | 59 | | 69 | 59 | 66 | 64 |
+| Barbarian | 44 | 38 | 59 | 31 | | 59 | 38 | 45 |
+| Druid | 59 | 53 | 53 | 41 | 41 | | 59 | 51 |
+| Assassin | 47 | 44 | 58 | 34 | 63 | 41 | | 48 |
+
+In 2v2 every race but the Amazon is between 43% and 53%; the Amazon won 34% at 92% team gold and 64% at 99% and 106%, so it ships at 99% and flagged. A king fell before wave 21 in 50% of 2v2 matches and 55% of mirror matches.
+
+Calls made for item 7:
+
+- The team wave percent is a mode lever, not a wave or skill change: it scales every wave's HP for a team's size, so a 2v2 lane sees the same roster at 155% and its king still sees leaks.
+- Races were tuned from 100% again rather than from 0.4.1's numbers: those levers encoded the old mode's faults (the Paladin held at 67% because its holy line ran the old lanes), and the new mode's faults are different.
+- 3v3 and 4v4 were checked for king falls only (two seeds); their race tables were not tuned.
+
 Calls made for items 1 to 4:
 
 - Fighters are hit without an attack roll: monsters' attack rating against a class's defence would need armour the mode has not got, and Legion's creeps always connect.

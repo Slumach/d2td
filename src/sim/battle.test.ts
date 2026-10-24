@@ -358,6 +358,14 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     for (const r of races(11)) expect(Object.keys(real().classes)).toContain(r);
   });
 
+  it('a bigger team faces tougher waves: teamWavePct by seats', () => {
+    const one = createMatch(real(), 2, 'battle', 2, { teamSize: 1 }).zones[0]!.data.waves[3]!.hpPct!;
+    const two = createMatch(real(), 2, 'battle', 4, { teamSize: 2 }).zones[0]!.data.waves[3]!.hpPct!;
+    const pct = real().battle!.rules.teamWavePct;
+    expect(one).toBe(Math.floor((real().battle!.waves[3]!.hpPct! * pct[0]!) / 100));
+    expect(two).toBe(Math.floor((real().battle!.waves[3]!.hpPct! * pct[1]!) / 100));
+  });
+
   it('the long game plays waves 22 to 30 from Nightmare, Diablo on 26 and Baal on 30', () => {
     const m = createMatch(real(), 2, 'battle', 2, { teamSize: 1, races: ['paladin', 'paladin'], bots: [], options: { pick: 'all', sends: 1, mirror: false, easy: false, long: true, champions: true } });
     const waves = m.zones[0]!.data.waves;
