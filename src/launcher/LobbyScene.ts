@@ -1,13 +1,16 @@
 // Host and Join. The host opens a lobby on this PC and gets codes to hand out; a friend types
-// a code to join. The host picks Team or Free for all and starts; everyone then moves to the
-// game with the same seed, mode and player order.
+// a code to join. The host picks Team, Free for all, Battle or Co-op and starts; everyone then
+// moves to the game with the same seed, mode and player order. In Battle and Co-op the host
+// sets the team size, each player picks a race and (Battle) a team, and bots take the seats
+// no one fills.
 
 import Phaser from 'phaser';
 
 import { LOBBY_MODES, type LobbyPlayer } from '../net/protocol.ts';
 import { stageName } from '../sim/data.ts';
 import type { Checkpoint } from '../sim/checkpoint.ts';
-import { MAX_TEAM_PLAYERS, type MatchMode } from '../sim/match.ts';
+import { battleSetupFor, MAX_LOBBY, MAX_TEAM_PLAYERS, type MatchMode } from '../sim/match.ts';
+import { RACES, type BattleChoice } from './MenuScene.ts';
 import { loadCheckpoint } from '../render/saves.ts';
 import type { OnlineStart } from '../render/GameScene.ts';
 import { GAME_HEIGHT, GAME_WIDTH } from '../render/layout.ts';
@@ -50,13 +53,18 @@ export class LobbyScene extends Phaser.Scene {
   private isHost = false;
   private codes: JoinCode[] = [];
   private upnp: UpnpStatus | 'trying' = 'trying';
+  /** Battle Mode: players a team (the host's), and the choices the host came in with from the Battle Mode page. */
+  private teamSize = 1;
+  private preset: BattleChoice | undefined;
 
   constructor() {
     super('Lobby');
   }
 
-  create(data: { role: 'host' | 'join' }): void {
+  create(data: { role: 'host' | 'join'; battle?: BattleChoice }): void {
     this.role = data.role;
+    this.preset = data.battle;
+    this.teamSize = 1;
     this.session = MpSession.of(this.registry.get(LAUNCHER_KEY) as LauncherApi);
     Object.assign(this, { phase: data.role === 'host' ? 'connecting' : 'code', message: '', players: [], mode: 'team', me: -1, isHost: false, codes: [], upnp: 'trying', field: undefined, saved: undefined });
     this.session.listen((e) => this.onEvent(e));
@@ -91,16 +99,24 @@ export class LobbyScene extends Phaser.Scene {
         this.isHost = m.host;
         this.phase = 'lobby';
         this.message = '';
+        // Hosting from the Battle Mode page: its mode, team size and race come along
+        const p = this.preset;
+        if (p && m.host) {
+          this.preset = undefined;
+          this.session.send({ t: 'mode', mode: p.mode });
+          this.session.send({ t: 'battle', teamSize: p.teamSize, race: p.race });
+        }
       } else if (m.t === 'lobby') {
         this.players = m.players;
         this.mode = m.mode;
+        this.teamSize = m.teamSize ?? this.teamSize;
       } else if (m.t === 'reject') {
         this.message = m.reason;
       } else if (m.t === 'start') {
         // Hold the tick bundles that follow until the game scene is ready for them
         this.session.hold();
         const resume = m.resume ? (JSON.parse(m.resume) as Checkpoint) : undefined;
-        const start: OnlineStart = { seed: m.seed, mode: m.mode, players: m.players, you: m.you, host: this.isHost, ...(resume ? { resume } : {}) };
+        const start: OnlineStart = { seed: m.seed, mode: m.mode, players: m.players, you: m.you, host: this.isHost, ...(resume ? { resume } : {}), ...(m.battle ? { battle: m.battle } : {}) };
         this.scene.start('Game', start);
         return;
       }
@@ -176,11 +192,13 @@ export class LobbyScene extends Phaser.Scene {
 
     if (this.isHost) y = this.drawCodes(y);
 
-    add(this.add.text(LEFT, y, `Players (${this.players.length} of 6)`, MUTED));
+    const battle = this.mode === 'battle' || this.mode === 'coop';
+    add(this.add.text(LEFT, y, `Players (${this.players.length} of ${MAX_LOBBY})`, MUTED));
     y += 30;
     for (const p of this.players) {
       const tags = [p.slot === 0 ? 'host' : '', p.slot === this.me ? 'you' : ''].filter(Boolean).join(', ');
-      add(this.add.text(LEFT, y, `${p.slot + 1}. ${p.name}${tags ? `  (${tags})` : ''}`, TEXT));
+      const side = battle ? `, ${raceName(p.race ?? 'random')}${this.mode === 'battle' ? `, team ${(p.team ?? 0) + 1}` : ''}` : '';
+      add(this.add.text(LEFT, y, `${p.slot + 1}. ${p.name}${side}${tags ? `  (${tags})` : ''}`, TEXT));
       y += 32;
     }
     y += 20;
@@ -202,10 +220,22 @@ export class LobbyScene extends Phaser.Scene {
     const about = add(this.add.text(LEFT, y, MODE_TEXT[this.mode].about, MUTED));
     y += about.height + 30;
 
-    const campaign = add(this.add.text(LEFT, y, 'The campaign: five acts on Normal, then Nightmare, then Hell. The host saves at every new act.', MUTED));
-    y += campaign.height + 30;
+    if (battle) {
+      y = this.drawBattleChoices(y);
+    } else {
+      const campaign = add(this.add.text(LEFT, y, 'The campaign: five acts on Normal, then Nightmare, then Hell. The host saves at every new act.', MUTED));
+      y += campaign.height + 30;
+    }
 
-    if (this.isHost && this.mode === 'team' && this.players.length > MAX_TEAM_PLAYERS) {
+    const humans = this.players.map((p) => ({ race: p.race ?? 'random', team: p.team ?? 0 }));
+    const seats = battle ? battleSetupFor(this.mode as 'battle' | 'coop', this.teamSize, humans) : undefined;
+    if (this.isHost && battle && !seats) {
+      add(this.add.text(LEFT, y + 6, `${this.players.length} players do not fit ${this.mode === 'battle' ? 'two teams' : 'one team'} of ${this.teamSize}: raise the team size.`, TEXT));
+    } else if (this.isHost && battle) {
+      this.parts.push(...button(this, LEFT, y, { label: 'Start', onClick: () => this.session.send({ t: 'start' }), colour: '#6a3020', width: 200 }));
+      const bots = seats?.bots?.length ?? 0;
+      add(this.add.text(LEFT + 220, y + 6, bots ? `Bots take the other ${bots} ${bots === 1 ? 'seat' : 'seats'}.` : 'Every seat has a player.', MUTED));
+    } else if (this.isHost && this.mode === 'team' && this.players.length > MAX_TEAM_PLAYERS) {
       add(this.add.text(LEFT, y + 6, `A team takes up to ${MAX_TEAM_PLAYERS} players: pick Free for all, or wait for someone to leave.`, TEXT));
     } else if (this.isHost) {
       this.parts.push(...button(this, LEFT, y, { label: 'Start', onClick: () => this.session.send({ t: 'start' }), colour: '#6a3020', width: 200 }));
@@ -219,6 +249,31 @@ export class LobbyScene extends Phaser.Scene {
       }
     } else {
       add(this.add.text(LEFT, y + 6, 'Waiting for the host to start.', TEXT));
+    }
+    return y + 70;
+  }
+
+  /** Battle and Co-op: the team size (the host's to set), your race and, in Battle, your team. */
+  private drawBattleChoices(y: number): number {
+    const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
+    const mine = this.players.find((p) => p.slot === this.me);
+    add(this.add.text(LEFT, y, 'Players a team', MUTED));
+    y += 30;
+    if (this.isHost) {
+      for (let n = 1; n <= 4; n++) {
+        this.parts.push(...button(this, LEFT + (n - 1) * 120, y, { label: `${n}`, onClick: () => this.session.send({ t: 'battle', teamSize: n }), colour: n === this.teamSize ? '#6a3020' : '#3a2c1c', width: 100 }));
+      }
+      y += 50;
+    } else {
+      add(this.add.text(LEFT, y, `${this.teamSize}`, TEXT));
+      y += 34;
+    }
+    const race = mine?.race ?? 'random';
+    const all = ['random', ...RACES];
+    this.parts.push(...button(this, LEFT, y, { label: `Your race: ${raceName(race)}`, onClick: () => this.session.send({ t: 'battle', race: all[(all.indexOf(race) + 1) % all.length]! }), width: 340 }));
+    if (this.mode === 'battle') {
+      const team = mine?.team ?? 0;
+      this.parts.push(...button(this, LEFT + 360, y, { label: `Your team: ${team + 1}`, onClick: () => this.session.send({ t: 'battle', team: 1 - team }), width: 240 }));
     }
     return y + 70;
   }
@@ -247,4 +302,9 @@ export class LobbyScene extends Phaser.Scene {
     const t = add(this.add.text(LEFT, y + 4, upnpText, MUTED));
     return y + t.height + 30;
   }
+}
+
+/** A race's name for the lobby. */
+function raceName(race: string): string {
+  return race === 'random' ? 'Random' : race.charAt(0).toUpperCase() + race.slice(1);
 }

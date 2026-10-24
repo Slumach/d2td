@@ -6,10 +6,10 @@
 // The host's own game is a player like the rest: it connects to its relay over loopback.
 
 import type { Command } from '../sim/state.ts';
-import type { MatchMode, PlayerCommand } from '../sim/match.ts';
+import type { BattleSetup, MatchMode, PlayerCommand } from '../sim/match.ts';
 
 /** Bumped whenever a message changes shape; players on different protocols cannot join. */
-export const PROTOCOL = 2;
+export const PROTOCOL = 3;
 export const DEFAULT_PORT = 47310;
 /** Ticks between match hash reports. */
 export const HASH_EVERY = 100;
@@ -19,6 +19,9 @@ export const TICK_MS = 50;
 export interface LobbyPlayer {
   slot: number;
   name: string;
+  /** Battle Mode: the race they picked ('random' by default) and the team they asked for. */
+  race?: string;
+  team?: number;
 }
 
 /** Player to relay. */
@@ -34,6 +37,8 @@ export type ClientMessage =
       token?: string;
     }
   | { t: 'mode'; mode: MatchMode }
+  /** Battle Mode: the host sets the team size; anyone sets their own race and team. */
+  | { t: 'battle'; teamSize?: number; race?: string; team?: number }
   /** The host starts the match; with `resume`, from its saved checkpoint (JSON). */
   | { t: 'start'; resume?: string }
   | { t: 'cmd'; command: Command }
@@ -43,11 +48,11 @@ export type ClientMessage =
 export type HostMessage =
   | { t: 'welcome'; you: number; host: boolean }
   | { t: 'reject'; reason: string }
-  | { t: 'lobby'; players: LobbyPlayer[]; mode: MatchMode }
-  | { t: 'start'; seed: number; mode: MatchMode; players: LobbyPlayer[]; you: number; resume?: string }
+  | { t: 'lobby'; players: LobbyPlayer[]; mode: MatchMode; teamSize?: number }
+  | { t: 'start'; seed: number; mode: MatchMode; players: LobbyPlayer[]; you: number; resume?: string; battle?: BattleSetup }
   | { t: 'tick'; tick: number; cmds: PlayerCommand[] }
   | { t: 'left'; slot: number; name: string }
   | { t: 'desync'; tick: number };
 
 /** Lobby modes; solo is single-player only. */
-export const LOBBY_MODES: readonly MatchMode[] = ['team', 'ffa'];
+export const LOBBY_MODES: readonly MatchMode[] = ['team', 'ffa', 'battle', 'coop'];

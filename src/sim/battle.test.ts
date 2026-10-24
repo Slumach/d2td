@@ -6,7 +6,7 @@ import { battleData, kingUpgradeCost, sendCost, sendDef, workerCost } from './ba
 import { buildGameData, type GameData } from './data.ts';
 import { UNITS_PER_TILE } from './fixed.ts';
 import { createLaneMap, isBlocked, isPathTile, laneOf, LANE, positionAt, wrap } from './map.ts';
-import { createMatch, matchHash, stepMatch, type Match, type PlayerCommand } from './match.ts';
+import { battleSetupFor, createMatch, matchHash, stepMatch, type Match, type PlayerCommand } from './match.ts';
 import { createMonster } from './monsters.ts';
 import { step } from './sim.ts';
 
@@ -56,7 +56,32 @@ describe('battle lanes', () => {
   });
 });
 
+describe('battle seats', () => {
+  it('puts each player on the team they asked for while it has room, bots in the rest', () => {
+    expect(battleSetupFor('battle', 2, [{ race: 'paladin', team: 1 }, { race: 'druid', team: 1 }, { race: 'random', team: 1 }])).toEqual({
+      teamSize: 2,
+      races: ['random', 'random', 'paladin', 'druid'],
+      bots: [1],
+      seats: [2, 3, 0],
+    });
+    expect(battleSetupFor('coop', 3, [{ race: 'amazon', team: 1 }])).toEqual({ teamSize: 3, races: ['amazon', 'random', 'random'], bots: [1, 2], seats: [0] });
+    expect(battleSetupFor('battle', 1, [{ race: 'a', team: 0 }, { race: 'b', team: 0 }, { race: 'c', team: 0 }])).toBeUndefined();
+  });
+});
+
 describe.skipIf(!hasTables())('Battle Mode (real tables)', () => {
+  it('online, a lobby slot acts for the seat it was given', () => {
+    const setup = battleSetupFor('battle', 2, [{ race: 'paladin', team: 0 }, { race: 'sorceress', team: 1 }])!;
+    const m = createMatch(real(), 9, 'battle', 4, setup);
+    // Lobby slot 1 sits at match slot 2: the second team's first lane
+    expect(m.state.battle!.races[2]).toBe('sorceress');
+    const lane = m.zones[1]!;
+    const arc = lane.map.arcs[0]!;
+    const p = positionAt(lane.map, arc.start + 10 * UNITS_PER_TILE);
+    stepMatch(m, [{ player: 1, command: { type: 'build', x: Math.floor(p.x / UNITS_PER_TILE) + 1, y: 10, cls: 'sorceress', skill: 'fire-bolt' } }]);
+    expect(lane.state.towers.filter((t) => t.owner === 0 && t.cls === 'sorceress')).toHaveLength(1);
+  });
+
   it('builds 21 waves from the tables, the act bosses on 6, 10, 14, 17 and 21', () => {
     const waves = real().battle!.waves;
     expect(waves).toHaveLength(21);

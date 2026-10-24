@@ -695,6 +695,19 @@ Calls made for Stage 2:
 - The bot runs inside the match step on every client (src/sim/battlebot.ts), not as a host-side player, so bots need no network traffic and stay in lockstep. It plays its race's two strongest attack lines (a trap line counts its trap's bolt), buys by damage gained per gold, saves for a ready evolution up to four waves of income ahead, values a level short of 5 as a step toward the next tier (Double Swing gains nothing from its own levels, and the Barbarian bot never tiered), hires workers early, sends the dearest send its Souls buy at the enemy lane that leaks most, and buys king life when the king is under 70%. Each bot slot has a temper drawn from the seed (workers, how far ahead it saves, how long it holds Souls, a lean toward one line), so the harness sees more than one game a pairing.
 - A send's monsters take the joined wave's HP percent, not their own: a superunique at a late wave is as dangerous for its cost as at an early one.
 
+### Stage 3: bots and matchmaking
+
+- **The battle bot** (src/sim/battlebot.ts, Stage 2's calls) plays any slot no human takes, in single player and online alike, because it runs inside the match step.
+- **npm run battle** (tools/battle.ts) plays bot against bot: every race pairing, the mirror included, on each seed (four by default), each pairing from both sides of the map so a side's or a bot temper's edge cancels out; batches run in child processes (six at most, the machine's memory). It prints each race's win rate against every other and overall, how many matches ended with a king falling and on which waves, how many went the distance on life, and flags any race above 60% or below 40% overall or against any one race. --team 2 plays 2v2 (each team one race), --set tries a balance.json number, --one plays a single match with a wave by wave log.
+- **Single player:** Battle Mode on the main menu opens its page: the profile's battle record, Mode (Battle or Co-op), Players a team (1 to 4), Race (Random or a class), Play against bots (this player in the first seat, bots in every other), Host online, Join online. In a browser, ?battle starts one (?battle=coop, &team=2, &race=paladin).
+- **Online:** host and join by code as before. The lobby gains Battle and Co-op beside Team and Free for all; the host sets the team size; each player picks their race and, in a battle, their team (the `battle` lobby message, PROTOCOL 3). On Start the relay seats the players (match.ts battleSetupFor: each in joining order on the team they asked for while it has room, else the other) and bots take the empty seats; the start message carries the setup (team size, races, bots, and each lobby slot's seat), and the match maps every command from a lobby slot to its seat. A lobby holds eight now, so a 4v4 can be all players; free for all still starts with six at most. The relay refuses to start a battle whose players do not fit its teams. Battles are not saved.
+- **Co-op:** one team's battlefield against the 21 waves; the sends arrive on a schedule (battle.coop.sends: from the Cow King on wave 3 to the Ancients with Nihlathak on wave 20), onto the lanes in turn, instead of from an enemy team. The send panel shows what comes with the next wave instead. The team wins if its Worldstone stands after wave 21.
+
+Calls made for Stage 3:
+
+- Bots are seated by the match, not the relay: the relay sends who is human and the match fills the rest, so a lobby's bots cost no network traffic and cannot desync. A 2v2 of two players and two bots over TCP stays in lockstep (relay.test.ts).
+- A player's team choice is a request: when their team is full they play on the other.
+
 ## Overnight decisions
 
 Calls made without asking, each the option closest to Diablo II's own rules.

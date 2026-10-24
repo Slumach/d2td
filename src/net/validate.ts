@@ -6,7 +6,7 @@ import type { ItemRef } from '../sim/items/inventory.ts';
 import type { Item, Quality, StatRoll } from '../sim/items/item.ts';
 import type { InvItem } from '../sim/items/loot.ts';
 import type { Command, Targeting } from '../sim/state.ts';
-import { LOOT_FILTERS, TARGETING_MODES, type LootFilter } from '../sim/state.ts';
+import { KING_UPGRADES, LOOT_FILTERS, TARGETING_MODES, type KingUpgrade, type LootFilter } from '../sim/state.ts';
 
 const int = (v: unknown, max = 1_000_000_000): boolean => Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) <= max;
 const str = (v: unknown): boolean => typeof v === 'string' && v.length > 0 && v.length <= 64;
@@ -160,6 +160,12 @@ export function validCommand(v: unknown): Command | null {
     case 'tradeAccept':
     case 'tradeCancel':
       return { type: c['type'] };
+    case 'hire':
+      return { type: 'hire' };
+    case 'send':
+      return str(c['send']) && int(c['lane'], 8) ? { type: 'send', send: c['send'] as string, lane: c['lane'] as number } : null;
+    case 'king':
+      return KING_UPGRADES.includes(c['upgrade'] as KingUpgrade) ? { type: 'king', upgrade: c['upgrade'] as KingUpgrade } : null;
     default:
       return null;
   }

@@ -5,6 +5,9 @@ import { Lockstep } from '../../src/net/lockstep.ts';
 import { PROTOCOL, type ClientMessage, type HostMessage } from '../../src/net/protocol.ts';
 import { fixtureGameData } from '../../src/sim/fixture.ts';
 import { matchHash } from '../../src/sim/match.ts';
+import { DESIGN } from '../../src/data/design.ts';
+import { buildGameData } from '../../src/sim/data.ts';
+import { hasTables, loadTables } from '../../tools/lib/load-tables.ts';
 import { connectToRelay, type Connection } from './client.ts';
 import { Relay } from './relay.ts';
 
@@ -103,6 +106,80 @@ describe('relay lobby', () => {
     await bob.next('welcome');
     ann.conn.close();
     expect(await bob.next('welcome')).toEqual({ t: 'welcome', you: 1, host: false });
+  });
+});
+
+describe('relay battle lobby', () => {
+  it('seats the players by the team they asked for and sends the setup with the start', async () => {
+    const port = await relay();
+    const host = player(port, 'Host', { token: TOKEN });
+    await host.next('welcome');
+    const ann = player(port, 'Ann');
+    await ann.next('welcome');
+    host.conn.send({ t: 'mode', mode: 'battle' });
+    host.conn.send({ t: 'battle', teamSize: 2, race: 'paladin' });
+    ann.conn.send({ t: 'battle', race: 'sorceress', team: 1 });
+    // Only the host sizes the teams
+    ann.conn.send({ t: 'battle', teamSize: 4 });
+    await new Promise((r) => setTimeout(r, 50));
+    const lobby = host.messages.filter((m) => m.t === 'lobby').at(-1) as Extract<HostMessage, { t: 'lobby' }>;
+    expect(lobby.teamSize).toBe(2);
+    expect(lobby.players.map((p) => [p.race, p.team])).toEqual([['paladin', 0], ['sorceress', 1]]);
+    host.conn.send({ t: 'start' });
+    const start = (await ann.next('start')) as Extract<HostMessage, { t: 'start' }>;
+    expect(start.mode).toBe('battle');
+    expect(start.battle).toEqual({ teamSize: 2, races: ['paladin', 'random', 'sorceress', 'random'], bots: [1, 3], seats: [0, 2] });
+  });
+
+  it.skipIf(!hasTables())('a 2v2 battle, two players and two bots, plays over TCP in lockstep', async () => {
+    const LIMIT = 4000;
+    const real = buildGameData(loadTables(), DESIGN, 30);
+    const port = await relay();
+    const finals: Promise<number>[] = [];
+    let desync = false;
+    const players = ['Host', 'Ann'].map((name, i) => {
+      let step: Lockstep | undefined;
+      let done: (hash: number) => void = () => undefined;
+      finals.push(new Promise((r) => (done = r)));
+      const p: TestPlayer = player(port, name, i === 0 ? { token: TOKEN } : {}, (m) => {
+        if (m.t === 'desync') desync = true;
+        if (m.t === 'start') {
+          step = new Lockstep({ data: real, seed: m.seed, mode: m.mode, players: 4, me: m.you, send: (msg) => p.conn.send(msg), ...(m.battle ? { battle: m.battle } : {}) });
+        }
+        if (m.t === 'tick' && step && step.match.state.tick < LIMIT) {
+          step.receive(m.tick, m.cmds);
+          step.advance(LIMIT - step.match.state.tick, () => {
+            // Each human hires a worker now and then; the bots build
+            if (step!.match.state.tick % 400 === 0) step!.issue({ type: 'hire' });
+          });
+          if (step.match.state.tick >= LIMIT) done(matchHash(step.match));
+        }
+      });
+      return p;
+    });
+    await players[0]!.next('welcome');
+    await players[1]!.next('welcome');
+    players[0]!.conn.send({ t: 'mode', mode: 'battle' });
+    players[0]!.conn.send({ t: 'battle', teamSize: 2 });
+    players[1]!.conn.send({ t: 'battle', team: 1 });
+    await new Promise((r) => setTimeout(r, 50));
+    players[0]!.conn.send({ t: 'start' });
+    const hashes = await Promise.all(finals);
+    expect(desync).toBe(false);
+    expect(new Set(hashes).size).toBe(1);
+  }, 60_000);
+
+  it('will not start a battle its players do not fit', async () => {
+    const port = await relay();
+    const host = player(port, 'Host', { token: TOKEN });
+    await host.next('welcome');
+    const others = ['Ann', 'Bob'].map((n) => player(port, n));
+    for (const o of others) await o.next('welcome');
+    host.conn.send({ t: 'mode', mode: 'coop' });
+    host.conn.send({ t: 'battle', teamSize: 2 });
+    host.conn.send({ t: 'start' });
+    await new Promise((r) => setTimeout(r, 80));
+    expect(host.messages.some((m) => m.t === 'start')).toBe(false);
   });
 });
 

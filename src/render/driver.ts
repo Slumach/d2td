@@ -84,8 +84,10 @@ export class NetDriver implements Driver {
     return this.lockstep.match;
   }
 
+  /** This player's match slot: their lobby slot, or online in a battle the seat the lobby gave them. */
   get me(): number {
-    return this.lockstep.me;
+    const seats = this.lockstep.match.state.battle?.seats;
+    return seats?.length ? (seats[this.lockstep.me] ?? this.lockstep.me) : this.lockstep.me;
   }
 
   get log(): readonly TimedPlayerCommand[] {

@@ -36,6 +36,36 @@ export interface BattleSetup {
   races?: string[];
   /** Slots the match's own bots play (empty seats). */
   bots?: number[];
+  /** Online: the match slot each lobby slot plays (seats[lobby] = slot). Absent, lobby slot and match slot are one. */
+  seats?: number[];
+}
+
+/** A human in a battle lobby: the race they picked (or 'random') and the team they asked for (0 or 1). */
+export interface BattleHuman {
+  race: string;
+  team: number;
+}
+
+/**
+ * Seats a battle lobby: each human, in joining order, on the team they asked for while it
+ * has room (else the other), in its next seat; bots take every seat left. Undefined when
+ * the humans do not fit (more than the teams hold).
+ */
+export function battleSetupFor(mode: 'battle' | 'coop', teamSize: number, humans: readonly BattleHuman[]): BattleSetup | undefined {
+  const teams = mode === 'battle' ? 2 : 1;
+  const slots = teamSize * teams;
+  if (teamSize < 1 || teamSize > MAX_BATTLE_TEAM || humans.length > slots) return undefined;
+  const used = Array.from({ length: teams }, () => 0);
+  const races = Array.from({ length: slots }, () => 'random');
+  const seats = humans.map((h) => {
+    const want = teams === 1 ? 0 : h.team === 1 ? 1 : 0;
+    const team = used[want]! < teamSize ? want : 1 - want;
+    const slot = team * teamSize + used[team]!++;
+    races[slot] = h.race;
+    return slot;
+  });
+  const bots = Array.from({ length: slots }, (_, p) => p).filter((p) => !seats.includes(p));
+  return { teamSize, races, bots, seats };
 }
 
 /** The phases both teams share, and what the lobby set up. */
@@ -53,8 +83,12 @@ export interface BattleMatchState {
   made: string[][];
   /** The match seed, for the bots' play (each bot slot plays a little differently). */
   seed: number;
+  /** Online: the match slot each lobby slot plays; empty when they are the same. */
+  seats: number[];
 }
 export const MAX_PLAYERS = 6;
+/** A lobby holds up to eight: a 4v4 battle; free for all still starts with at most MAX_PLAYERS. */
+export const MAX_LOBBY = 8;
 /** A team shares one ring: an arc each. */
 export const MAX_TEAM_PLAYERS = ARC_COUNT;
 
@@ -126,7 +160,7 @@ function createBattleMatch(data: GameData, seed: number, mode: 'battle' | 'coop'
       status: 'playing',
       winners: [],
       trades: [],
-      battle: { phase: 'build', phaseTick: first, wave: 0, teamSize: n, races, bots: [...(setup.bots ?? [])].filter((b) => b >= 0 && b < players), made: races.map(() => []), seed: seed >>> 0 },
+      battle: { phase: 'build', phaseTick: first, wave: 0, teamSize: n, races, bots: [...(setup.bots ?? [])].filter((b) => b >= 0 && b < players), made: races.map(() => []), seed: seed >>> 0, seats: [...(setup.seats ?? [])] },
     },
   };
 }
@@ -198,8 +232,9 @@ export function stepMatch(match: Match, commands: readonly PlayerCommand[]): voi
   }
   const perZone: Command[][] = match.zones.map(() => []);
   const b = m.battle;
-  // The match's own bots play their slots here, so every client runs them alike
-  const all = b ? [...commands.filter((c) => !b.bots.includes(c.player)), ...b.bots.flatMap((p) => botCommands(match, p).map((command) => ({ player: p, command })))] : commands;
+  // Online, a lobby slot plays its seat; the match's own bots play theirs here, so every client runs them alike
+  const humans = b ? commands.map((c) => ({ ...c, player: b.seats.length ? (b.seats[c.player] ?? -1) : c.player })).filter((c) => !b.bots.includes(c.player)) : commands;
+  const all = b ? [...humans, ...b.bots.flatMap((p) => botCommands(match, p).map((command) => ({ player: p, command })))] : commands;
   for (const { player, command } of all) {
     if (player < 0 || player >= match.players) continue;
     if (b) {

@@ -382,10 +382,18 @@ export class GameScene extends Phaser.Scene {
         send: (m) => session.send(m),
         ...(start.resume ? { resume: start.resume } : {}),
       });
-      this.driver = new NetDriver(lockstep, start.players);
-      this.view = ringOf(lockstep.match, start.you);
-      // The host keeps the multiplayer save
-      if (start.host) this.saves = 'mp';
+      // In a battle the names go by seat: the lobby's players where it seated them, bots in the rest
+      const seats = start.battle?.seats;
+      const players = seats
+        ? Array.from({ length: lockstep.match.players }, (_, slot) => {
+            const lobby = seats.indexOf(slot);
+            return { slot, name: lobby >= 0 ? (start.players.find((p) => p.slot === lobby)?.name ?? `Player ${lobby + 1}`) : `Bot ${slot + 1}` };
+          })
+        : start.players;
+      this.driver = new NetDriver(lockstep, players);
+      this.view = ringOf(lockstep.match, this.driver.me);
+      // The host keeps the multiplayer save; a battle is not saved
+      if (start.host && !start.battle) this.saves = 'mp';
       session.listen((e) => this.onNet(e, lockstep));
     } else if (start && 'battle' in start) {
       // A battle against bots: a fresh seed each time, nothing saved
@@ -538,16 +546,20 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-HOME', () => {
       const d = this.driver;
       if (!d) return;
-      if (d.match.state.mode === 'ffa' && this.view !== ringOf(d.match, d.me)) this.watch(ringOf(d.match, d.me));
+      if ((d.match.state.mode === 'ffa' || battle) && this.view !== ringOf(d.match, d.me)) this.watch(ringOf(d.match, d.me));
       this.lookAtArcOf(d.me);
     });
-    if (online) {
+    if (online || battle) {
+      // Keys 1 to n: a player's arc, ring or lane (in a battle, on whichever battlefield it is)
       this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
         const n = Number(e.key);
         const match = this.driver!.match;
         if (!Number.isInteger(n) || n < 1 || n > match.players) return;
         if (match.state.mode === 'ffa' && n - 1 !== this.view) this.watch(n - 1);
-        else this.lookAtArcOf(n - 1);
+        else if (match.state.battle && ringOf(match, n - 1) !== this.view) {
+          this.watch(ringOf(match, n - 1));
+          this.lookAtArcOf(n - 1);
+        } else this.lookAtArcOf(n - 1);
       });
     }
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => (this.hover = this.camera.dragging ? undefined : this.tileAt(p)));
@@ -2040,8 +2052,14 @@ click to return to the menu`).setFontSize(40).setVisible(true);
     this.panel = [];
     this.tooltip.hide();
     if (!this.onOwnRing || (tower && tower.owner !== this.seat)) {
-      const whose = tower ? `${this.nameOf(this.driver?.match.state.mode === 'team' ? tower.owner : this.view)}'s tower` : `${this.nameOf(this.view)}'s ring`;
-      this.info.setText(`Looking at ${whose}.${this.onOwnRing ? '' : ` Press ${(this.driver?.me ?? 0) + 1}, or click your name under the map, to go back to yours.`}`);
+      const match = this.driver?.match;
+      if (match?.state.battle) {
+        const whose = tower ? `${this.nameOf(slotOf(match, this.view, tower.owner))}'s tower` : `the ${KEEP_NAMES[this.view] ?? ''} battlefield`;
+        this.info.setText(`Looking at ${whose}.${this.onOwnRing ? '' : ' Press Home to go back to your lane.'}`);
+      } else {
+        const whose = tower ? `${this.nameOf(match?.state.mode === 'team' ? tower.owner : this.view)}'s tower` : `${this.nameOf(this.view)}'s ring`;
+        this.info.setText(`Looking at ${whose}.${this.onOwnRing ? '' : ` Press ${(this.driver?.me ?? 0) + 1}, or click your name under the map, to go back to yours.`}`);
+      }
       this.d2?.setSlots([]);
       this.d2?.setTabs([]);
       this.d2?.setTowerPanel(undefined);

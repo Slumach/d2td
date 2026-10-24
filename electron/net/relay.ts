@@ -6,7 +6,7 @@
 import { randomInt } from 'node:crypto';
 import { createServer, type Server, type Socket } from 'node:net';
 
-import { MAX_PLAYERS, MAX_TEAM_PLAYERS, type MatchMode, type PlayerCommand } from '../../src/sim/match.ts';
+import { battleSetupFor, MAX_BATTLE_TEAM, MAX_LOBBY, MAX_PLAYERS, MAX_TEAM_PLAYERS, type BattleSetup, type MatchMode, type PlayerCommand } from '../../src/sim/match.ts';
 import { PROTOCOL, TICK_MS, type ClientMessage, type HostMessage, type LobbyPlayer } from '../../src/net/protocol.ts';
 import { validCommand } from '../../src/net/validate.ts';
 import { readLines, sendLine } from './framing.ts';
@@ -34,7 +34,12 @@ interface Peer {
   /** Set once the peer has said hello and been let in. */
   joined: boolean;
   gone: boolean;
+  /** Battle Mode: the race they picked and the team they asked for. */
+  race: string;
+  team: number;
 }
+
+const BATTLE_MODES: readonly MatchMode[] = ['battle', 'coop'];
 
 const HELLO_TIMEOUT_MS = 5000;
 
@@ -43,6 +48,8 @@ export class Relay {
   private readonly opts: RelayOptions;
   private peers: Peer[] = [];
   private mode: MatchMode = 'team';
+  /** Battle Mode: players a team, set by the host. */
+  private teamSize = 1;
   private started = false;
   private tick = 0;
   private queue: PlayerCommand[] = [];
@@ -84,11 +91,11 @@ export class Relay {
   }
 
   private lobbyPlayers(): LobbyPlayer[] {
-    return this.joined.map((p) => ({ slot: p.slot, name: p.name }));
+    return this.joined.map((p) => ({ slot: p.slot, name: p.name, ...(BATTLE_MODES.includes(this.mode) ? { race: p.race, team: p.team } : {}) }));
   }
 
   private sendLobby(): void {
-    this.broadcast({ t: 'lobby', players: this.lobbyPlayers(), mode: this.mode });
+    this.broadcast({ t: 'lobby', players: this.lobbyPlayers(), mode: this.mode, ...(BATTLE_MODES.includes(this.mode) ? { teamSize: this.teamSize } : {}) });
   }
 
   private reject(socket: Socket, reason: string): void {
@@ -98,7 +105,7 @@ export class Relay {
 
   private accept(socket: Socket): void {
     socket.setNoDelay(true);
-    const peer: Peer = { socket, name: '', host: false, data: '', slot: -1, joined: false, gone: false };
+    const peer: Peer = { socket, name: '', host: false, data: '', slot: -1, joined: false, gone: false, race: 'random', team: 0 };
     this.peers.push(peer);
     const helloTimer = setTimeout(() => !peer.joined && socket.destroy(), HELLO_TIMEOUT_MS);
     readLines(socket, (m) => this.onMessage(peer, m as ClientMessage));
@@ -116,12 +123,24 @@ export class Relay {
       else peer.socket.destroy();
       return;
     }
-    if (m.t === 'mode' && peer.host && !this.started && (m.mode === 'team' || m.mode === 'ffa')) {
+    if (m.t === 'mode' && peer.host && !this.started && (m.mode === 'team' || m.mode === 'ffa' || BATTLE_MODES.includes(m.mode))) {
       this.mode = m.mode;
+      this.sendLobby();
+    } else if (m.t === 'battle' && !this.started) {
+      // The host sizes the teams; everyone picks their own race and team
+      if (peer.host && Number.isInteger(m.teamSize) && m.teamSize! >= 1 && m.teamSize! <= MAX_BATTLE_TEAM) this.teamSize = m.teamSize!;
+      if (typeof m.race === 'string' && /^[a-z]{1,20}$/.test(m.race)) peer.race = m.race;
+      if (m.team === 0 || m.team === 1) peer.team = m.team;
       this.sendLobby();
     } else if (m.t === 'start' && peer.host && !this.started) {
       // A team shares one ring, an arc each
       if (this.mode === 'team' && this.joined.length > MAX_TEAM_PLAYERS) return this.log(`relay: a team takes up to ${MAX_TEAM_PLAYERS} players`);
+      if (this.mode === 'ffa' && this.joined.length > MAX_PLAYERS) return this.log(`relay: free for all takes up to ${MAX_PLAYERS} players`);
+      if (BATTLE_MODES.includes(this.mode)) {
+        const setup = battleSetupFor(this.mode as 'battle' | 'coop', this.teamSize, this.joined.map((p) => ({ race: p.race, team: p.team })));
+        if (!setup) return this.log(`relay: ${this.joined.length} players do not fit ${this.mode} teams of ${this.teamSize}`);
+        return this.start(undefined, setup);
+      }
       this.start(resumeOf(m.resume, this.mode, this.joined.length));
     } else if (m.t === 'cmd' && this.started) {
       const command = validCommand(m.command);
@@ -141,7 +160,7 @@ export class Relay {
     const isHost = m.token === this.opts.token && !host;
     if (!isHost && !host) return this.reject(peer.socket, 'The host is not ready yet. Try again in a moment.');
     if (this.started) return this.reject(peer.socket, 'That game has already started.');
-    if (this.joined.length >= MAX_PLAYERS) return this.reject(peer.socket, `That game is full (${MAX_PLAYERS} players).`);
+    if (this.joined.length >= MAX_LOBBY) return this.reject(peer.socket, `That game is full (${MAX_LOBBY} players).`);
     if (host && m.data !== host.data) {
       return this.reject(peer.socket, "Your game files are different from the host's. Both of you: update Diablo II: Resurrected, then in Settings extract the game files again.");
     }
@@ -152,14 +171,14 @@ export class Relay {
   }
 
   /** Starts the match: fresh, or from the host's checkpoint, whose tick the bundles carry on from. */
-  private start(resume?: { json: string; seed: number; tick: number }): void {
+  private start(resume?: { json: string; seed: number; tick: number }, battle?: BattleSetup): void {
     this.started = true;
     const players = this.lobbyPlayers();
     const seed = resume?.seed ?? (this.opts.seed ?? (() => randomInt(1, 0x7fffffff)))();
     if (resume) this.tick = resume.tick;
     this.log(`relay: ${resume ? `resume at tick ${resume.tick}` : 'start'} ${this.mode} with ${players.map((p) => p.name).join(', ')}, seed ${seed}`);
     for (const p of this.joined) {
-      sendLine(p.socket, { t: 'start', seed, mode: this.mode, players, you: p.slot, ...(resume ? { resume: resume.json } : {}) } satisfies HostMessage);
+      sendLine(p.socket, { t: 'start', seed, mode: this.mode, players, you: p.slot, ...(resume ? { resume: resume.json } : {}), ...(battle ? { battle } : {}) } satisfies HostMessage);
     }
     const tickMs = this.opts.tickMs ?? TICK_MS;
     const t0 = performance.now();

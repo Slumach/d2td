@@ -213,10 +213,11 @@ export class MenuScene extends Phaser.Scene {
       ['Join online', () => this.scene.start('Lobby', { role: 'join' })],
       ['Back', () => this.go('main')],
     ];
+    // Seven choices: the medium stones, which stack without overlapping
     items.forEach(([label, onClick], i) => {
-      const y = BUTTONS_TOP + 60 + i * 66;
-      if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 400 }));
-      else this.parts.push(...button(this, CX - 200, y - 18, { label, onClick, width: 400 }));
+      const y = BUTTONS_TOP + 75 + i * 60;
+      if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { size: 'med', width: 350, fontSize: 18 }));
+      else this.parts.push(...button(this, CX - 190, y - 18, { label, onClick, width: 380 }));
     });
   }
 
