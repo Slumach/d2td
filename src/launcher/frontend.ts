@@ -32,6 +32,8 @@ export interface FrontendManifest {
   pauseButton: Sheet | null;
   settingsPanel: Sheet | null;
   optionsBg: Sheet | null;
+  /** D2R's checkbox, from 0.4.2's extraction: four states unchecked, four checked, four indeterminate. */
+  checkbox?: Sheet | null;
 }
 
 /** D2R draws its HD UI at this scale at 1080p; so do we, so it is the size players know. */

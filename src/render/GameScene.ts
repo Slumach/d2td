@@ -46,7 +46,7 @@ import {
   waveAt,
 } from '../sim/sim.ts';
 import { TABLE_NAMES, type Tables } from '../sim/tables.ts';
-import { TARGETING_MODES, type LootFilter } from '../sim/state.ts';
+import { KING_UPGRADES, TARGETING_MODES, type KingUpgrade, type LootFilter } from '../sim/state.ts';
 import type { DebuffDef, PierceDef, SkillDef } from '../sim/archetypes/types.ts';
 import { SKILL_ART, STATUS_OVERLAYS, SUMMON_BOLTS, SUMMON_HEROES } from './art.ts';
 import {
@@ -70,7 +70,7 @@ import {
   preloadAssets,
   type IconIndex,
 } from './assets.ts';
-import { D2Hud, hudManifest, preloadHud, type HudNumbers, type PanelButton, type SkillSlot, type SlotItem, type TowerPanelModel } from './d2hud.ts';
+import { D2Hud, hudKey, hudManifest, preloadHud, type HudNumbers, type PanelButton, type SkillSlot, type SlotItem, type TowerPanelModel } from './d2hud.ts';
 import { ItemPanels, type ItemPanelHost } from './itempanels.ts';
 import { preloadItemArt } from './itemart.ts';
 import { Keeper } from './keeper.ts';
@@ -78,11 +78,12 @@ import { arcOfSeat } from '../sim/cow.ts';
 import { tradeOf } from '../sim/items/trade.ts';
 import { angle64, spriteDirection } from './directions.ts';
 import { LocalDriver, NetDriver, type Driver, type LocalBattle } from './driver.ts';
-import { BattleHud, KEEP_NAMES } from './battlehud.ts';
+import { BattleHud, KEEP_NAMES, KING_NAMES } from './battlehud.ts';
+import { kingLevel, kingUpgradeCost, wholeShards } from '../sim/battle.ts';
 import { facingFromVector, type Facing8 } from './facing.ts';
-import { ISO_H, ISO_W, ORIGIN, WORLD_WIDTH, ellipseOf, project, screenVector, tileAtWorld, tileDiamond } from './iso.ts';
+import { ISO_H, ISO_W, ORIGIN, WORLD_WIDTH, ZONE_SHIFT_PX, ZONE_SHIFT_UNITS, ellipseOf, project, screenVector, tileAtWorld, tileAtWorldIn, tileDiamond, worldExtent } from './iso.ts';
 import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, PANEL_TOP } from './layout.ts';
-import { Minimap } from './minimap.ts';
+import { Minimap, type MinimapLayer } from './minimap.ts';
 import { BATTLE_COLUMNS, battleRows, Scoreboard, scoreRows } from './scoreboard.ts';
 import { saveCheckpoint } from './saves.ts';
 import { WorldView } from './view.ts';
@@ -145,7 +146,7 @@ const SUMMON_NOUNS: Record<string, [string, string]> = {
 const DEBUG = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug');
 
 
-type Selection = { kind: 'tile'; x: number; y: number } | { kind: 'tower'; id: number } | undefined;
+type Selection = { kind: 'tile'; x: number; y: number } | { kind: 'tower'; id: number } | { kind: 'king' } | undefined;
 
 /** What the lobby hands the game when the host starts an online match. */
 export interface OnlineStart {
@@ -177,6 +178,16 @@ const BATTLE_KEEPS = ['harrogath', 'fortress'];
 /** Eternal Conflict's workers: D2's hirelings of every act in turn, a Dark Hunter before they are extracted. */
 const WORKER_ART = HIRELING_IDS.map((id) => `mon:${id}:normal`);
 const WORKER_STAND_IN = 'mon:corruptrogue1:normal';
+/** The kings, by team: Tyrael for Harrogath, Baal for the Fortress (his king atlas stands; his wave art walks). */
+const KING_ART = [['mon:tyrael1:normal'], ['mon:baalcrab:king', 'mon:baalcrab:normal']];
+/** The shard pile beside each pad's workers, as the bake places it: in the divider column left of the pad, by the back row. */
+const SHARD_PILE = { dx: -5, y: 32 };
+/** Ids never pass this many on one ring: zone z's id n is keyed z * ZONE_IDS + n in the view maps. */
+const ZONE_IDS = 10_000_000;
+/** How much of its height a tower's life bar sits above its feet, and the bar's width. */
+const TOWER_BAR = { width: 26, lift: 0.55 };
+/** The tint of a fighter that is down for the round. */
+const DOWN_TINT = 0x404048;
 
 /** The grey-box ground, for a run without the extracted maps: field, then boss lair. */
 const GREY_BOX: [number, number] = [0x30402a, 0x34343a];
@@ -197,6 +208,9 @@ interface TowerView {
   facing: Facing8;
   cooldown: number;
   partnerCooldown: number;
+  /** Eternal Conflict: down for the round, and rallied to the king, as last drawn. */
+  down: boolean;
+  atKing: boolean;
 }
 
 interface MissileView {
@@ -246,7 +260,7 @@ export class GameScene extends Phaser.Scene {
   /** Why an online game stopped early (desync, host gone); empty while it runs. */
   private halted = '';
   private lastTick = -1;
-  private hover: { x: number; y: number } | undefined;
+  private hover: { zone: number; x: number; y: number } | undefined;
   private spawnLabel: Phaser.GameObjects.Text | undefined;
   private altKey: Phaser.Input.Keyboard.Key | undefined;
   private selection: Selection;
@@ -284,9 +298,12 @@ export class GameScene extends Phaser.Scene {
   /** The class tab the build menu shows. */
   /** The build tab chosen; every class the game data carries has one, in its order. */
   private buildClass = 'paladin';
-  /** Eternal Conflict: its HUD, the keep's sprites, the local battle to play again, and whether the result is on the profile. */
+  /** Eternal Conflict: its HUD, the lane marks and kings, the local battle to play again, and whether the result is on the profile. */
   private battleHud: BattleHud | undefined;
   private keepParts: Phaser.GameObjects.GameObject[] = [];
+  private kingSprites = new Map<number, Phaser.GameObjects.Sprite>();
+  private kingTexts = new Map<number, Phaser.GameObjects.Text>();
+  private shardTexts = new Map<string, Phaser.GameObjects.Text>();
   private localBattle: LocalBattle | undefined;
   private battleRecorded = false;
 
@@ -307,9 +324,32 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** The ring on screen. */
+  /** The ring on screen (in Eternal Conflict, your own team's battlefield; both are drawn). */
   private get sim(): Sim {
     return this.driver!.match.zones[this.view]!;
+  }
+
+  /** Every ring drawn: both battlefields in Eternal Conflict, else the ring on screen. */
+  private zones(): { z: number; sim: Sim }[] {
+    const match = this.driver?.match;
+    if (!match) return [];
+    if (match.state.battle) return match.zones.map((sim, z) => ({ z, sim }));
+    return [{ z: this.view, sim: this.sim }];
+  }
+
+  /** How far along sim x a zone's battlefield lies in the world: the enemy's beside your own. */
+  private shiftOf(z: number): number {
+    return this.driver?.match.state.battle ? z * ZONE_SHIFT_UNITS : 0;
+  }
+
+  /** The world point of a sim point on zone z. */
+  private at(z: number, x: number, y: number): Point {
+    return project(x + this.shiftOf(z), y);
+  }
+
+  /** A unit's key in the view maps: its id, on its zone. */
+  private kid(z: number, id: number): number {
+    return (this.driver?.match.state.battle ? z : 0) * ZONE_IDS + id;
   }
 
   /** Who this player is on the ring on screen (their slot on a team ring). */
@@ -334,9 +374,9 @@ export class GameScene extends Phaser.Scene {
     const arc = sim.arcOwners.indexOf(seatOf(match, player));
     const a = sim.map.arcs[Math.max(0, arc)]!;
     if (sim.map.open) {
-      // A battle lane: its middle rows
+      // A battle pad: its middle rows, on its team's battlefield
       const p = positionAt(sim.map, a.start + 15 * UNITS_PER_TILE);
-      const at = project(p.x, p.y);
+      const at = this.at(ringOf(match, player), p.x, p.y);
       this.camera.centreOn(at.x, at.y);
       return;
     }
@@ -414,8 +454,12 @@ export class GameScene extends Phaser.Scene {
       this.saves = 'solo';
     }
     const battle = this.driver.match.state.battle;
-    // A battle player builds only their race
-    if (battle) this.buildClass = battle.races[this.driver.me] ?? this.buildClass;
+    // A battle player builds only their race; both battlefields lie in one world
+    if (battle) {
+      this.buildClass = battle.races[this.driver.me] ?? this.buildClass;
+      const ext = worldExtent(this.driver.match.zones.length);
+      this.camera.setExtent(ext.width, ext.height);
+    }
     this.waveSeen = this.sim.state.wave;
     this.keeper = new Keeper(this.registry.get('launcher') as LauncherApi | undefined, this.gameData.items);
     // Eternal Conflict carries no items: the profile only takes its record
@@ -464,17 +508,15 @@ export class GameScene extends Phaser.Scene {
       this.ringGfx = this.add.graphics().setDepth(DEPTH.rings);
       this.overlayGfx = this.add.graphics().setDepth(DEPTH.overlay);
     });
-    this.minimap = new Minimap(this, this.camera, GAME_WIDTH - WORLD_WIDTH / 8 - 12, 84, 3100);
+    if (battle) {
+      // Under the scoreboard panel, both battlefields at a sixteenth
+      const ext = worldExtent(this.driver.match.zones.length);
+      this.minimap = new Minimap(this, this.camera, GAME_WIDTH - ext.width / 16 - 12, BattleHud.panelBottom(this.driver.match.players) + 12, 3100, ext, 16);
+    } else this.minimap = new Minimap(this, this.camera, GAME_WIDTH - WORLD_WIDTH / 8 - 12, 84, 3100);
     this.scoreboard = new Scoreboard(this, (GAME_WIDTH - WORLD_WIDTH / 8 - 24) / 2, 150, 5600);
     // FFA: the rings lie side by side, so panning on past an edge shows the next player's
     this.camera.onEdge = (dir) => {
       const match = this.driver?.match;
-      // Battle: the other team's battlefield lies past either edge
-      if (match?.state.battle) {
-        if (match.zones.length < 2) return false;
-        this.watch((this.view + dir + 2) % 2);
-        return true;
-      }
       if (!match || match.state.mode !== 'ffa' || match.players < 2) return false;
       this.watch((this.view + dir + match.players) % match.players);
       return true;
@@ -511,6 +553,8 @@ export class GameScene extends Phaser.Scene {
         match: () => this.driver!.match,
         me: () => this.driver!.me,
         nameOf: (slot) => this.nameOf(slot),
+        colourOf: (slot) => PLAYER_COLOURS[slot % PLAYER_COLOURS.length]!,
+        ...(this.d2 ? { barTop: this.d2.barTop, slotTexture: hudKey('slot') } : {}),
         issue: (c) => {
           this.issue(c);
           if (c.type === 'send') this.sounds.battle('send');
@@ -520,7 +564,7 @@ export class GameScene extends Phaser.Scene {
       });
       this.stageText.setVisible(false);
       this.aliveText.setVisible(false);
-      this.toast(`You play the ${this.gameData.classes[this.buildClass]?.name ?? this.buildClass}. Build beside your lane before the first wave.`);
+      this.toast(`You play the ${this.gameData.classes[this.buildClass]?.name ?? this.buildClass}. Build on your pad before the first wave: your fighters hold the creeps and fall if they are overrun.`);
     }
     if (this.d2) {
       // D2 shows no status line: lives, gold and the wave live in the panel; hints sit just above it
@@ -555,7 +599,7 @@ export class GameScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-HOME', () => {
       const d = this.driver;
       if (!d) return;
-      if ((d.match.state.mode === 'ffa' || battle) && this.view !== ringOf(d.match, d.me)) this.watch(ringOf(d.match, d.me));
+      if (d.match.state.mode === 'ffa' && this.view !== ringOf(d.match, d.me)) this.watch(ringOf(d.match, d.me));
       this.lookAtArcOf(d.me);
     });
     if (online || battle) {
@@ -565,10 +609,7 @@ export class GameScene extends Phaser.Scene {
         const match = this.driver!.match;
         if (!Number.isInteger(n) || n < 1 || n > match.players) return;
         if (match.state.mode === 'ffa' && n - 1 !== this.view) this.watch(n - 1);
-        else if (match.state.battle && ringOf(match, n - 1) !== this.view) {
-          this.watch(ringOf(match, n - 1));
-          this.lookAtArcOf(n - 1);
-        } else this.lookAtArcOf(n - 1);
+        else this.lookAtArcOf(n - 1);
       });
     }
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => (this.hover = this.camera.dragging ? undefined : this.tileAt(p)));
@@ -691,115 +732,141 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Eternal Conflict: each lane's player named at its top in their colour, and the keep at the
-   * back: the Worldstone, with Tyrael beside it.
+   * Eternal Conflict: on both battlefields, each pad's player named at its top in their
+   * colour, and the king on his platform at the back.
    */
   private markLanes(): void {
     const d = this.driver;
     if (!d) return;
-    const { map } = this.sim;
     const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
     this.camera.asWorld(() => {
-      map.arcs.forEach((arc, k) => {
-        const owner = arcOwner(d.match, this.view, k);
-        const colour = PLAYER_COLOURS[owner % PLAYER_COLOURS.length]!;
-        const top = positionAt(map, arc.start + UNITS_PER_TILE);
-        const at = project(top.x, top.y);
-        const race = d.match.state.battle?.races[owner];
-        const label = `${this.nameOf(owner)}${race ? `, ${this.gameData.classes[race]?.name ?? race}` : ''}`;
-        this.keepParts.push(
-          this.add.text(Math.round(at.x), Math.round(at.y) - 16, label, { fontFamily: FONT, fontSize: '13px', color: hex(colour), stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setDepth(DEPTH.overlay),
-        );
-      });
-    });
-    this.drawKeep();
-  }
-
-  /** The keep where the lanes meet: Tyrael beside the Worldstone. */
-  private drawKeep(): void {
-    const { map } = this.sim;
-    if (!map.king || !map.tyrael) return;
-    this.camera.asWorld(() => {
-      const k = project((map.king!.x + 0.5) * UNITS_PER_TILE, (map.king!.y + 0.5) * UNITS_PER_TILE);
-      // The Worldstone stands in the baked battlefield; a drawn crystal stands in without it
-      const baked = (this.cache.json.get(MAP_KEY) as MapManifest | undefined)?.battle !== undefined;
-      const g = this.add.graphics().setDepth(DEPTH.units + k.y / 1000).setVisible(!baked);
-      g.fillStyle(0x6040a0, 0.9).fillTriangle(k.x - 14, k.y, k.x + 14, k.y, k.x, k.y - 70);
-      g.fillStyle(0xa080f0, 0.8).fillTriangle(k.x - 6, k.y - 4, k.x + 8, k.y - 4, k.x + 1, k.y - 60);
-      g.lineStyle(2, 0xd0c0ff, 0.9).strokeTriangle(k.x - 14, k.y, k.x + 14, k.y, k.x, k.y - 70);
-      this.keepParts.push(g);
-      const t = project((map.tyrael!.x + 0.5) * UNITS_PER_TILE, (map.tyrael!.y + 0.5) * UNITS_PER_TILE);
-      const key = monsterKey('tyrael1', 'normal');
-      if (this.textures.exists(key)) {
-        const s = this.sprite(key, Math.round(t.x), Math.round(t.y)).setDepth(DEPTH.units + t.y / 1000);
-        const anim = this.modeKey(key, 'NU', 'sw');
-        if (anim) s.play(anim);
-        this.keepParts.push(s);
-        this.tyraelSprite = s;
+      for (const { z, sim } of this.zones()) {
+        const { map } = sim;
+        map.arcs.forEach((arc, k) => {
+          const owner = arcOwner(d.match, z, k);
+          const colour = PLAYER_COLOURS[owner % PLAYER_COLOURS.length]!;
+          const top = positionAt(map, arc.start + UNITS_PER_TILE);
+          const at = this.at(z, top.x, top.y);
+          const race = d.match.state.battle?.races[owner];
+          const label = `${this.nameOf(owner)}${race ? `, ${this.gameData.classes[race]?.name ?? race}` : ''}`;
+          this.keepParts.push(
+            this.add.text(Math.round(at.x), Math.round(at.y) - 16, label, { fontFamily: FONT, fontSize: '13px', color: hex(colour), stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setDepth(DEPTH.overlay),
+          );
+        });
+        this.drawKing(z, sim);
       }
     });
   }
 
-  private tyraelSprite: Phaser.GameObjects.Sprite | undefined;
+  /** A team's king standing on his platform: Tyrael at Harrogath, Baal at the Fortress. */
+  private drawKing(z: number, sim: Sim): void {
+    const { map } = sim;
+    if (!map.king) return;
+    const k = this.at(z, (map.king.x + 0.5) * UNITS_PER_TILE, (map.king.y + 0.5) * UNITS_PER_TILE);
+    const key = (KING_ART[z] ?? KING_ART[0]!).find((t) => this.textures.exists(t));
+    if (key) {
+      const s = this.sprite(key, Math.round(k.x), Math.round(k.y)).setDepth(DEPTH.units + k.y / 1000);
+      const anim = this.modeKey(key, 'NU', 'sw') ?? this.modeKey(key, 'WL', 'sw');
+      if (anim) s.play(anim);
+      if (!this.modeKey(key, 'NU', 'sw')) s.anims.pause();
+      this.keepParts.push(s);
+      this.kingSprites.set(z, s);
+    } else {
+      // No art: a stone marker where the king stands
+      const g = this.add.graphics().setDepth(DEPTH.units + k.y / 1000);
+      g.fillStyle(0xc8c0a0, 0.9).fillEllipse(k.x, k.y, 40, 20);
+      this.keepParts.push(g);
+    }
+    // The king's upgrade counters beside him, as Legion shows them
+    const t = this.add.text(Math.round(k.x) + 46, Math.round(k.y) - 70, '', { fontFamily: FONT, fontSize: '11px', color: '#e8e0c8', stroke: '#000000', strokeThickness: 3, lineSpacing: 2 }).setResolution(3).setDepth(DEPTH.overlay);
+    this.keepParts.push(t);
+    this.kingTexts.set(z, t);
+  }
+
   /** Battlefield grounds asked for, so each loads once. */
   private battlefieldLoading = new Set<string>();
-  /** Eternal Conflict: the workers standing in each lane's back row, by lane and slot; the sends seen queued. */
+  /** Eternal Conflict: the workers standing in each pad's back row, by zone, lane and slot; the sends seen queued. */
   private workerSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private queuedSeen = 0;
 
   /**
-   * Eternal Conflict, every tick: each lane's workers in its back row, Tyrael striking, what
-   * reached the Worldstone (its damage floating red over it), and a word when a send is
-   * made at your lane.
+   * Eternal Conflict, every tick, on both battlefields: each pad's workers swinging at the
+   * shard pile beside it (its count over the pile), the king swinging when he strikes and
+   * his counters, what hit him (its damage floating red), and a word when a send is made
+   * at your team's pads.
    */
   private syncBattle(): void {
     const d = this.driver!;
-    const sim = this.sim;
-    const b = sim.state.battle!;
-    const slots = sim.map.workerSlots ?? [];
     const hired = WORKER_ART.filter((k) => this.textures.exists(k));
-    slots.forEach((spots, lane) => {
-      const seat = sim.arcOwners[lane] ?? 0;
-      const n = b.workers[seat] ?? 0;
-      spots.forEach((spot, i) => {
-        const id = `${lane}:${i}`;
-        const key = hired.length ? hired[i % hired.length]! : this.textures.exists(WORKER_STAND_IN) ? WORKER_STAND_IN : undefined;
-        const have = this.workerSprites.get(id);
-        if (i >= n || !key) {
-          have?.destroy();
-          this.workerSprites.delete(id);
-          return;
-        }
-        if (have) return;
-        const at = project((spot.x + 0.5) * UNITS_PER_TILE, (spot.y + 0.5) * UNITS_PER_TILE);
-        const s = this.sprite(key, Math.round(at.x), Math.round(at.y)).setDepth(DEPTH.units + at.y / 1000);
-        const anim = this.modeKey(key, 'NU', i % 2 ? 'se' : 'sw');
-        if (anim) s.play({ key: anim, startFrame: i % 3 });
-        this.workerSprites.set(id, s);
-      });
-    });
-    // Tyrael swings at what he strikes; the strike lands as a holy bolt's burst
-    if (sim.tyraelHits?.length) this.sounds.battle('tyrael');
-    if (sim.kingHits?.length && this.onOwnRing) this.sounds.battle('kingHit');
-    for (const h of sim.tyraelHits ?? []) {
-      const t = this.tyraelSprite;
-      if (t) {
-        const anim = this.modeKey(t.texture.key, 'A1', 'sw');
-        if (anim) t.play(anim).once('animationcomplete', () => {
-          const idle = this.modeKey(t.texture.key, 'NU', 'sw');
-          if (idle && t.active) t.play(idle);
+    for (const { z, sim } of this.zones()) {
+      const b = sim.state.battle!;
+      const slots = sim.map.workerSlots ?? [];
+      slots.forEach((spots, lane) => {
+        const seat = sim.arcOwners[lane] ?? 0;
+        const n = b.workers[seat] ?? 0;
+        spots.forEach((spot, i) => {
+          const id = `${z}:${lane}:${i}`;
+          const key = hired.length ? hired[i % hired.length]! : this.textures.exists(WORKER_STAND_IN) ? WORKER_STAND_IN : undefined;
+          const have = this.workerSprites.get(id);
+          if (i >= n || !key) {
+            have?.destroy();
+            this.workerSprites.delete(id);
+            return;
+          }
+          if (have) return;
+          const at = this.at(z, (spot.x + 0.5) * UNITS_PER_TILE, (spot.y + 0.5) * UNITS_PER_TILE);
+          const s = this.sprite(key, Math.round(at.x), Math.round(at.y)).setDepth(DEPTH.units + at.y / 1000);
+          // Mining: the workers swing at the pile to their left, all match long
+          const anim = this.modeKey(key, 'A1', 'w') ?? this.modeKey(key, 'NU', 'sw');
+          if (anim) s.play({ key: anim, startFrame: (i * 5) % 12, repeat: -1 });
+          this.workerSprites.set(id, s);
         });
+        // The shard count over the pile, once a worker mines
+        const cx = Math.floor(positionAt(sim.map, sim.map.arcs[lane]!.start + 10 * UNITS_PER_TILE).x / UNITS_PER_TILE);
+        const pid = `${z}:${lane}`;
+        let text = this.shardTexts.get(pid);
+        if (!text) {
+          const at = this.at(z, (cx + SHARD_PILE.dx + 0.5) * UNITS_PER_TILE, (SHARD_PILE.y + 0.5) * UNITS_PER_TILE);
+          text = this.add.text(Math.round(at.x), Math.round(at.y) - 44, '', { fontFamily: FONT, fontSize: '12px', color: '#b8d8ff', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setDepth(DEPTH.overlay);
+          this.shardTexts.set(pid, text);
+        }
+        const milli = b.shards[seat] ?? 0;
+        text.setText(n > 0 || milli > 0 ? `${wholeShards(milli)}.${Math.floor((milli % 1000) / 100)} shards` : '');
+      });
+      // The king swings at what he strikes; the strike lands as a holy bolt's burst
+      const king = this.kingSprites.get(z);
+      if (sim.kingStrikes?.length) this.sounds.battle('tyrael');
+      if (sim.kingHits?.length && z === this.view) this.sounds.battle('kingHit');
+      for (const h of sim.kingStrikes ?? []) {
+        if (king) {
+          const anim = this.modeKey(king.texture.key, 'A1', 'sw');
+          if (anim) {
+            king.anims.resume();
+            king.play(anim).once('animationcomplete', () => {
+              const idle = this.modeKey(king.texture.key, 'NU', 'sw') ?? this.modeKey(king.texture.key, 'WL', 'sw');
+              if (idle && king.active) {
+                king.play(idle);
+                if (!this.modeKey(king.texture.key, 'NU', 'sw')) king.anims.pause();
+              }
+            });
+          }
+        }
+        const c = this.chestIn(z, h);
+        this.effect('fistoftheheavensbolt', c.x, c.y);
       }
-      this.effect('fistoftheheavensbolt', this.chest(h).x, this.chest(h).y);
+      for (const hit of sim.kingHits ?? []) {
+        const at = this.at(z, hit.x, hit.y);
+        const t = this.add.text(Math.round(at.x), Math.round(at.y) - 60, `-${hit.damage}`, { fontFamily: FONT, fontSize: '15px', color: '#ff5040', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setDepth(DEPTH.effects);
+        this.tweens.add({ targets: t, y: t.y - 24, alpha: 0, duration: 1200, ease: 'Cubic.easeIn', onComplete: () => t.destroy() });
+      }
+      const counters = this.kingTexts.get(z);
+      if (counters) {
+        const rules = sim.data.battle!.rules.king.upgrades;
+        const lines = (['attack', 'hp', 'regen'] as KingUpgrade[]).map((u) => `${u === 'hp' ? 'Life' : u === 'regen' ? 'Regen' : 'Attack'} ${kingLevel(b, u)}/${rules[u].maxLevel}`);
+        counters.setText(lines.join('\n'));
+      }
     }
-    const king = sim.map.king;
-    for (const hit of sim.kingHits ?? []) {
-      if (!king) break;
-      const at = project((king.x + 0.5) * UNITS_PER_TILE, (king.y + 0.5) * UNITS_PER_TILE);
-      const t = this.add.text(Math.round(at.x), Math.round(at.y) - 80, `-${hit.damage}`, { fontFamily: FONT, fontSize: '15px', color: '#ff5040', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setDepth(DEPTH.effects);
-      this.tweens.add({ targets: t, y: t.y - 24, alpha: 0, duration: 1200, ease: 'Cubic.easeIn', onComplete: () => t.destroy() });
-    }
-    // A send made at your own team's lanes, as it is queued
+    // A send made at your own team's pads, as it is queued
     const own = d.match.zones[ringOf(d.match, d.me)]!.state.battle!;
     if (own.queued.length < this.queuedSeen) this.queuedSeen = 0;
     for (; this.queuedSeen < own.queued.length; this.queuedSeen++) {
@@ -812,6 +879,7 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+
   /** Alone, the monsters' one spawn is marked on the ground until the first wave: the place to build near. */
   private markSpawn(): void {
     const sp = positionAt(this.sim.map, this.sim.map.arcs[0]!.spawn);
@@ -822,19 +890,23 @@ export class GameScene extends Phaser.Scene {
     this.toast('Monsters come from the marked corner; build near it');
   }
 
-  /** The tower whose auras are shown: the selected tower, or the one under the pointer. */
+  /** The tower whose auras are shown: the selected tower, or the one under the pointer (on the ring on screen). */
   private highlightedTower(): number | undefined {
     if (this.selection?.kind === 'tower') return this.selection.id;
     const h = this.hover;
-    return h ? this.sim.state.towers.find((t) => t.tileX === h.x && t.tileY === h.y)?.id : undefined;
+    return h && h.zone === this.view ? this.sim.state.towers.find((t) => t.tileX === h.x && t.tileY === h.y)?.id : undefined;
   }
 
-  private tileAt(p: Phaser.Input.Pointer): { x: number; y: number } | undefined {
+  /** The tile under the pointer, with the zone it is on (0 outside Eternal Conflict), or undefined over the HUD or off the map. */
+  private tileAt(p: Phaser.Input.Pointer): { zone: number; x: number; y: number } | undefined {
     if (this.d2 ? this.d2.covers(p.x, p.y) : p.y < HUD_HEIGHT || p.y >= PANEL_TOP) return undefined;
     if (this.inventory?.covers(p.x, p.y) || this.minimap.covers(p.x, p.y) || this.battleHud?.covers(p.x, p.y)) return undefined;
     const w = this.camera.worldPoint(p.x, p.y);
-    return tileAtWorld(w.x, w.y);
+    if (this.driver?.match.state.battle) return tileAtWorldIn(w.x, w.y, this.driver.match.zones.length);
+    const t = tileAtWorld(w.x, w.y);
+    return t ? { zone: this.view, ...t } : undefined;
   }
+
 
   /** True when the ring on screen is this player's own. */
   private get onOwnRing(): boolean {
@@ -846,6 +918,19 @@ export class GameScene extends Phaser.Scene {
     if (this.inventory?.holding) return;
     const tile = this.tileAt(p);
     if (!tile) return;
+    // The enemy's battlefield can be looked at, not touched
+    if (tile.zone !== this.view) {
+      this.selection = undefined;
+      this.panelKey = '';
+      return;
+    }
+    // Your own king: his panel with the team's upgrades
+    const king = this.sim.map.king;
+    if (king && this.onOwnRing && Math.abs(tile.x - king.x) <= 1 && Math.abs(tile.y - king.y) <= 1) {
+      this.selection = { kind: 'king' };
+      this.panelKey = '';
+      return;
+    }
     // Anyone's tower can be looked at; only your own arc's free tiles can be built on
     const tower = towerAt(this.sim, tile.x, tile.y);
     if (tower) this.selection = { kind: 'tower', id: tower.id };
@@ -853,6 +938,7 @@ export class GameScene extends Phaser.Scene {
     else this.selection = undefined;
     this.panelKey = '';
   }
+
 
   /** Player input only ever becomes commands; the match applies them on a later tick. */
   issue(...commands: Command[]): void {
@@ -871,6 +957,8 @@ export class GameScene extends Phaser.Scene {
       this.clearViews();
       this.driver = undefined;
       this.battleHud?.destroy();
+      for (const o of this.keepParts) o.destroy();
+      this.keepParts = [];
       this.scene.stop('Pause');
       this.scene.start('Menu');
       return;
@@ -968,6 +1056,8 @@ export class GameScene extends Phaser.Scene {
   private clearViews(): void {
     for (const s of this.workerSprites.values()) s.destroy();
     this.workerSprites.clear();
+    for (const t of this.shardTexts.values()) t.destroy();
+    this.shardTexts.clear();
     this.lastTick = -1;
     this.selection = undefined;
     this.panelKey = '';
@@ -1027,12 +1117,6 @@ export class GameScene extends Phaser.Scene {
     this.clearViews();
     this.mapShown = '-';
     this.redrawGround();
-    if (this.driver?.match.state.battle) {
-      for (const o of this.keepParts) o.destroy();
-      this.keepParts = [];
-      this.tyraelSprite = undefined;
-      this.markLanes();
-    }
   }
 
   private nameOf(slot: number): string {
@@ -1054,6 +1138,7 @@ export class GameScene extends Phaser.Scene {
       });
     }
     if (this.selection?.kind === 'tower' && !towerById(this.sim, this.selection.id)) this.selection = undefined;
+    if (this.selection?.kind === 'king' && !this.sim.state.battle) this.selection = undefined;
     if (DEBUG && this.game.loop.frame % 60 === 0) {
       for (const o of this.children.list) {
         if (!(o instanceof Phaser.GameObjects.Sprite)) continue;
@@ -1070,7 +1155,10 @@ export class GameScene extends Phaser.Scene {
     this.inventory?.sync();
     this.syncCowLevel();
     this.camera.asWorld(() => this.fx?.update());
-    this.minimap.draw(this.sim, (arc) => this.arcColour(arc));
+    if (this.driver.match.state.battle) {
+      const layers: MinimapLayer[] = this.zones().map(({ z, sim }) => ({ sim, dx: z * ZONE_SHIFT_PX.x, dy: z * ZONE_SHIFT_PX.y }));
+      this.minimap.drawLayers(layers, (z, arc) => PLAYER_COLOURS[arcOwner(this.driver!.match, z, arc) % PLAYER_COLOURS.length]!);
+    } else this.minimap.draw(this.sim, (arc) => this.arcColour(arc));
     this.drawPlayers();
   }
 
@@ -1091,7 +1179,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (this.scoreboard.visible && match.state.battle) {
       const b = match.state.battle;
-      this.scoreboard.table(BATTLE_COLUMNS, battleRows(match, d.me, (slot) => this.nameOf(slot), colourOf), `${match.state.mode === 'coop' ? 'Eternal Conflict co-op' : 'Eternal Conflict'}: wave ${b.wave} of ${match.data.battle!.waves.length}`);
+      this.scoreboard.table(BATTLE_COLUMNS, battleRows(match, d.me, (slot) => this.nameOf(slot), colourOf), `${match.state.mode === 'coop' ? 'Eternal Conflict co-op' : 'Eternal Conflict'}: wave ${b.wave} of ${match.zones[0]!.data.waves.length}`);
     } else if (this.scoreboard.visible) {
       const title = match.state.mode === 'ffa' ? 'Free for All' : match.state.mode === 'team' ? 'Party' : 'Score';
       this.scoreboard.update(scoreRows(match, d.me, (slot) => this.nameOf(slot), colourOf, (wave) => this.waveLabel(wave)), title);
@@ -1124,19 +1212,27 @@ export class GameScene extends Phaser.Scene {
 
   /** A sim point on screen, lifted to about chest height for effects. */
   private chest(p: Point): Point {
-    const at = project(p.x, p.y);
+    return this.chestIn(this.view, p);
+  }
+
+  /** A sim point on zone z on screen, at chest height. */
+  private chestIn(z: number, p: Point): Point {
+    const at = this.at(z, p.x, p.y);
     return { x: at.x, y: at.y - 30 };
   }
+
 
   private syncTick(): void {
     const s = this.sim.state;
     if (s.tick === this.lastTick) return;
     this.lastTick = s.tick;
-    this.syncMonsters();
-    this.syncTowers();
-    this.syncMissiles();
-    this.syncSummons();
-    this.floatGold();
+    for (const { z, sim } of this.zones()) {
+      this.syncMonsters(z, sim);
+      this.syncTowers(z, sim);
+      this.syncMissiles(z, sim);
+      this.syncSummons(z, sim);
+      this.floatGold(z, sim);
+    }
     if (this.battleHud) this.syncBattle();
     this.drops?.sync(this.sim.data.items, s.drops, this.seat, this.sim.state.lootFilters[this.seat] ?? 'default', this.altKey?.isDown === true);
     if (this.spawnLabel && s.wave >= 1) {
@@ -1153,11 +1249,11 @@ export class GameScene extends Phaser.Scene {
    * A "+N" in D2's gold at each corpse, what that kill paid (gold find and Find Item
    * included): your kills on your ring, every kill on a ring you watch. Options turns it off.
    */
-  private floatGold(): void {
+  private floatGold(z: number, sim: Sim): void {
     if (this.registry.get('goldNumbers') === false) return;
-    for (const p of this.sim.paid) {
-      if (this.onOwnRing && p.player !== this.seat) continue;
-      const at = project(p.x, p.y);
+    for (const p of sim.paid) {
+      if (z === this.view && this.onOwnRing && p.player !== this.seat) continue;
+      const at = this.at(z, p.x, p.y);
       const t = this.add
         .text(Math.round(at.x), Math.round(at.y) - 28, `+${p.gold}`, { fontFamily: FONT, fontSize: '13px', color: GOLD_TEXT, stroke: '#000000', strokeThickness: 3 })
         .setOrigin(0.5, 1)
@@ -1229,29 +1325,30 @@ export class GameScene extends Phaser.Scene {
     };
   }
 
-  private syncMonsters(): void {
-    const s = this.sim.state;
+  private syncMonsters(z: number, sim: Sim): void {
+    const s = sim.state;
     const alive = new Set<number>();
     const riders = new Set<string>();
     /** Each curse skill marks one freshly cursed spot per tick with its area art. */
     const freshCurse = new Map<string, Point>();
     for (const m of s.monsters) {
-      alive.add(m.id);
-      const { x: px, y: py } = project(m.x, m.y);
-      let view = this.monsters.get(m.id);
+      const k = this.kid(z, m.id);
+      alive.add(k);
+      const { x: px, y: py } = this.at(z, m.x, m.y);
+      let view = this.monsters.get(k);
       if (!view) {
-        const def = this.sim.data.monsters[m.def]!;
+        const def = sim.data.monsters[m.def]!;
         const texture = monsterKey(def.base, m.rank, def.artVariant);
         if (!this.textures.exists(texture)) continue;
         view = { sprite: this.sprite(texture, px, py), texture, def: m.def, x: m.x, y: m.y, facing: 's', mode: '' };
-        this.monsters.set(m.id, view);
+        this.monsters.set(k, view);
       }
       const moved = m.x !== view.x || m.y !== view.y;
       if (moved) {
         const v = screenVector(m.x - view.x, m.y - view.y);
         view.facing = facingFromVector(v.x, v.y);
       }
-      // Standing still and not stunned, frozen or casting means it is fighting a blocker
+      // Standing still and not stunned, frozen or casting means it is fighting a blocker, a fighter or the king
       const held = m.stunTicks > 0 || m.freezeTicks > 0 || m.castTicks > 0;
       const mode = moved ? 'WL' : held ? view.mode || 'WL' : 'A1';
       if (mode === 'A1' && view.mode === 'A1' && !view.sprite.anims.isPlaying) view.sprite.play(animKey(view.texture, 'A1', view.facing));
@@ -1264,32 +1361,32 @@ export class GameScene extends Phaser.Scene {
       const depth = DEPTH.units + py / 1000;
       view.sprite.setPosition(Math.round(px), Math.round(py)).setDepth(depth);
       // Cold shows blue (frozen deeper than chilled), poison green
-      const slowed = (this.sim.fx.monsters[m.id]?.slowPct ?? 0) > 0 || m.slowPct > 0 || m.chillTicks > 0;
+      const slowed = (sim.fx.monsters[m.id]?.slowPct ?? 0) > 0 || m.slowPct > 0 || m.chillTicks > 0;
       const tint = m.freezeTicks > 0 ? FROZEN_TINT : slowed ? CHILL_TINT : m.poisonTicks > 0 ? POISON_TINT : undefined;
       if (tint !== undefined) view.sprite.setTint(tint);
       else view.sprite.clearTint();
 
       // The first curse it carries rides on it as its overlay.txt effect; frozen shows ice
-      const key = `m${m.id}`;
+      const key = `m${k}`;
       riders.add(key);
       const curse = m.curses[0];
       this.fx.ride(key, curse ? SKILL_ART[baseSkillId(curse.skill)]?.overlay : undefined, { x: px, y: py }, depth + 0.0005);
       riders.add(`${key}f`);
       this.fx.ride(`${key}f`, m.freezeTicks > 0 ? STATUS_OVERLAYS.frozen : undefined, { x: px, y: py }, depth + 0.0004);
-      const before = this.cursesSeen.get(m.id);
+      const before = this.cursesSeen.get(k);
       for (const c of m.curses) if (!before?.has(baseSkillId(c.skill)) && !freshCurse.has(baseSkillId(c.skill))) freshCurse.set(baseSkillId(c.skill), { x: px, y: py });
-      this.cursesSeen.set(m.id, new Set(m.curses.map((c) => baseSkillId(c.skill))));
+      this.cursesSeen.set(k, new Set(m.curses.map((c) => baseSkillId(c.skill))));
     }
     for (const [skill, at] of freshCurse) {
       const art = SKILL_ART[skill]?.area;
       if (art) this.effect(art, at.x, at.y);
     }
-    for (const id of this.cursesSeen.keys()) if (!alive.has(id)) this.cursesSeen.delete(id);
+    for (const id of this.cursesSeen.keys()) if (Math.floor(id / ZONE_IDS) === this.kid(z, 0) / ZONE_IDS && !alive.has(id)) this.cursesSeen.delete(id);
 
     // Gone this tick: a new corpse in its place means it died, otherwise it leaked
-    const fresh = s.corpses.filter((c) => !this.corpses.has(c.id));
+    const fresh = s.corpses.filter((c) => !this.corpses.has(this.kid(z, c.id)));
     for (const [id, view] of this.monsters) {
-      if (alive.has(id)) continue;
+      if (alive.has(id) || Math.floor(id / ZONE_IDS) !== this.kid(z, 0) / ZONE_IDS) continue;
       this.monsters.delete(id);
       const corpse = fresh.find((c) => c.def === view.def && Math.abs(c.x - view.x) <= 400 && Math.abs(c.y - view.y) <= 400);
       if (!corpse) {
@@ -1297,7 +1394,7 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
       fresh.splice(fresh.indexOf(corpse), 1);
-      this.sounds.death(this.sim.data.monsters[view.def]?.base ?? baseMonsterId(view.def));
+      this.sounds.death(sim.data.monsters[view.def]?.base ?? baseMonsterId(view.def));
       this.sounds.gold();
       view.sprite.clearTint().setDepth(DEPTH.corpses);
       view.sprite.anims.resume();
@@ -1309,27 +1406,27 @@ export class GameScene extends Phaser.Scene {
       view.sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
         if (view.sprite.active && this.anims.exists(dead)) view.sprite.play(dead);
       });
-      this.corpses.set(corpse.id, view.sprite);
+      this.corpses.set(this.kid(z, corpse.id), view.sprite);
     }
 
     // A corpse gone before it rotted was taken: Corpse Explosion bursts it, Revive raises it
     // (its summon shows that), a Fallen Shaman raises it (its monster shows that)
-    const corpseIds = new Set(s.corpses.map((c: Corpse) => c.id));
-    const exploders = this.actedThisTick.filter((t) => activeSkill(this.sim, t)?.skill.archetype === 'corpse');
+    const corpseIds = new Set(s.corpses.map((c: Corpse) => this.kid(z, c.id)));
+    const exploders = this.actedThisTick.filter((t) => activeSkill(sim, t)?.skill.archetype === 'corpse');
     for (const [id, seen] of this.corpseSeen) {
-      if (corpseIds.has(id)) continue;
+      if (Math.floor(id / ZONE_IDS) !== this.kid(z, 0) / ZONE_IDS || corpseIds.has(id)) continue;
       this.corpseSeen.delete(id);
       if (seen.ticksLeft <= 1 || exploders.length === 0) continue;
-      const near = exploders.find((t) => (t.x - seen.x) ** 2 + (t.y - seen.y) ** 2 <= (activeSkill(this.sim, t)!.skill.rangeUnits + 200) ** 2);
+      const near = exploders.find((t) => (t.x - seen.x) ** 2 + (t.y - seen.y) ** 2 <= (activeSkill(sim, t)!.skill.rangeUnits + 200) ** 2);
       if (!near) continue;
-      const art = SKILL_ART[baseSkillId(activeSkill(this.sim, near)!.skill.id)];
-      const at = project(seen.x, seen.y);
+      const art = SKILL_ART[baseSkillId(activeSkill(sim, near)!.skill.id)];
+      const at = this.at(z, seen.x, seen.y);
       if (art?.corpse) this.effect(art.corpse, at.x, at.y);
       for (const a of art?.impact ?? []) this.effect(a, at.x, at.y);
     }
-    for (const c of s.corpses) this.corpseSeen.set(c.id, { x: c.x, y: c.y, ticksLeft: c.ticksLeft });
+    for (const c of s.corpses) this.corpseSeen.set(this.kid(z, c.id), { x: c.x, y: c.y, ticksLeft: c.ticksLeft });
     for (const [id, sprite] of this.corpses) {
-      if (!corpseIds.has(id)) {
+      if (Math.floor(id / ZONE_IDS) === this.kid(z, 0) / ZONE_IDS && !corpseIds.has(id)) {
         this.corpses.delete(id);
         // A death still playing (Baal's runs past the corpse's ten seconds) finishes first
         if (sprite.active && sprite.anims.isPlaying && sprite.anims.currentAnim?.key.includes('|DT|')) {
@@ -1341,36 +1438,42 @@ export class GameScene extends Phaser.Scene {
     // only now and then, so the tower stays readable; and every rider of a unit that is gone
     const enchant = SKILL_ART['enchant']?.overlay;
     for (const t of s.towers) {
-      if ((this.sim.fx.towers[t.id]?.fireMax ?? 0) <= 0 || !enchant) continue;
-      const key = `t${t.id}`;
+      if ((sim.fx.towers[t.id]?.fireMax ?? 0) <= 0 || !enchant) continue;
+      const key = `t${this.kid(z, t.id)}`;
       riders.add(key);
-      const at = project(t.x, t.y);
+      const at = this.at(z, t.x, t.y);
       const depth = DEPTH.units + at.y / 1000 + 0.0005;
       this.fx.ride(key, enchant, { x: at.x + ENCHANT_HAND.x, y: at.y + ENCHANT_HAND.y }, depth, { scale: 0.22, alpha: 0.35 });
       if ((s.tick + t.id * 37) % ENCHANT_FLARE_TICKS === 0) this.fx.overlayOnce(enchant, at, depth, 0.5);
     }
     // The selected or hovered aura tower: D2's aura glow on every tower its auras reach
-    const lit = this.highlightedTower();
-    const source = lit !== undefined ? towerById(this.sim, lit) : undefined;
+    const lit = z === this.view ? this.highlightedTower() : undefined;
+    const source = lit !== undefined ? towerById(sim, lit) : undefined;
     if (source) {
-      for (const aura of projected(this.sim, source)) {
+      for (const aura of projected(sim, source)) {
         const overlay = SKILL_ART[aura.skill]?.overlay;
         if (!overlay || !helps(aura)) continue;
-        for (const { tower } of reachOf(this.sim, source, aura)) {
-          const key = `ta${tower.id}.${aura.skill}`;
+        for (const { tower } of reachOf(sim, source, aura)) {
+          const key = `ta${this.kid(z, tower.id)}.${aura.skill}`;
           riders.add(key);
-          const at = project(tower.x, tower.y);
+          const at = this.at(z, tower.x, tower.y);
           this.fx.ride(key, overlay, at, DEPTH.units + at.y / 1000 + 0.0006);
         }
       }
     }
-    this.fx.keepRiders(riders);
+    // Riders of units on the other battlefield stay; this zone's that are gone go
+    const zone = this.kid(z, 0) / ZONE_IDS;
+    const zoneOf = (key: string) => {
+      const m = /^(?:ta|t|m)(\d+)/.exec(key);
+      return m ? Math.floor(Number(m[1]) / ZONE_IDS) : zone;
+    };
+    this.fx.keepRiders(riders, (key) => zoneOf(key) !== zone);
   }
 
-  private nearestMonster(from: { x: number; y: number }, range: number, skip: number[] = []): Monster | undefined {
+  private nearestMonster(sim: Sim, from: { x: number; y: number }, range: number, skip: number[] = []): Monster | undefined {
     let best: Monster | undefined;
     let bestD = range * range;
-    for (const m of this.sim.state.monsters) {
+    for (const m of sim.state.monsters) {
       if (m.hp <= 0 || skip.includes(m.id)) continue;
       const d = (m.x - from.x) ** 2 + (m.y - from.y) ** 2;
       if (d <= bestD) {
@@ -1380,6 +1483,10 @@ export class GameScene extends Phaser.Scene {
     }
     return best;
   }
+
+
+
+
 
   /** Towers whose skill (or evolved partner skill) acted on the tick being drawn. */
   private actedThisTick: Tower[] = [];
@@ -1417,41 +1524,66 @@ export class GameScene extends Phaser.Scene {
   /** The last cooldowns seen of each legend rider, to tell when it acted. */
   private riders = new Map<number, { cooldown: number; partnerCooldown: number }>();
 
-  private syncTowers(): void {
-    const s = this.sim.state;
+  private syncTowers(z: number, sim: Sim): void {
+    const s = sim.state;
     const seen = new Set<number>();
     this.actedThisTick = [];
     // A legend's riders have no figure of their own: their casts show at the legend, first,
     // so the legend knows to swing
     for (const t of s.towers) {
       if (t.legendOf !== undefined) {
-        const was = this.riders.get(t.id);
-        this.riders.set(t.id, { cooldown: t.cooldown, partnerCooldown: t.partnerCooldown });
+        const k = this.kid(z, t.id);
+        const was = this.riders.get(k);
+        this.riders.set(k, { cooldown: t.cooldown, partnerCooldown: t.partnerCooldown });
         if (!was) continue;
         const acted = t.cooldown > was.cooldown;
         if (acted || t.partnerCooldown > was.partnerCooldown) this.actedThisTick.push(t);
-        const active = acted ? activeSkill(this.sim, t) : undefined;
-        if (active) this.castEffects(t, active.skill.id, active.lvl);
-        if (t.partnerCooldown > was.partnerCooldown && t.partnerSkill) this.castEffects(t, t.partnerSkill, t.partnerLevel);
+        const active = acted ? activeSkill(sim, t) : undefined;
+        if (active) this.castEffects(z, sim, t, active.skill.id, active.lvl);
+        if (t.partnerCooldown > was.partnerCooldown && t.partnerSkill) this.castEffects(z, sim, t, t.partnerSkill, t.partnerLevel);
       }
     }
     for (const t of s.towers) {
       if (t.legendOf !== undefined) continue;
-      seen.add(t.id);
-      const { x: px, y: py } = project(t.x, t.y);
-      const legend = t.legend ? this.sim.data.legends.find((l) => l.id === t.legend) : undefined;
+      const k = this.kid(z, t.id);
+      seen.add(k);
+      const { x: px, y: py } = this.at(z, t.x, t.y);
+      const legend = t.legend ? sim.data.legends.find((l) => l.id === t.legend) : undefined;
       const texture = legend ? monsterKey(legend.monster, 'normal') : (this.wornLook(t) ?? heroKey(t));
-      let view = this.towers.get(t.id);
+      let view = this.towers.get(k);
       if (view && view.texture !== texture) {
         view.sprite.destroy();
         view = undefined;
       }
       if (!view) {
         if (!this.textures.exists(texture)) continue;
-        view = { sprite: this.sprite(texture, px, py), texture, facing: 's', cooldown: t.cooldown, partnerCooldown: t.partnerCooldown };
-        this.towers.set(t.id, view);
+        view = { sprite: this.sprite(texture, px, py), texture, facing: 's', cooldown: t.cooldown, partnerCooldown: t.partnerCooldown, down: false, atKing: false };
+        this.towers.set(k, view);
       }
-      const target = this.nearestMonster(t, FACE_RANGE);
+      // Eternal Conflict: a fighter that is down lies dark until the next build phase; one rallied flashes as it goes and comes
+      const down = s.battle !== undefined && (t.hp ?? 1) <= 0;
+      const atKing = t.atKing === true;
+      if (atKing !== view.atKing) {
+        view.atKing = atKing;
+        this.effect('townportalcast', px, py - 10);
+      }
+      if (down !== view.down) {
+        view.down = down;
+        if (down) {
+          view.sprite.setTint(DOWN_TINT).setAlpha(0.5);
+          view.sprite.anims.pause();
+        } else {
+          view.sprite.clearTint().setAlpha(1);
+          view.sprite.anims.resume();
+        }
+      }
+      if (down) {
+        view.cooldown = t.cooldown;
+        view.partnerCooldown = t.partnerCooldown;
+        view.sprite.setPosition(px, py).setDepth(DEPTH.corpses + py / 1000);
+        continue;
+      }
+      const target = this.nearestMonster(sim, t, FACE_RANGE);
       if (target) {
         const v = screenVector(target.x - t.x, target.y - t.y);
         view.facing = facingFromVector(v.x, v.y);
@@ -1478,31 +1610,32 @@ export class GameScene extends Phaser.Scene {
         this.playIfChanged(view.sprite, stand, true);
       }
       if (acted) {
-        const active = activeSkill(this.sim, t);
-        if (active) this.castEffects(t, active.skill.id, active.lvl);
-        this.meleeHit(t);
+        const active = activeSkill(sim, t);
+        if (active) this.castEffects(z, sim, t, active.skill.id, active.lvl);
+        this.meleeHit(z, sim, t);
       }
-      if (partnerActed && t.partnerSkill) this.castEffects(t, t.partnerSkill, t.partnerLevel);
+      if (partnerActed && t.partnerSkill) this.castEffects(z, sim, t, t.partnerSkill, t.partnerLevel);
       view.sprite.setPosition(px, py).setDepth(DEPTH.units + py / 1000).setAlpha(t.line ? 1 : 0.55);
     }
     for (const [id, view] of this.towers) {
-      if (!seen.has(id)) {
+      if (Math.floor(id / ZONE_IDS) === this.kid(z, 0) / ZONE_IDS && !seen.has(id)) {
         view.sprite.destroy();
         this.towers.delete(id);
       }
     }
   }
 
+
   /**
    * What a tower's cast looks like when the skill leaves no missile: the cast art at the
    * tower, Chain Lightning's arcs from target to target, Static Field's burst.
    */
-  private castEffects(t: Tower, skillId: string, lvl: number): void {
+  private castEffects(z: number, sim: Sim, t: Tower, skillId: string, lvl: number): void {
     this.sounds.cast(baseSkillId(skillId));
-    const skill = this.sim.data.skills[skillId];
+    const skill = sim.data.skills[skillId];
     const art = SKILL_ART[baseSkillId(skillId)];
     if (!skill || !art) return;
-    const at = project(t.x, t.y);
+    const at = this.at(z, t.x, t.y);
     if (art.cast) this.effect(art.cast, at.x, at.y);
     if (art.castOverlay) this.fx.overlayOnce(art.castOverlay, at, DEPTH.units + at.y / 1000 + 0.0007);
     if (skill.archetype === 'pierce' && skill.mode === 'chain' && art.arc) {
@@ -1510,12 +1643,12 @@ export class GameScene extends Phaser.Scene {
       const { hops, jumpUnits } = (skill as PierceDef).levels[lvl]!;
       const hit: number[] = [];
       const points: Point[] = [{ x: at.x, y: at.y - 50 }];
-      let current = this.nearestMonster(t, skill.rangeUnits);
+      let current = this.nearestMonster(sim, t, skill.rangeUnits);
       for (let hop = 0; current && hop <= hops; hop++) {
         hit.push(current.id);
-        const p = this.chest(current);
+        const p = this.chestIn(z, current);
         points.push(p);
-        current = this.nearestMonster(current, jumpUnits, hit);
+        current = this.nearestMonster(sim, current, jumpUnits, hit);
       }
       // D2's chain: its LightningStrike cel along every jump
       this.fx.strikeTrail(art.arc, points);
@@ -1537,24 +1670,24 @@ export class GameScene extends Phaser.Scene {
           this.effect(art.arc, at.x + (Math.cos(a) * r.w) / 2, at.y + (Math.sin(a) * r.h) / 2 + 30);
         }
       }
-      const struck = this.sim.state.monsters.filter((m) => m.hp > 0 && (m.x - t.x) ** 2 + (m.y - t.y) ** 2 <= radius * radius).slice(0, 6);
+      const struck = sim.state.monsters.filter((m) => m.hp > 0 && (m.x - t.x) ** 2 + (m.y - t.y) ** 2 <= radius * radius).slice(0, 6);
       for (const m of struck) {
-        const p = this.chest(m);
+        const p = this.chestIn(z, m);
         if (art.arc) this.effect(art.arc, p.x, p.y + 30);
       }
     }
   }
 
   /** Zeal and Vengeance hits have no missile in the sim; show their effects on the target. */
-  private meleeHit(t: Tower): void {
-    const active = activeSkill(this.sim, t);
+  private meleeHit(z: number, sim: Sim, t: Tower): void {
+    const active = activeSkill(sim, t);
     if (!active || active.skill.archetype !== 'melee') return;
-    const target = this.nearestMonster(t, active.skill.rangeUnits);
+    const target = this.nearestMonster(sim, t, active.skill.rangeUnits);
     if (!target) return;
     const hit = active.skill.id === 'vengeance' ? 'vengeance-hit' : 'zeal-hit';
     const v = screenVector(target.x - t.x, target.y - t.y);
     const angle = angle64(v.x, v.y);
-    const at = project(target.x, target.y);
+    const at = this.at(z, target.x, target.y);
     for (const m of SKILL_ART[hit]?.impact ?? []) this.effect(m, at.x, at.y - 15, angle);
   }
 
@@ -1564,16 +1697,17 @@ export class GameScene extends Phaser.Scene {
    * Lightning drawn along its line. Where one ends, its missiles.txt explosion and the
    * skill's impact art play.
    */
-  private syncMissiles(): void {
-    const s = this.sim.state;
+  private syncMissiles(z: number, sim: Sim): void {
+    const s = sim.state;
     const seen = new Set<number>();
     for (const m of s.missiles) {
-      seen.add(m.id);
-      const skill = this.sim.data.skills[m.skill];
+      const k = this.kid(z, m.id);
+      seen.add(k);
+      const skill = sim.data.skills[m.skill];
       const art = SKILL_ART[baseSkillId(m.skill)];
       if (!skill || !art) continue;
-      const { x: px, y: py } = project(m.x, m.y);
-      let view = this.missiles.get(m.id);
+      const { x: px, y: py } = this.at(z, m.x, m.y);
+      let view = this.missiles.get(k);
       if (!view) {
         const texture = art.fly ? missileKey(art.fly) : '';
         let sprite: Phaser.GameObjects.Sprite | undefined;
@@ -1583,7 +1717,7 @@ export class GameScene extends Phaser.Scene {
         }
         view = { sprite, x: m.x, y: m.y, skill: baseSkillId(m.skill), art: art.fly ?? '', age: 0 };
         if (art.fly) this.sounds.travel(art.fly);
-        this.missiles.set(m.id, view);
+        this.missiles.set(k, view);
         if (art.fall) this.fx.fall(art.fall, { x: px, y: py }, m.ticksLeft * TICK_MS, () => undefined);
         if (art.ring && skill.archetype === 'splash') {
           // The nova's ring: missiles thrown outward to its edge over its life
@@ -1613,7 +1747,7 @@ export class GameScene extends Phaser.Scene {
       if (art.bolt) {
         // The bolt grows along its line as the missile flies: D2's strikes laid on each new stretch
         const from = view.boltAt ?? (() => {
-          const o = project(m.ox, m.oy);
+          const o = this.at(z, m.ox, m.oy);
           return { x: o.x, y: o.y - 50 };
         })();
         const to = { x: px, y: py - 30 };
@@ -1634,20 +1768,20 @@ export class GameScene extends Phaser.Scene {
       view.y = m.y;
     }
     for (const [id, view] of this.missiles) {
-      if (seen.has(id)) continue;
+      if (seen.has(id) || Math.floor(id / ZONE_IDS) !== this.kid(z, 0) / ZONE_IDS) continue;
       const art = SKILL_ART[view.skill];
-      const at = project(view.x, view.y);
+      const at = this.at(z, view.x, view.y);
       if (view.art) this.sounds.hit(view.art);
       const ex = view.art ? this.fx.explosionOf(view.art) : undefined;
       if (ex) this.effect(ex, at.x, at.y - 15);
       for (const a of art?.impact ?? []) this.effect(a, at.x, at.y - 10);
       // Fist of the Heavens: its holy bolts fly from the strike to the monsters around it
-      const skill = this.sim.data.skills[view.skill];
+      const skill = sim.data.skills[view.skill];
       if (art?.burst && skill?.archetype === 'splash') {
         const reach = skill.levels[skill.levels.length - 1]!.subRadiusUnits || skill.radiusUnits;
-        const around = this.sim.state.monsters.filter((mm) => mm.hp > 0 && (mm.x - view.x) ** 2 + (mm.y - view.y) ** 2 <= reach * reach).slice(0, 8);
+        const around = sim.state.monsters.filter((mm) => mm.hp > 0 && (mm.x - view.x) ** 2 + (mm.y - view.y) ** 2 <= reach * reach).slice(0, 8);
         for (const mm of around) {
-          const to = this.chest(mm);
+          const to = this.chestIn(z, mm);
           const v = screenVector(mm.x - view.x, mm.y - view.y);
           this.fx.shoot(art.burst, { x: at.x, y: at.y - 30 }, to, 260, angle64(v.x, v.y));
         }
@@ -1663,15 +1797,16 @@ export class GameScene extends Phaser.Scene {
    * the nearest monster, attack when their attack comes round, and mages throw their
    * element's missile.
    */
-  private syncSummons(): void {
-    const s = this.sim.state;
+  private syncSummons(z: number, sim: Sim): void {
+    const s = sim.state;
     const seen = new Set<number>();
     for (const u of s.summons) {
-      seen.add(u.id);
-      const { x: px, y: py } = project(u.x, u.y);
-      let view = this.summons.get(u.id);
+      const k = this.kid(z, u.id);
+      seen.add(k);
+      const { x: px, y: py } = this.at(z, u.x, u.y);
+      let view = this.summons.get(k);
       if (!view) {
-        const base = this.sim.data.monsters[u.def]?.base ?? u.def;
+        const base = sim.data.monsters[u.def]?.base ?? u.def;
         const hero = SUMMON_HEROES[base];
         const texture = hero ? heroKey({ cls: hero.cls, line: hero.line, tier: MAX_TIER, evolved: '' }) : monsterKey(base, 'normal');
         if (!this.textures.exists(texture)) continue;
@@ -1683,14 +1818,14 @@ export class GameScene extends Phaser.Scene {
           if (raise) this.effect(raise, px, py);
         }
         view = { sprite, texture, facing: 'n', cooldown: u.cooldown };
-        this.summons.set(u.id, view);
+        this.summons.set(k, view);
         // Raised skeletons and mages climb out of the ground (D2's S1)
         // (a sentry trap is drawn in one facing: modeKey finds it)
         const rise = this.modeKey(texture, 'S1', view.facing);
         if (rise) sprite.play(rise);
         else this.playIfChanged(sprite, this.modeKey(texture, 'NU', view.facing) ?? '', false);
       }
-      const target = s.monsters.find((m) => m.id === u.targetId && m.hp > 0) ?? this.nearestMonster(u, UNITS_PER_TILE * 4);
+      const target = s.monsters.find((m) => m.id === u.targetId && m.hp > 0) ?? this.nearestMonster(sim, u, UNITS_PER_TILE * 4);
       if (target) {
         const v = screenVector(target.x - u.x, target.y - u.y);
         view.facing = facingFromVector(v.x, v.y);
@@ -1704,7 +1839,7 @@ export class GameScene extends Phaser.Scene {
         if (u.kind === 'ranged') {
           const bolt = SUMMON_BOLTS[u.element];
           const v = screenVector(target.x - u.x, target.y - u.y);
-          if (bolt) this.fx.shoot(bolt, { x: px, y: py - 40 }, this.chest(target), 220, angle64(v.x, v.y));
+          if (bolt) this.fx.shoot(bolt, { x: px, y: py - 40 }, this.chestIn(z, target), 220, angle64(v.x, v.y));
         }
       } else if (!rising && !view.sprite.anims.currentAnim?.key.includes('|A1|')) {
         this.playIfChanged(view.sprite, this.modeKey(view.texture, 'NU', view.facing) ?? '', true);
@@ -1716,7 +1851,7 @@ export class GameScene extends Phaser.Scene {
       view.sprite.setPosition(px + shove, py).setDepth(DEPTH.units + py / 1000);
     }
     for (const [id, view] of this.summons) {
-      if (seen.has(id)) continue;
+      if (seen.has(id) || Math.floor(id / ZONE_IDS) !== this.kid(z, 0) / ZONE_IDS) continue;
       this.summons.delete(id);
       // A fallen summon plays its death where it has one
       const death = this.modeKey(view.texture, 'DT', view.facing) ?? '';
@@ -1731,16 +1866,17 @@ export class GameScene extends Phaser.Scene {
 
   // ---- shapes that stay shapes: ground, rings, bars ----
 
-  /**
-   * The ring as flat tiles until its art is baked: dirt on the path, dark scenery, grass
-   * where towers go, each arc's grass edged in the colour of the player who defends it.
-   */
   private drawGround(): void {
     const g = (this.groundGfx ??= this.add.graphics().setDepth(DEPTH.ground)).clear();
     const { map } = this.sim;
     const stage = this.stage();
     this.stageText?.setText(stage.label);
     if (this.drawBakedMap(stage)) {
+      // Eternal Conflict: every pad's grid, drawn in its owner's colour on both battlefields
+      if (map.open) {
+        for (const { z, sim } of this.zones()) this.drawPadGrid(g, z, sim);
+        return;
+      }
       // On a shared ring each arc is tinted in its owner's colour, path and free tiles alike
       if (this.sim.players > 1) {
         for (let y = 0; y < map.height; y++) {
@@ -1751,6 +1887,22 @@ export class GameScene extends Phaser.Scene {
             if (!isPathTile(map, x, y)) g.lineStyle(1, colour, 0.18).strokePoints(tileDiamond(x, y), true);
           }
         }
+      }
+      return;
+    }
+    if (map.open) {
+      // No baked battlefields: flat pads, the road and the platform
+      for (const { z, sim } of this.zones()) {
+        const m = sim.map;
+        for (let y = 0; y < m.height; y++) {
+          for (let x = 0; x < m.width; x++) {
+            const path = isPathTile(m, x, y);
+            const blocked = isBlocked(m, x, y);
+            g.fillStyle(path ? 0x6a5a3a : blocked ? 0x2a3028 : 0x4a5a3a);
+            g.fillPoints(this.diamondIn(z, x, y), true);
+          }
+        }
+        this.drawPadGrid(g, z, sim);
       }
       return;
     }
@@ -1766,6 +1918,30 @@ export class GameScene extends Phaser.Scene {
       }
     }
   }
+
+  /** A tile's diamond on zone z. */
+  private diamondIn(z: number, x: number, y: number): Point[] {
+    const shift = this.shiftOf(z) / UNITS_PER_TILE;
+    return tileDiamond(x + shift, y);
+  }
+
+  /** A battlefield's pads: a drawn grid over every buildable tile in its owner's colour, the path down the middle a shade lighter. */
+  private drawPadGrid(g: Phaser.GameObjects.Graphics, z: number, sim: Sim): void {
+    const d = this.driver!;
+    const m = sim.map;
+    for (let y = 0; y < m.height; y++) {
+      for (let x = 0; x < m.width; x++) {
+        if (isBlocked(m, x, y)) continue;
+        const path = isPathTile(m, x, y);
+        if (y > 30 && !path) continue;
+        const colour = PLAYER_COLOURS[arcOwner(d.match, z, arcAt(m, x, y)) % PLAYER_COLOURS.length]!;
+        const pts = this.diamondIn(z, x, y);
+        g.fillStyle(colour, path ? 0.06 : 0.1).fillPoints(pts, true);
+        if (!path && y <= 29) g.lineStyle(1, colour, 0.4).strokePoints(pts, true);
+      }
+    }
+  }
+
 
   /**
    * The map the ring on screen shows: the act of its last wave started (Act 1 before the
@@ -1784,15 +1960,10 @@ export class GameScene extends Phaser.Scene {
     return { act, lair, label: `${stageName(wave?.difficulty ?? 0, act)}: ${place}` };
   }
 
-  /**
-   * The act's baked map for the stage (its field, or its boss lair on the final wave), its
-   * scenery depth-sorted with the units. False when the act has no art (or none was
-   * extracted), and the grey box shows instead.
-   */
   private drawBakedMap(stage: { act: number; lair: boolean; cow?: boolean }): boolean {
     const manifest = this.cache.json.get(MAP_KEY) as MapManifest | undefined;
     // A battlefield is drawn on its own ground, never an act's ring
-    if (this.sim.map.open) return this.drawBattlefield(manifest);
+    if (this.sim.map.open) return this.drawBattlefields(manifest);
     const name = stage.cow ? 'cow' : stage.lair ? 'lair' : 'field';
     const baked = manifest?.acts[String(stage.act)]?.[name];
     const key = groundKey(stage.act, name);
@@ -1817,41 +1988,54 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * A battlefield's baked ground and scenery (the extraction's map/battle-<keep>-<lanes>):
-   * its team's keep, for its lane count. Its ground image loads the first time it is shown;
-   * false (the grey box) until then, or without the art.
+   * Both battlefields' baked grounds and scenery (the extraction's map/battle-<keep>-<lanes>),
+   * each team's keep for its lane count, the enemy's beside your own. A ground image loads
+   * the first time it is shown; false (the flat pads) until every one is in, or without the art.
    */
-  private drawBattlefield(manifest: MapManifest | undefined): boolean {
-    const keep = BATTLE_KEEPS[this.view];
-    const baked = keep ? manifest?.battle?.[keep]?.[String(this.sim.map.arcs.length)] : undefined;
-    const key = groundKey(`battle-${keep}`, String(this.sim.map.arcs.length));
-    const want = baked && this.textures.exists(key) ? key : '';
-    if (baked && !want && !this.battlefieldLoading.has(key)) {
+  private drawBattlefields(manifest: MapManifest | undefined): boolean {
+    const wanted = this.zones().map(({ z, sim }) => {
+      const keep = BATTLE_KEEPS[z];
+      const baked = keep ? manifest?.battle?.[keep]?.[String(sim.map.arcs.length)] : undefined;
+      const key = groundKey(`battle-${keep}`, String(sim.map.arcs.length));
+      return { z, baked, key, have: baked !== undefined && this.textures.exists(key) };
+    });
+    let loading = false;
+    for (const w of wanted) {
+      if (!w.baked || w.have || this.battlefieldLoading.has(w.key)) continue;
       // Load it now and draw again once it is in
-      this.battlefieldLoading.add(key);
-      this.load.image(key, baked.ground.image);
+      this.battlefieldLoading.add(w.key);
+      this.load.image(w.key, w.baked.ground.image);
+      loading = true;
+    }
+    if (loading) {
       this.load.once(Phaser.Loader.Events.COMPLETE, () => {
         this.mapShown = '-';
         this.redrawGround();
       });
       this.load.start();
     }
+    const want = wanted.every((w) => w.have) ? wanted.map((w) => w.key).join('+') : '';
     if (want === this.mapShown) return want !== '';
     for (const o of this.mapParts) o.destroy();
     this.mapParts = [];
     this.mapShown = want;
-    if (!baked || !manifest || !want) return false;
-    this.mapParts.push(this.add.image(ORIGIN.x - baked.ground.originX, ORIGIN.y - baked.ground.originY, key).setOrigin(0).setDepth(DEPTH.ground - 0.5));
-    for (const obj of baked.objects) {
-      const prefab = manifest.prefabs[obj.prefab];
-      if (!prefab || !this.textures.exists(sceneryKey(obj.prefab))) continue;
-      const p = project(obj.at[0]! * UNITS_PER_TILE, obj.at[1]! * UNITS_PER_TILE);
-      const img = this.add.image(Math.round(p.x), Math.round(p.y), sceneryKey(obj.prefab));
-      img.setOrigin(prefab.anchorX / img.width, prefab.anchorY / img.height).setDepth(DEPTH.units + p.y / 1000);
-      this.mapParts.push(img);
+    if (!manifest || !want) return false;
+    for (const w of wanted) {
+      const dx = w.z * ZONE_SHIFT_PX.x;
+      const dy = w.z * ZONE_SHIFT_PX.y;
+      this.mapParts.push(this.add.image(ORIGIN.x - w.baked!.ground.originX + dx, ORIGIN.y - w.baked!.ground.originY + dy, w.key).setOrigin(0).setDepth(DEPTH.ground - 0.5));
+      for (const obj of w.baked!.objects) {
+        const prefab = manifest.prefabs[obj.prefab];
+        if (!prefab || !this.textures.exists(sceneryKey(obj.prefab))) continue;
+        const p = this.at(w.z, obj.at[0]! * UNITS_PER_TILE, obj.at[1]! * UNITS_PER_TILE);
+        const img = this.add.image(Math.round(p.x), Math.round(p.y), sceneryKey(obj.prefab));
+        img.setOrigin(prefab.anchorX / img.width, prefab.anchorY / img.height).setDepth(DEPTH.units + p.y / 1000);
+        this.mapParts.push(img);
+      }
     }
     return true;
   }
+
 
   /** The ring on screen changed (FFA watching): redraw its ground. */
   private redrawGround(): void {
@@ -1859,64 +2043,91 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawOverlay(): void {
-    const { state, fx } = this.sim;
     const g = this.overlayGfx.clear();
     const rings = this.ringGfx.clear();
     const selected = this.selection?.kind === 'tower' ? this.selection.id : undefined;
     const highlight = this.highlightedTower();
+    for (const { z, sim } of this.zones()) {
+      const { state, fx } = sim;
+      const own = z === this.view;
+      // Base rings in the tower's line colour; evolved towers ring purple
+      for (const t of state.towers) {
+        if (t.legendOf !== undefined) continue;
+        const colour = t.evolved ? EVOLVED_COLOUR : (LINE_COLOURS[t.line] ?? 0x707070);
+        const { x: cx, y: cy } = this.at(z, t.x, t.y);
+        const sel = own && t.id === selected;
+        rings.fillStyle(colour, 0.35).fillEllipse(cx, cy, ISO_W * 0.7, ISO_H * 0.7);
+        rings.lineStyle(sel ? 3 : 2, colour, sel ? 1 : 0.8).strokeEllipse(cx, cy, ISO_W * 0.7, ISO_H * 0.7);
+        // Eternal Conflict: a fighter's life over it, grey when it is down
+        if (state.battle && t.maxHp) {
+          const view = this.towers.get(this.kid(z, t.id));
+          const top = view ? view.sprite.y - view.sprite.displayOriginY * TOWER_BAR.lift - 6 : cy - 36;
+          const x = cx - TOWER_BAR.width / 2;
+          g.fillStyle(0x100008).fillRect(x, top, TOWER_BAR.width, 4);
+          g.fillStyle((t.hp ?? 0) > 0 ? 0x50b0ff : 0x606060).fillRect(x, top, (TOWER_BAR.width * Math.max(0, t.hp ?? 0)) / t.maxHp, 4);
+        }
+      }
 
-    // Base rings in the tower's line colour; evolved towers ring purple
-    for (const t of state.towers) {
-      const colour = t.evolved ? EVOLVED_COLOUR : (LINE_COLOURS[t.line] ?? 0x707070);
-      const { x: cx, y: cy } = project(t.x, t.y);
-      rings.fillStyle(colour, 0.35).fillEllipse(cx, cy, ISO_W * 0.7, ISO_H * 0.7);
-      rings.lineStyle(t.id === selected ? 3 : 2, colour, t.id === selected ? 1 : 0.8).strokeEllipse(cx, cy, ISO_W * 0.7, ISO_H * 0.7);
+      // Aura rings: faint for every emitter, bright for the selected or hovered tower
+      for (const e of fx.emitters) {
+        const t = towerById(sim, e.towerId);
+        if (!t) continue;
+        const lit = own && e.towerId === highlight;
+        g.lineStyle(lit ? 2 : 1, 0x80b0ff, lit ? 0.8 : 0.15);
+        const c = this.at(z, t.x, t.y);
+        const r = ellipseOf(e.radiusUnits);
+        g.strokeEllipse(c.x, c.y, r.w, r.h);
+      }
+      const sel = own && selected !== undefined ? towerById(sim, selected) : undefined;
+      const active = sel && activeSkill(sim, sel);
+      if (sel && active && active.skill.rangeUnits > 0) {
+        const c = this.at(z, sel.x, sel.y);
+        const r = ellipseOf(active.skill.rangeUnits);
+        g.lineStyle(1, 0xffffff, 0.5).strokeEllipse(c.x, c.y, r.w, r.h);
+      }
+
+      // Ground zones: a faint ellipse of the zone's radius under its falling shards
+      for (const m of state.missiles) {
+        const skill = sim.data.skills[m.skill];
+        if (skill?.archetype !== 'zone') continue;
+        const c = this.at(z, m.x, m.y);
+        const r = ellipseOf(skill.levels[m.level]?.radiusUnits ?? skill.radiusUnits);
+        g.fillStyle(0x80c0ff, 0.12).fillEllipse(c.x, c.y, r.w, r.h);
+      }
+
+      // HP bars over monsters
+      for (const m of state.monsters) {
+        const view = this.monsters.get(this.kid(z, m.id));
+        const w = m.rank === 'boss' ? 42 : 24;
+        // A D2 frame box reaches about twice the body's height above the feet
+        const at = this.at(z, m.x, m.y);
+        const top = view ? view.sprite.y - view.sprite.displayOriginY * 0.45 - 6 : at.y - 40;
+        const x = at.x - w / 2;
+        g.fillStyle(0x200000).fillRect(x, top, w, 4);
+        g.fillStyle(m.rank === 'normal' ? 0x40e040 : 0xe0c040).fillRect(x, top, (w * Math.max(0, m.hp)) / m.maxHp, 4);
+      }
+
+      // The king's life over his head
+      if (state.battle && sim.map.king) {
+        const k = state.battle.king;
+        const at = this.at(z, (sim.map.king.x + 0.5) * UNITS_PER_TILE, (sim.map.king.y + 0.5) * UNITS_PER_TILE);
+        const sprite = this.kingSprites.get(z);
+        const top = sprite ? sprite.y - sprite.displayOriginY * 0.9 - 10 : at.y - 90;
+        const w = 60;
+        const x = at.x - w / 2;
+        g.fillStyle(0x000000, 0.8).fillRect(x - 1, top - 1, w + 2, 8);
+        g.fillStyle(0x401010).fillRect(x, top, w, 6);
+        g.fillStyle(z === 0 ? 0xc8a040 : 0xc84a3a).fillRect(x, top, (w * Math.max(0, Math.min(k.maxHp, k.hp))) / Math.max(1, k.maxHp), 6);
+      }
     }
 
-    // Aura rings: faint for every emitter, bright for the selected or hovered tower
-    for (const e of fx.emitters) {
-      const t = towerById(this.sim, e.towerId);
-      if (!t) continue;
-      g.lineStyle(e.towerId === highlight ? 2 : 1, 0x80b0ff, e.towerId === highlight ? 0.8 : 0.15);
-      const c = project(t.x, t.y);
-      const r = ellipseOf(e.radiusUnits);
-      g.strokeEllipse(c.x, c.y, r.w, r.h);
-    }
-    const sel = selected !== undefined ? towerById(this.sim, selected) : undefined;
-    const active = sel && activeSkill(this.sim, sel);
-    if (sel && active && active.skill.rangeUnits > 0) {
-      const c = project(sel.x, sel.y);
-      const r = ellipseOf(active.skill.rangeUnits);
-      g.lineStyle(1, 0xffffff, 0.5).strokeEllipse(c.x, c.y, r.w, r.h);
-    }
-
-    // Ground zones: a faint ellipse of the zone's radius under its falling shards
-    for (const m of state.missiles) {
-      const skill = this.sim.data.skills[m.skill];
-      if (skill?.archetype !== 'zone') continue;
-      const c = project(m.x, m.y);
-      const r = ellipseOf(skill.levels[m.level]?.radiusUnits ?? skill.radiusUnits);
-      g.fillStyle(0x80c0ff, 0.12).fillEllipse(c.x, c.y, r.w, r.h);
-    }
-
-    // HP bars over monsters
-    for (const m of state.monsters) {
-      const view = this.monsters.get(m.id);
-      const w = m.rank === 'boss' ? 42 : 24;
-      // A D2 frame box reaches about twice the body's height above the feet
-      const at = project(m.x, m.y);
-      const top = view ? view.sprite.y - view.sprite.displayOriginY * 0.45 - 6 : at.y - 40;
-      const x = at.x - w / 2;
-      g.fillStyle(0x200000).fillRect(x, top, w, 4);
-      g.fillStyle(m.rank === 'normal' ? 0x40e040 : 0xe0c040).fillRect(x, top, (w * Math.max(0, m.hp)) / m.maxHp, 4);
-    }
-
-    if (this.hover && state.status === 'playing') {
+    if (this.hover && this.hover.zone === this.view && this.sim.state.status === 'playing') {
       const { x, y } = this.hover;
       const ok = (this.onOwnRing && canBuild(this.sim, x, y, this.seat)) || towerAt(this.sim, x, y) !== undefined;
-      g.lineStyle(2, ok ? 0xffffff : 0xff4040, 0.6).strokePoints(tileDiamond(x, y), true);
+      g.lineStyle(2, ok ? 0xffffff : 0xff4040, 0.6).strokePoints(this.diamondIn(this.view, x, y), true);
     }
   }
+
 
   /** The alive count across the top: it fills as monsters pile up, and the run is lost when it is full. */
   private drawAlive(alive: number): void {
@@ -1952,25 +2163,29 @@ export class GameScene extends Phaser.Scene {
     this.battleHud!.update();
     const own = match.zones[ringOf(match, d.me)]!;
     const king = own.state.battle!.king;
+    const team = teamOf(match, d.me);
     this.hud2.setText('');
+    const waves = own.data.waves.length;
     if (this.d2) {
       const n = this.hudNumbers(king.maxHp);
       const rules = match.data.battle!.rules;
       const left = b.phase === 'build' ? (b.phaseTick - match.state.tick) / Math.max(1, b.wave === 0 ? rules.firstBuildTicks : rules.buildTicks) : 0;
-      this.d2.update({ ...n, gold: own.state.gold[seatOf(match, d.me)] ?? 0, alive: king.maxHp - Math.max(0, king.hp), aliveLimit: king.maxHp, lifeLabel: `Worldstone: ${Math.max(0, king.hp)} / ${king.maxHp}`, wave: `Wave ${b.wave} of ${match.data.battle!.waves.length}`, timer: '', timerFrac: Math.max(0, Math.min(1, left)), actFrac: b.wave / match.data.battle!.waves.length, nextWave: this.nextWaveTip(b.wave) });
+      this.d2.update({ ...n, gold: own.state.gold[seatOf(match, d.me)] ?? 0, alive: king.maxHp - Math.max(0, king.hp), aliveLimit: king.maxHp, lifeLabel: `${KING_NAMES[team]}: ${Math.max(0, king.hp)} / ${king.maxHp}`, wave: `Wave ${b.wave} of ${waves}`, timer: '', timerFrac: Math.max(0, Math.min(1, left)), actFrac: b.wave / waves, nextWave: this.nextWaveTip(b.wave) });
     }
     if (match.state.status === 'over' && !this.endOverlay.visible && !this.battleEndShown && !this.halted) {
       const won = match.state.winners.includes(d.me);
       const draw = match.state.winners.length === 0 && match.state.mode === 'battle';
       const kings = match.zones.map((z) => z.state.battle!.king.hp);
       const fell = kings.some((hp) => hp <= 0);
+      const mine = KING_NAMES[team]!;
+      const theirs = KING_NAMES[1 - team] ?? 'the enemy king';
       const title =
         match.state.mode === 'coop'
-          ? won ? 'The Worldstone stands' : 'The Worldstone has fallen'
-          : draw ? 'A draw' : won ? (fell ? "Victory: the enemy's Worldstone fell" : 'Victory on life') : fell ? 'Defeat: your Worldstone fell' : 'Defeat on life';
-      const yours = kings[teamOf(match, d.me)] ?? 0;
+          ? won ? `${mine} stands` : `${mine} has fallen`
+          : draw ? 'A draw' : won ? (fell ? `Victory: ${theirs} has fallen` : 'Victory on life') : fell ? `Defeat: ${mine} has fallen` : 'Defeat on life';
+      const yours = kings[team] ?? 0;
       if (!this.battleEnd(title, won)) this.endOverlay.setText(`${title}
-wave ${b.wave}, your Worldstone at ${Math.max(0, yours)}
+wave ${b.wave}, ${mine} at ${Math.max(0, yours)}
 click to return to the menu`).setFontSize(40).setVisible(true);
       if (won) this.sounds.battle('victory');
       if (!this.battleRecorded) {
@@ -1981,8 +2196,8 @@ click to return to the menu`).setFontSize(40).setVisible(true);
   }
 
   /**
-   * Eternal Conflict's end, in D2's style: the stone panel with the result in gold, each team's
-   * Worldstone, kills, leaks and sends, and a stone button back to the menu. False without
+   * Eternal Conflict's end, in D2's style: the stone panel with the result in gold, each
+   * team's king, kills, leaks and sends, and a stone button back to the menu. False without
    * the frontend art (the plain overlay shows instead).
    */
   private battleEnd(title: string, won: boolean): boolean {
@@ -1998,19 +2213,21 @@ click to return to the menu`).setFontSize(40).setVisible(true);
     const panel = stonePanel(this, cx, cy, 760, 520);
     if (panel) parts.push(panel.setDepth(6001));
     const text = (y: number, s: string, size: number, colour: string) => parts.push(this.add.text(cx, y, s, { fontFamily: FONT, fontSize: `${size}px`, color: colour, align: 'center' }).setOrigin(0.5).setDepth(6002).setShadow(1, 1, '#000000', 2));
-    text(cy - 200, title, 34, won ? '#c7b377' : '#d06048');
-    text(cy - 150, `Wave ${match.state.battle!.wave} of ${match.data.battle!.waves.length}`, 20, '#a8a088');
+    text(cy - 220, 'Eternal Conflict', 20, '#a8a088');
+    text(cy - 190, title, 34, won ? '#c7b377' : '#d06048');
+    text(cy - 150, `Wave ${match.state.battle!.wave} of ${match.zones[0]!.data.waves.length}`, 20, '#a8a088');
     match.zones.forEach((zone, t) => {
       const b = zone.state.battle!;
       const team = match.zones.length === 1 ? 'Your team' : t === teamOf(match, d.me) ? 'Your team' : 'The enemy';
       const sum = (xs: number[]) => xs.reduce((n, x) => n + x, 0);
       text(cy - 90 + t * 110, `${team}, ${KEEP_NAMES[t]}`, 22, '#c7b377');
-      text(cy - 58 + t * 110, `Worldstone ${Math.max(0, b.king.hp)} of ${b.king.maxHp}   Kills ${zone.state.kills}   Leaks ${sum(b.leaks)}   Sends ${sum(b.sendsMade)}`, 19, '#e8e0c8');
+      text(cy - 58 + t * 110, `${KING_NAMES[t]} ${Math.max(0, b.king.hp)} of ${b.king.maxHp}   Kills ${zone.state.kills}   Leaks ${sum(b.leaks)}   Sends ${sum(b.sendsMade)}`, 19, '#e8e0c8');
       text(cy - 32 + t * 110, b.races.map((r, seat) => `${this.nameOf(slotOf(match, t, seat))}: ${this.gameData.classes[r]?.name ?? r}`).join('   '), 16, '#a8a088');
     });
     parts.push(...stoneButton(this, cx, cy + 190, 'Return to menu', () => (d.online ? this.leaveOnline() : this.quitToMenu()), { width: 300 }).map((o) => (o as Phaser.GameObjects.Image).setDepth(6003)));
     return true;
   }
+
 
   private battleEndShown = false;
 
@@ -2131,17 +2348,26 @@ click to return to the menu`).setFontSize(40).setVisible(true);
     const sim = this.sim;
     const sel = this.selection;
     const tower = sel?.kind === 'tower' ? towerById(sim, sel.id) : undefined;
-    const key = JSON.stringify([this.view, sel, this.buildClass, tower && [tower.tier, tower.level, tower.picks, tower.targeting], this.gold, sim.state.towers.length]);
+    const king = sim.state.battle?.king;
+    const key = JSON.stringify([this.view, sel, this.buildClass, tower && [tower.tier, tower.level, tower.picks, tower.targeting, tower.hp !== undefined && tower.hp <= 0], this.gold, sim.state.towers.length, king && [king.hpLevel, king.regenLevel, king.attackLevel]]);
     if (key === this.panelKey) return;
     this.panelKey = key;
     for (const o of this.panel) o.destroy();
     this.panel = [];
     this.tooltip.hide();
+    if (sel?.kind === 'king' && this.d2 && sim.state.battle) {
+      this.info.setText('');
+      this.d2.setSlots([]);
+      this.d2.setTabs([]);
+      this.d2.setTowerPanel(this.kingModel());
+      this.d2.setSkills(undefined);
+      return;
+    }
     if (!this.onOwnRing || (tower && tower.owner !== this.seat)) {
       const match = this.driver?.match;
       if (match?.state.battle) {
-        const whose = tower ? `${this.nameOf(slotOf(match, this.view, tower.owner))}'s tower` : `the ${KEEP_NAMES[this.view] ?? ''} battlefield`;
-        this.info.setText(`Looking at ${whose}.${this.onOwnRing ? '' : ' Press Home to go back to your lane.'}`);
+        const whose = tower ? `${this.nameOf(slotOf(match, this.view, tower.owner))}'s fighter` : `the ${KEEP_NAMES[this.view] ?? ''} battlefield`;
+        this.info.setText(`Looking at ${whose}.`);
       } else {
         const whose = tower ? `${this.nameOf(match?.state.mode === 'team' ? tower.owner : this.view)}'s tower` : `${this.nameOf(this.view)}'s ring`;
         this.info.setText(`Looking at ${whose}.${this.onOwnRing ? '' : ` Press ${(this.driver?.me ?? 0) + 1}, or click your name under the map, to go back to yours.`}`);
@@ -2281,6 +2507,28 @@ click to return to the menu`).setFontSize(40).setVisible(true);
     }
   }
 
+  /** Eternal Conflict: the king's stone panel, the team's three upgrades and what they stand at. */
+  private kingModel(): TowerPanelModel {
+    const sim = this.sim;
+    const b = sim.state.battle!;
+    const rules = sim.data.battle!.rules.king;
+    const team = this.driver ? teamOf(this.driver.match, this.driver.me) : 0;
+    const name = KING_NAMES[team] ?? 'The king';
+    const lines = [
+      `${name}, ${KEEP_NAMES[team]}: ${Math.max(0, b.king.hp)} of ${b.king.maxHp} life`,
+      `Strikes the nearest creep in reach every ${rules.attack.rateTicks / TICKS_PER_SECOND} s for ${rules.attack.hitPct + b.king.attackLevel * rules.upgrades.attack.add}% of its life (${rules.attack.bossHitPct + Math.floor((b.king.attackLevel * rules.upgrades.attack.add) / 5)}% on a boss)`,
+      `Life back ${rules.regenPerSecond + b.king.regenLevel * rules.upgrades.regen.add} a second`,
+      'Creeps that reach him stand at his feet and hit him; the team shares his upgrades',
+    ];
+    const buttons: PanelButton[] = KING_UPGRADES.map((u) => {
+      const cost = kingUpgradeCost(sim, u);
+      const level = kingLevel(b, u);
+      const what = u === 'hp' ? `Life +${rules.upgrades.hp.add}` : u === 'regen' ? `Regen +${rules.upgrades.regen.add}/s` : `Attack +${rules.upgrades.attack.add}%`;
+      return { label: cost === undefined ? `${what} (${level}/${rules.upgrades[u].maxLevel}, full)` : `${what} ${cost}g (${level}/${rules.upgrades[u].maxLevel})`, enabled: cost !== undefined && this.gold >= cost, onClick: () => this.issue({ type: 'king', upgrade: u }) };
+    });
+    return { title: name, lines, buttons };
+  }
+
   /** What the selected tower's stone panel shows: who it is, what it does, what it can buy. */
   private towerModel(tower: Tower): TowerPanelModel {
     const sim = this.sim;
@@ -2299,6 +2547,7 @@ click to return to the menu`).setFontSize(40).setVisible(true);
           ? `${className}, evolved with ${this.skillName(tower.partnerSkill)} built in   Level ${tower.level}`
           : `${className}, ${line?.name ?? 'no line yet'}   Tier ${tower.tier}   Level ${tower.level}`,
     );
+    if (sim.state.battle && tower.maxHp) lines.push((tower.hp ?? 0) > 0 ? `Life ${Math.ceil((tower.hp ?? 0) / 256)} of ${Math.ceil(tower.maxHp / 256)}` : `Down for the round: stands again at the next build phase`);
     const auras = effectsOn(sim, tower);
     const auraName = (e: { skill: string; item: boolean }) => `${this.skillName(e.skill)}${e.item ? ' (item)' : ''}`;
     if (active) {

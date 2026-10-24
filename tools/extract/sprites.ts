@@ -350,7 +350,9 @@ function monsterJobs(shared: Shared): SpriteJob[] {
   const legendArt = new Set(Object.values(legends).map((l) => l.monster));
   // Eternal Conflict's workers: the hirelings, in their own acts' palettes
   const hirelings = (sprites as { hirelings?: { ids: Record<string, number> } }).hirelings?.ids ?? {};
-  const ids = [...new Set([...MONSTER_ART, ...summons, ...legendArt, ...Object.keys(hirelings)])];
+  // Eternal Conflict's kings: a standing and swinging variant for a boss whose wave art only walks
+  const kings = (sprites as { kings?: { ids: string[]; modes: string[] } }).kings ?? { ids: [], modes: [] };
+  const ids = [...new Set([...MONSTER_ART, ...summons, ...legendArt, ...Object.keys(hirelings), ...kings.ids])];
   // A superunique wears its class's art in its own palette: palshift.dat row Utrans
   const superuniques = readTable(source, 'superuniques.txt');
   const jobs: SpriteJob[] = [];
@@ -378,11 +380,12 @@ function monsterJobs(shared: Shared): SpriteJob[] {
     // Maggot Queen's death is a DC6, which a composite cannot use)
     const has = (mode: string) => Object.keys(compositeInputs(source, specFor(mode, mode))?.layers ?? {}).length > 0;
     const specs = modes.map((want) => specFor(has(want) ? want : ((MODE_FALLBACK[want] ?? []).find(has) ?? want), want));
+    const kingSpecs = kings.ids.includes(id) ? kings.modes.map((want) => specFor(has(want) ? want : ((MODE_FALLBACK[want] ?? []).find(has) ?? want), want)) : [];
     const palshift = `global/${folder}/cof/palshift.dat`;
     // A TransLvl with no palshift.dat beside the COFs (the Council) draws in the plain palette
     const transLvl = source.exists(palshift) ? Number(row['TransLvl'] || 0) : 0;
     const inputs = [...(transLvl > 0 ? [palshift] : [])];
-    for (const spec of specs) {
+    for (const spec of [...specs, ...kingSpecs]) {
       const found = compositeInputs(source, spec);
       if (!found) inputs.push(cofFor(spec.mode, spec.weaponClass));
       else inputs.push(found.cofPath, ...Object.values(found.layers));
@@ -413,6 +416,11 @@ function monsterJobs(shared: Shared): SpriteJob[] {
           const palette = remapped(actPalette, shift ? [...own, pl2Shift(pl2, shift)] : own);
           const modes = specs.map((s) => compositeMode(shared, s, palette));
           out.push(...atlasFrom(`monsters/${id}/${variant}`, modes, DIRECTION_NAMES_8, { monster: id, variant }));
+        }
+        if (kingSpecs.length > 0) {
+          const palette = remapped(actPalette, own);
+          const modes = kingSpecs.map((s) => compositeMode(shared, s, palette));
+          out.push(...atlasFrom(`monsters/${id}/king`, modes, DIRECTION_NAMES_8, { monster: id, variant: 'king' }));
         }
         for (const { name, utrans } of named) {
           // Utrans picks a row of the class's palshift.dat in place of its own TransLvl row

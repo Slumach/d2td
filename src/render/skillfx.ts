@@ -181,10 +181,10 @@ export class SkillFx {
     r.sprite.setPosition(Math.round(at.x), Math.round(at.y)).setDepth(depth);
   }
 
-  /** Drops the overlays of units that are gone. */
-  keepRiders(alive: Set<string>): void {
+  /** Drops the overlays of units that are gone; `keep` holds any other (another battlefield's). */
+  keepRiders(alive: Set<string>, keep: (key: string) => boolean = () => false): void {
     for (const [key, r] of this.riding) {
-      if (alive.has(key)) continue;
+      if (alive.has(key) || keep(key)) continue;
       r.sprite.destroy();
       this.riding.delete(key);
     }

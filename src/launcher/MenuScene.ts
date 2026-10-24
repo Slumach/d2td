@@ -203,7 +203,7 @@ export class MenuScene extends Phaser.Scene {
     add(this.add.text(CX, top - 10, 'Eternal Conflict', { ...TEXT, fontSize: '28px', color: '#c7b377' }).setOrigin(0.5).setDepth(3001));
     const record = r ? `Eternal Conflict record: won ${r.wins}, lost ${r.losses}${r.draws ? `, drawn ${r.draws}` : ''}; best wave ${r.bestWave || 'none yet'}` : 'Reading the profile...';
     add(this.add.text(CX, top + 28, record, TEXT).setOrigin(0.5).setDepth(3001));
-    const about = b.mode === 'battle' ? 'Two teams, a lane each; first Worldstone to fall loses' : 'One team against 21 waves, sends on a timer';
+    const about = b.mode === 'battle' ? 'Heaven against Hell, Legion style: first king to fall loses' : 'One team against the waves, sends on a timer';
     add(this.add.text(CX, top + 60, about, MUTED).setOrigin(0.5).setDepth(3001));
     const size = `${b.teamSize}v${b.teamSize}`;
     const items: [string, () => void][] = [

@@ -399,6 +399,8 @@ export interface ClassDef {
   id: string;
   name: string;
   lines: Record<string, { name: string; tiers: string[][] }>;
+  /** charstats.txt: life at level 1 (hpadd plus vit) and the life a level, in fourths (LifePerLevel). */
+  life: { base: number; perLevel: number };
 }
 
 export interface EvolutionDef {
@@ -1000,13 +1002,14 @@ export function endlessWave(balance: BalanceJson, monsters: MonstersJson, defOf:
  * boss, built as the campaign builds its waves, every monster at the wave's level on its
  * table difficulty, its HP the wave's percent.
  */
-export function battleWaves(balance: BalanceJson, defOf: DefOf): WaveDef[] {
+export function battleWaves(balance: BalanceJson, defOf: DefOf, long = false, champions = true): WaveDef[] {
   const b = balance.battle;
   if (!b) return [];
   const bal: BalanceJson = { ...balance, waves: { ...balance.waves, streamTicks: b.streamTicks } };
-  return b.waves.map((e, i) => {
+  const list = long ? [...b.waves, ...(b.longWaves ?? [])] : b.waves;
+  return list.map((e, i) => {
     const entry: WaveJson = e.boss ? { boss: e.boss, ...(e.superunique ? { superunique: e.superunique } : {}) } : { monster: e.monster!, kind: e.kind ?? 'swarm', ...(e.superunique ? { superunique: e.superunique } : {}) };
-    const { kind, groups, lead } = buildWave({ balance: bal, defOf, difficulty: e.difficulty, act: e.act, entry, championPack: e.champions === true, levelOf: () => e.level });
+    const { kind, groups, lead } = buildWave({ balance: bal, defOf, difficulty: e.difficulty, act: e.act, entry, championPack: champions && e.champions === true, levelOf: () => e.level });
     // The boss carries its own percent, so the sends that join its wave keep the wave's
     for (const g of groups) if (g.rank === 'boss' && e.bossHpPct !== undefined) g.hpPct = e.bossHpPct;
     return {
@@ -1015,7 +1018,7 @@ export function battleWaves(balance: BalanceJson, defOf: DefOf): WaveDef[] {
       difficulty: e.difficulty,
       act: e.act,
       actWave: i + 1,
-      actWaves: b.waves.length,
+      actWaves: list.length,
       final: kind === 'boss',
       number: i + 1,
       level: lead.level,
@@ -1023,6 +1026,18 @@ export function battleWaves(balance: BalanceJson, defOf: DefOf): WaveDef[] {
       hpPct: e.hpPct,
     };
   });
+}
+
+/** The battle data: its rules, the default waves, and the other setups' waves built on demand. */
+function battleDataFrom(balance: BalanceJson, defOf: DefOf): BattleData {
+  const cache = new Map<string, WaveDef[]>();
+  const wavesFor = (long: boolean, champions: boolean) => {
+    const key = `${long}:${champions}`;
+    let w = cache.get(key);
+    if (!w) cache.set(key, (w = battleWaves(balance, defOf, long, champions)));
+    return w;
+  };
+  return { rules: balance.battle!, waves: wavesFor(false, true), wavesFor };
 }
 
 /** Each boss wave's boss HP percent: a straight line by wave index from the first boss wave to the last. */
@@ -1450,7 +1465,9 @@ export function buildGameData(
     for (const line of Object.values(c.lines)) {
       for (const id of line.tiers.flat()) if (!jsonById.has(id)) throw new Error(`${c.id}: no skill entry ${id}`);
     }
-    classes[c.id] = { id: c.id, name: c.name, lines: c.lines };
+    const stats = tables.charstats?.find((r) => r['class'] === c.name);
+    const life = stats ? { base: int(stats, 'hpadd') + int(stats, 'vit'), perLevel: int(stats, 'LifePerLevel') } : { base: 50, perLevel: 8 };
+    classes[c.id] = { id: c.id, name: c.name, lines: c.lines, life };
   }
   const ladders = buildLadders(tables, design, skills, jsonById, weaponFor, options.checkTierBonus ?? true);
   // Skills no tower picks, cast by another (trap shots, charges): at their caster's levels
@@ -1585,7 +1602,7 @@ export function buildGameData(
     skillTabs,
     skillVariant,
     itemSkill,
-    ...(design.balance.battle ? { battle: { rules: design.balance.battle, waves: battleWaves(design.balance, defOf) } } : {}),
+    ...(design.balance.battle ? { battle: battleDataFrom(design.balance, defOf) } : {}),
     ...(extendWaves ? { extendWaves } : {}),
   };
 }

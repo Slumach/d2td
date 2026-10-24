@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { DESIGN } from '../data/design.ts';
 import { hasTables, loadTables } from '../../tools/lib/load-tables.ts';
-import { battleData, kingUpgradeCost, sendCost, sendDef, sendGroups, sendHpPct, workerCost } from './battle.ts';
+import { battleData, fighterLife, kingUpgradeCost, leakDamage, sendCost, sendDef, sendGroups, sendHpPct, shardsPerTick, workerCost } from './battle.ts';
 import { buildGameData, type GameData } from './data.ts';
 import { UNITS_PER_TILE } from './fixed.ts';
 import { createLaneMap, isBlocked, isPathTile, laneOf, LANE, positionAt, wrap } from './map.ts';
 import { battleSetupFor, createMatch, matchHash, stepMatch, type Match, type PlayerCommand } from './match.ts';
 import { createMonster } from './monsters.ts';
 import { step } from './sim.ts';
+import { towerAt } from './towers.ts';
 
 let cached: GameData | undefined;
 const real = () => (cached ??= buildGameData(loadTables(), DESIGN, 30));
@@ -100,23 +101,33 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     expect(a!.length).toBeGreaterThan(0);
   });
 
-  it('a monster that reaches its lane end takes its alive weight off the king and is gone', () => {
+  it('a monster that reaches its lane end stands at the king and hits it until one of them dies', () => {
     const m = duel();
     const sim = m.zones[0]!;
     const arc = sim.map.arcs[0]!;
     sim.state.waves.push({ remaining: 1 });
-    const mo = createMonster(sim, real().battle!.waves[0]!.groups[0]!.monster, 0, 'champion', [], arc.end! - 50);
+    const k = real().battle!.rules.king;
+    // A tough one, so the king's strikes do not kill it first
+    const mo = createMonster(sim, real().battle!.waves[0]!.groups[0]!.monster, 0, 'champion', [], arc.end! - 50, 100_000_000);
     sim.state.monsters.push(mo);
     const before = sim.state.battle!.king.hp;
     step(sim, []);
+    expect(mo.atKing).toBe(true);
+    expect(sim.state.battle!.leaks[0]).toBe(1);
+    expect(sim.state.monsters).toHaveLength(1);
     const dpw = real().battle!.rules.king.damagePerWeight;
     expect(sim.state.battle!.king.hp).toBe(before - real().rules.aliveWeight.champion * dpw);
-    expect(sim.state.monsters).toHaveLength(0);
-    expect(sim.state.battle!.leaks[0]).toBe(1);
     expect(sim.kingHits).toHaveLength(1);
+    // It swings again when its attack comes round, and the king strikes it back
+    const hp = mo.hp;
+    for (let i = 0; i < real().rules.monsterAttackTicks; i++) step(sim, []);
+    expect(sim.state.battle!.king.hp).toBe(before - 2 * real().rules.aliveWeight.champion * dpw);
+    expect(mo.hp).toBeLessThan(hp);
+    expect(sim.state.battle!.leaks[0]).toBe(1);
+    expect(k.hp[0]).toBe(sim.state.battle!.king.maxHp);
   });
 
-  it('a later wave leak hurts the king more, and the king has life for each seat', () => {
+  it('a later wave leak hurts the king more, and the king has life for each team size', () => {
     const m = duel();
     const sim = m.zones[0]!;
     const k = real().battle!.rules.king;
@@ -124,11 +135,85 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     expect(createMatch(real(), 1, 'battle', 4, { teamSize: 2, races: ['paladin', 'paladin', 'sorceress', 'sorceress'], bots: [] }).zones[0]!.state.battle!.king.maxHp).toBe(k.hp[1]);
     const arc = sim.map.arcs[0]!;
     for (let i = 0; i < 10; i++) sim.state.waves.push({ remaining: 1 });
-    const mo = createMonster(sim, real().battle!.waves[0]!.groups[0]!.monster, 9, 'normal', [], arc.end! - 50);
+    const mo = createMonster(sim, real().battle!.waves[0]!.groups[0]!.monster, 9, 'normal', [], arc.end! - 50, 100_000_000);
     sim.state.monsters.push(mo);
-    const before = sim.state.battle!.king.hp;
-    step(sim, []);
-    expect(before - sim.state.battle!.king.hp).toBe(Math.floor((real().rules.aliveWeight.normal * k.damagePerWeight * (100 + 9 * k.damagePctPerWave)) / 100));
+    expect(leakDamage(sim, mo)).toBe(Math.floor((real().rules.aliveWeight.normal * k.damagePerWeight * (100 + 9 * k.damagePctPerWave)) / 100));
+  });
+
+  it('a fighter has life from its class, blocks the creeps on its lane and is hit by them; down, it is passed', () => {
+    const m = duel();
+    const sim = m.zones[0]!;
+    sim.state.gold[0] = 100_000;
+    stepMatch(m, [{ player: 0, command: { type: 'build', x: 19, y: 10, cls: 'paladin', skill: 'holy-bolt' } }]);
+    const t = towerAt(sim, 19, 10)!;
+    const paladin = real().classes['paladin']!.life;
+    const f = real().battle!.rules.fighter;
+    expect(fighterLife(sim, t)).toBe(Math.floor((paladin.base * 256 * f.lifePct) / 100));
+    expect(t.hp).toBe(t.maxHp);
+    const arc = sim.map.arcs[0]!;
+    sim.state.waves.push({ remaining: 1 });
+    const mo = createMonster(sim, real().battle!.waves[0]!.groups[0]!.monster, 0, 'normal', [], arc.start + 8 * UNITS_PER_TILE, 100_000_000);
+    sim.state.monsters.push(mo);
+    for (let i = 0; i < 60; i++) step(sim, []);
+    // Held at the fighter's row, off the path toward it, hitting it
+    expect(mo.blockedBy).toBe(t.id);
+    expect(mo.dist).toBeLessThan(arc.start + 10 * UNITS_PER_TILE);
+    expect(mo.dist).toBeGreaterThan(arc.start + 8 * UNITS_PER_TILE);
+    // The fighter stands left of the path (x 19 beside the path's 20): the creep steps that way
+    expect(mo.x).toBeLessThan(positionAt(sim.map, mo.dist).x);
+    expect(t.hp).toBeLessThan(t.maxHp!);
+    // Down, it stops the creep no more
+    t.hp = 0;
+    for (let i = 0; i < 40; i++) step(sim, []);
+    expect(mo.blockedBy).not.toBe(t.id);
+    expect(mo.dist).toBeGreaterThan(arc.start + 11 * UNITS_PER_TILE);
+    expect(t.hp).toBe(0);
+  });
+
+  it('a cleared lane sends its fighters to the king, and the countdown brings them home at full life', () => {
+    const m = createMatch(real(), 4, 'battle', 4, { teamSize: 2, races: ['paladin', 'paladin', 'sorceress', 'sorceress'], bots: [] });
+    const sim = m.zones[0]!;
+    sim.state.gold[0] = 100_000;
+    const lane0 = sim.map.arcs[0]!;
+    const x0 = Math.floor(positionAt(sim.map, lane0.start).x / UNITS_PER_TILE) + 1;
+    stepMatch(m, [{ player: 0, command: { type: 'build', x: x0, y: 10, cls: 'paladin', skill: 'holy-bolt' } }]);
+    const t = towerAt(sim, x0, 10)!;
+    toFight(m);
+    // Lane 1 is still busy while lane 0 is clear: lane 0's fighter rallies
+    sim.state.spawns = sim.state.spawns.filter((s) => laneOf(sim.map, s.dist) === 1);
+    stepMatch(m, []);
+    expect(t.atKing).toBe(true);
+    const king = sim.map.king!;
+    expect(Math.abs(t.x - (king.x + 0.5) * UNITS_PER_TILE)).toBeLessThan(3 * UNITS_PER_TILE);
+    t.hp = 5;
+    // The fight ends: home, standing, at full
+    for (const z of m.zones) {
+      z.state.spawns = [];
+      z.state.monsters = [];
+    }
+    stepMatch(m, []);
+    expect(m.state.battle!.phase).toBe('build');
+    expect(t.atKing).toBeUndefined();
+    expect(t.x).toBe((x0 + 0.5) * UNITS_PER_TILE);
+    expect(t.hp).toBe(t.maxHp);
+  });
+
+  it('the countdown waits for every creep on both sides, the kings\' fights included', () => {
+    const m = duel();
+    toFight(m);
+    for (const z of m.zones) z.state.spawns = [];
+    m.zones[0]!.state.monsters = [];
+    const z1 = m.zones[1]!;
+    z1.state.waves.push({ remaining: 1 });
+    const mo = createMonster(z1, real().battle!.waves[0]!.groups[0]!.monster, 0, 'normal', [], z1.map.arcs[0]!.end! - 50, 100_000_000);
+    z1.state.monsters.push(mo);
+    for (let i = 0; i < 50; i++) stepMatch(m, []);
+    expect(mo.atKing).toBe(true);
+    expect(m.state.battle!.phase).toBe('fight');
+    z1.state.monsters = [];
+    stepMatch(m, []);
+    expect(m.state.battle!.phase).toBe('build');
+    expect(m.state.battle!.phaseTick - m.state.tick).toBe(real().battle!.rules.buildTicks - 1);
   });
 
   it('sends grow stronger late in the match', () => {
@@ -141,7 +226,7 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     expect(sendGroups(data, send, data.battle!.waves[late]!, late).every((g) => g.hpPct === sendHpPct(data, send, late))).toBe(true);
   });
 
-  it('Tyrael strikes a monster in his reach for his percent of its life', () => {
+  it('the king strikes a monster in his reach for his percent of its life', () => {
     const m = duel();
     const sim = m.zones[0]!;
     const arc = sim.map.arcs[0]!;
@@ -151,8 +236,8 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     mo.stunTicks = 100;
     sim.state.monsters.push(mo);
     step(sim, []);
-    expect(mo.hp).toBe(1_000_000 - Math.floor((1_000_000 * real().battle!.rules.tyrael.hitPct) / 100));
-    expect(sim.tyraelHits).toHaveLength(1);
+    expect(mo.hp).toBe(1_000_000 - Math.floor((1_000_000 * real().battle!.rules.king.attack.hitPct) / 100));
+    expect(sim.kingStrikes).toHaveLength(1);
   });
 
   it('a player builds only their race', () => {
@@ -176,7 +261,7 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     expect(100_000 - lane.state.gold[0]!).toBe(2 * real().economy.buildCost);
   });
 
-  it('workers cost gold and bring Souls at the end of every wave', () => {
+  it('workers cost gold and mine shards every tick', () => {
     const m = duel();
     const lane = m.zones[0]!;
     lane.state.gold[0] = 10_000;
@@ -184,20 +269,22 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     stepMatch(m, [{ player: 0, command: { type: 'hire' } }]);
     expect(lane.state.gold[0]).toBe(10_000 - cost);
     expect(lane.state.battle!.workers[0]).toBe(1);
-    toFight(m);
-    while (m.state.battle!.phase === 'fight') stepMatch(m, []);
-    expect(lane.state.battle!.souls[0]).toBe(real().battle!.rules.worker.soulsPerWave);
+    const w = real().battle!.rules.worker;
+    expect(shardsPerTick(lane, 0)).toBe(w.shardsPerSecond / 20);
+    const before = lane.state.battle!.shards[0]!;
+    for (let i = 0; i < 20; i++) stepMatch(m, []);
+    expect(lane.state.battle!.shards[0]).toBe(before + w.shardsPerSecond);
   });
 
-  it('a send costs Souls, raises the sender\'s income and joins the enemy lane\'s next wave', () => {
+  it('a send costs shards, raises the sender\'s income and joins the enemy lane\'s next wave', () => {
     const m = duel();
     const own = m.zones[0]!.state.battle!;
-    own.souls[0] = 100;
+    own.shards[0] = 100_000;
     const send = sendDef(real(), 'corpsefire')!;
     const cost = sendCost(send, 0);
     stepMatch(m, [{ player: 0, command: { type: 'send', send: 'corpsefire', lane: 0 } }]);
-    expect(own.souls[0]).toBe(100 - cost);
-    expect(own.income[0]).toBe(cost * real().battle!.rules.sendIncomePerSoul);
+    expect(own.shards[0]).toBe(100_000 - cost * 1000);
+    expect(own.income[0]).toBe(cost * real().battle!.rules.sendIncomePerShard);
     expect(m.zones[1]!.state.battle!.queued).toEqual([{ send: 'corpsefire', lane: 0, from: 0 }]);
     toFight(m);
     const enemy = m.zones[1]!.state.spawns.map((s) => s.def.split('@')[0]);
@@ -208,7 +295,7 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
   it('an act boss send goes once a match, and not before its wave', () => {
     const m = duel();
     const own = m.zones[0]!.state.battle!;
-    own.souls[0] = 10_000;
+    own.shards[0] = 10_000_000;
     stepMatch(m, [{ player: 0, command: { type: 'send', send: 'andariel', lane: 0 } }]);
     expect(own.sendsMade[0]).toBe(0);
     m.state.battle!.wave = 9;
@@ -269,5 +356,26 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     const races = (seed: number) => createMatch(real(), seed, 'battle', 4, { teamSize: 2 }).state.battle!.races;
     expect(races(11)).toEqual(races(11));
     for (const r of races(11)) expect(Object.keys(real().classes)).toContain(r);
+  });
+
+  it('the game setup: mirror and random picks, easy waves and king, multiplied sends, no champions', () => {
+    const base = { teamSize: 2, races: ['paladin', 'druid', 'sorceress', 'amazon'], bots: [] };
+    const mirror = createMatch(real(), 2, 'battle', 4, { ...base, options: { pick: 'all', sends: 1, mirror: true, easy: false, long: false, champions: true } });
+    expect(mirror.state.battle!.races).toEqual(['paladin', 'druid', 'paladin', 'druid']);
+    const random = createMatch(real(), 2, 'battle', 4, { ...base, options: { pick: 'random', sends: 1, mirror: false, easy: false, long: false, champions: true } });
+    expect(random.state.battle!.races).not.toEqual(base.races);
+    const easy = createMatch(real(), 2, 'battle', 2, { teamSize: 1, races: ['paladin', 'paladin'], bots: [], options: { pick: 'all', sends: 3, mirror: false, easy: true, long: false, champions: false } });
+    const rules = real().battle!.rules;
+    expect(easy.zones[0]!.state.battle!.king.maxHp).toBe(Math.floor((rules.king.hp[0]! * rules.easy.kingPct) / 100));
+    expect(easy.zones[0]!.data.waves[0]!.hpPct).toBe(Math.floor((real().battle!.waves[0]!.hpPct! * rules.easy.wavePct) / 100));
+    // No champion packs: the champion waves carry none
+    expect(easy.zones[0]!.data.waves.every((w) => w.groups.every((g) => g.rank !== 'champion'))).toBe(true);
+    expect(real().battle!.waves.some((w) => w.groups.some((g) => g.rank === 'champion'))).toBe(true);
+    // X3 sends: the send walks three times over
+    easy.zones[0]!.state.battle!.shards[0] = 1_000_000;
+    stepMatch(easy, [{ player: 0, command: { type: 'send', send: 'corpsefire', lane: 0 } }]);
+    toFight(easy);
+    const corpsefires = easy.zones[1]!.state.spawns.filter((s) => s.def.startsWith('corpsefire')).length;
+    expect(corpsefires).toBe(3);
   });
 });

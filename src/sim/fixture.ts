@@ -88,6 +88,15 @@ const HAND_TABLES: Tables = {
   ],
   monseq: Array.from({ length: 15 }, (_, frame) => ({ sequence: 'seq_shamanresurrect', mode: 'A2', frame })),
   weapons: [{ name: 'Crystal Sword', mindam: 4, maxdam: 12 }, ...FIXTURE_ITEM_WEAPONS],
+  charstats: [
+    { class: 'Amazon', vit: 20, hpadd: 30, LifePerLevel: 8 },
+    { class: 'Sorceress', vit: 10, hpadd: 30, LifePerLevel: 4 },
+    { class: 'Necromancer', vit: 15, hpadd: 30, LifePerLevel: 6 },
+    { class: 'Paladin', vit: 25, hpadd: 30, LifePerLevel: 8 },
+    { class: 'Barbarian', vit: 25, hpadd: 30, LifePerLevel: 8 },
+    { class: 'Druid', vit: 25, hpadd: 30, LifePerLevel: 6 },
+    { class: 'Assassin', vit: 20, hpadd: 30, LifePerLevel: 8 },
+  ],
   monstrings: [],
   ...FIXTURE_ITEM_TABLES,
   levels: [1, 2, 3, 4, 5].flatMap((act) =>

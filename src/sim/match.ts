@@ -19,7 +19,7 @@ import { ARC_COUNT, createLaneMap } from './map.ts';
 import { createSim, startWave, step } from './sim.ts';
 import type { Command, Sim } from './state.ts';
 import { applyTrade, isTradeCommand, type Trade } from './items/trade.ts';
-import { battleData, battleStart, battleWaveCount, fightOver, leakAll, payWave, sendCost, sendDef, sendGroups, sendOpen } from './battle.ts';
+import { battleData, battleOptions, battleStart, battleWaveCount, DEFAULT_OPTIONS, fightOver, payWave, rally, recall, sendCost, sendDef, sendGroups, sendOpen, wholeShards, type BattleOptions } from './battle.ts';
 import { botCommands } from './battlebot.ts';
 import { createRng, rollInt } from './rng.ts';
 
@@ -38,6 +38,8 @@ export interface BattleSetup {
   bots?: number[];
   /** Online: the match slot each lobby slot plays (seats[lobby] = slot). Absent, lobby slot and match slot are one. */
   seats?: number[];
+  /** The game setup screen's choices (battle.ts DEFAULT_OPTIONS when absent). */
+  options?: BattleOptions;
 }
 
 /** A human in a battle lobby: the race they picked (or 'random') and the team they asked for (0 or 1). */
@@ -51,7 +53,7 @@ export interface BattleHuman {
  * has room (else the other), in its next seat; bots take every seat left. Undefined when
  * the humans do not fit (more than the teams hold).
  */
-export function battleSetupFor(mode: 'battle' | 'coop', teamSize: number, humans: readonly BattleHuman[]): BattleSetup | undefined {
+export function battleSetupFor(mode: 'battle' | 'coop', teamSize: number, humans: readonly BattleHuman[], options?: BattleOptions): BattleSetup | undefined {
   const teams = mode === 'battle' ? 2 : 1;
   const slots = teamSize * teams;
   if (teamSize < 1 || teamSize > MAX_BATTLE_TEAM || humans.length > slots) return undefined;
@@ -65,7 +67,7 @@ export function battleSetupFor(mode: 'battle' | 'coop', teamSize: number, humans
     return slot;
   });
   const bots = Array.from({ length: slots }, (_, p) => p).filter((p) => !seats.includes(p));
-  return { teamSize, races, bots, seats };
+  return { teamSize, races, bots, seats, ...(options ? { options } : {}) };
 }
 
 /** The phases both teams share, and what the lobby set up. */
@@ -85,6 +87,8 @@ export interface BattleMatchState {
   seed: number;
   /** Online: the match slot each lobby slot plays; empty when they are the same. */
   seats: number[];
+  /** The setup screen's choices. */
+  options: BattleOptions;
 }
 export const MAX_PLAYERS = 6;
 /** A lobby holds up to eight: a 4v4 battle; free for all still starts with at most MAX_PLAYERS. */
@@ -143,12 +147,15 @@ function createBattleMatch(data: GameData, seed: number, mode: 'battle' | 'coop'
   const teams = mode === 'battle' ? 2 : 1;
   const players = n * teams;
   const classes = Object.keys(data.classes);
+  const options = battleOptions(setup.options ?? DEFAULT_OPTIONS);
   const rng = createRng((seed ^ 0x0ba771e5) >>> 0);
   const races = Array.from({ length: players }, (_, p) => {
-    const want = setup.races?.[p];
+    const want = options.pick === 'all' ? setup.races?.[p] : undefined;
     return want && data.classes[want] ? want : classes[rollInt(rng, 0, classes.length - 1)]!;
   });
-  const zones = Array.from({ length: teams }, (_, t) => createBattlefield(data, seed, races.slice(t * n, t * n + n)));
+  // Mirror mode: the second team plays the first team's races, seat for seat
+  if (options.mirror && teams === 2) for (let p = 0; p < n; p++) races[n + p] = races[p]!;
+  const zones = Array.from({ length: teams }, (_, t) => createBattlefield(data, seed, races.slice(t * n, t * n + n), options));
   const first = data.battle!.rules.firstBuildTicks;
   return {
     data,
@@ -160,16 +167,16 @@ function createBattleMatch(data: GameData, seed: number, mode: 'battle' | 'coop'
       status: 'playing',
       winners: [],
       trades: [],
-      battle: { phase: 'build', phaseTick: first, wave: 0, teamSize: n, races, bots: [...(setup.bots ?? [])].filter((b) => b >= 0 && b < players), made: races.map(() => []), seed: seed >>> 0, seats: [...(setup.seats ?? [])] },
+      battle: { phase: 'build', phaseTick: first, wave: 0, teamSize: n, races, bots: [...(setup.bots ?? [])].filter((b) => b >= 0 && b < players), made: races.map(() => []), seed: seed >>> 0, seats: [...(setup.seats ?? [])], options },
     },
   };
 }
 
 /** One team's battlefield: a lane per seat, each seat playing its race. */
-export function createBattlefield(data: GameData, seed: number, races: readonly string[]): Sim {
-  const bd = battleData(data);
+export function createBattlefield(data: GameData, seed: number, races: readonly string[], options: BattleOptions = DEFAULT_OPTIONS): Sim {
+  const bd = battleData(data, options);
   const sim = createSim(bd, seed, { players: races.length, map: createLaneMap(races.length) });
-  sim.state.battle = battleStart(bd, races);
+  sim.state.battle = battleStart(bd, races, options);
   return sim;
 }
 
@@ -263,7 +270,7 @@ export function enemyOf(match: Match, player: number): number {
   return match.zones.length > 1 ? 1 - teamOf(match, player) : 0;
 }
 
-/** A send: the sender pays its Souls and gains its income; it joins the enemy lane's next wave. */
+/** A send: the sender pays its shards and gains its income; it joins the enemy lane's next wave. */
 function applySend(match: Match, player: number, id: string, lane: number): void {
   const b = match.state.battle!;
   if (match.state.mode !== 'battle') return;
@@ -272,37 +279,39 @@ function applySend(match: Match, player: number, id: string, lane: number): void
   const own = match.zones[ringOf(match, player)]!;
   const target = match.zones[enemyOf(match, player)]!;
   const seat = seatOf(match, player);
-  if (!send || !own.state.battle || !target.state.battle || wave >= battleWaveCount(match.data)) return;
+  if (!send || !own.state.battle || !target.state.battle || wave >= battleWaveCount(own.data)) return;
   if (!Number.isInteger(lane) || lane < 0 || lane >= target.map.arcs.length || !sendOpen(send, wave, b.made[player]!)) return;
   const cost = sendCost(send, wave);
-  if (own.state.battle.souls[seat]! < cost) return;
-  own.state.battle.souls[seat]! -= cost;
-  own.state.battle.income[seat]! += cost * match.data.battle!.rules.sendIncomePerSoul;
+  if (wholeShards(own.state.battle.shards[seat]!) < cost) return;
+  own.state.battle.shards[seat]! -= cost * 1000;
+  own.state.battle.income[seat]! += cost * match.data.battle!.rules.sendIncomePerShard;
   own.state.battle.sendsMade[seat]!++;
   b.made[player]!.push(id);
   target.state.battle.queued.push({ send: id, lane, from: player });
 }
 
 /**
- * The shared phases: the build phase runs out, then every battlefield's wave starts with
- * the sends queued on it; the fight lasts until every battlefield is clear (or its time
- * runs out and what is left leaks), then every player is paid and the next build begins.
- * A king at 0 ends the match; after the last wave the king with more life wins.
+ * The shared phases, Legion's rule: the first build phase, then every battlefield's wave
+ * starts with the sends queued on it; the fight lasts until every creep on both sides is
+ * dead, sends and the fights at the kings included; then every player is paid, every
+ * fighter stands again at home, and the countdown to the next wave begins. During a fight
+ * a cleared lane's fighters rally to the king. A king at 0 ends the match; after the last
+ * wave the king with more life wins.
  */
 function stepBattle(match: Match): void {
   const m = match.state;
   const b = m.battle!;
   const rules = match.data.battle!.rules;
-  const count = battleWaveCount(match.data);
+  const count = battleWaveCount(match.zones[0]!.data);
   if (b.phase === 'build' && m.tick >= b.phaseTick) {
     match.zones.forEach((zone, t) => {
       const wave = zone.data.waves[b.wave]!;
-      const extra = zone.state.battle!.queued.map((q) => ({ lane: q.lane, groups: sendGroups(match.data, sendDef(match.data, q.send)!, wave, b.wave) }));
+      const extra = zone.state.battle!.queued.map((q) => ({ lane: q.lane, groups: sendGroups(match.data, sendDef(match.data, q.send)!, wave, b.wave, b.options.sends) }));
       // Co-op: the schedule's sends, onto the lanes in turn
       if (m.mode === 'coop') {
         (rules.coop.sends[b.wave] ?? []).forEach((id, i) => {
           const send = sendDef(match.data, id);
-          if (send) extra.push({ lane: (b.wave + i + t) % zone.map.arcs.length, groups: sendGroups(match.data, send, wave, b.wave) });
+          if (send) extra.push({ lane: (b.wave + i + t) % zone.map.arcs.length, groups: sendGroups(match.data, send, wave, b.wave, b.options.sends) });
         });
       }
       zone.state.battle!.queued = [];
@@ -312,13 +321,12 @@ function stepBattle(match: Match): void {
     b.phase = 'fight';
     b.phaseTick = m.tick;
   } else if (b.phase === 'fight') {
-    let over = match.zones.every(fightOver);
-    if (!over && m.tick - b.phaseTick >= rules.fightMaxTicks) {
-      match.zones.forEach(leakAll);
-      over = true;
-    }
-    if (over) {
-      for (const zone of match.zones) payWave(zone, b.wave - 1);
+    for (const zone of match.zones) rally(zone);
+    if (match.zones.every(fightOver)) {
+      for (const zone of match.zones) {
+        payWave(zone, b.wave - 1);
+        recall(zone);
+      }
       b.phase = 'build';
       b.phaseTick = m.tick + rules.buildTicks;
     }

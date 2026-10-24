@@ -1,5 +1,5 @@
 {
-  "comment": "Eternal Conflict's battlefields (src/sim/battle.ts), authored by us and baked at extraction from the player's tiles (tools/extract/battlemap.ts), once for each team size, on the lanes map.ts createLaneMap lays out: Harrogath under siege for the first team, the Pandemonium Fortress for the second. edge stands on the open ground beside the lanes (a clear strip left along each), tall pieces behind and left at tallPct of the tiles, low ones at lowPct on the side facing the camera; divider between neighbouring lanes; keep round the Worldstone. A prefab may take its own palette (the Worldstone's crystals are the Throne of Destruction's).",
+  "comment": "Eternal Conflict's battlefields (src/sim/battle.ts), authored by us and baked at extraction from the player's tiles (tools/extract/battlemap.ts), once for each team size, on the pads map.ts createLaneMap lays out: Harrogath under siege for the first team, the Pandemonium Fortress for the second. pad is each player's build pad's ground, platform the king's stone, road the stretch from the pads to it; gate the two posts at each pad's top. edge stands on the open ground beside the pads (never inside one), tall pieces behind and left at tallPct of the tiles, low ones at lowPct on the side facing the camera; divider between neighbouring pads; keep round the platform. A prefab may take its own palette (the shard piles are the Throne of Destruction's Worldstone crystals).",
   "keeps": {
     "harrogath": {
       "palette": "global/palette/act5/pal.dat",
@@ -86,7 +86,17 @@
             { "file": "Expansion/Siege/battle.dt1", "o": 7, "key": "11-0", "at": [0, 0] }
           ]
         },
-        "worldstone": {
+        "gatepost-l": {
+          "pieces": [
+            { "file": "Expansion/Town/maingate.dt1", "o": 8, "key": "3-5", "at": [0, 0] }
+          ]
+        },
+        "gatepost-r": {
+          "pieces": [
+            { "file": "Expansion/Town/maingate.dt1", "o": 8, "key": "3-4", "at": [0, 0] }
+          ]
+        },
+        "shards": {
           "palette": "global/palette/act5/pal.dat",
           "pieces": [
             { "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-0", "at": [0, 0] },
@@ -94,6 +104,22 @@
             { "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-3", "at": [0, 1] }
           ]
         }
+      },
+      "pad": {
+        "file": "Expansion/Siege/battle.dt1",
+        "tiles": ["20-0", "20-1", "20-2", "20-3", "20-4", "20-5", "20-6", "20-7", "20-8", "20-9", "20-10", "20-11", "20-12", "20-13"]
+      },
+      "platform": {
+        "file": "Act4/Fort/plaza.dt1",
+        "tiles": ["0-18", "0-19", "0-14", "0-12", "0-11", "0-10"],
+        "palette": "global/palette/act4/pal.dat",
+        "halfWidth": 3.5,
+        "halfDepth": 2.5
+      },
+      "gate": {
+        "left": "gatepost-l",
+        "right": "gatepost-r",
+        "out": 2.5
       }
     },
     "fortress": {
@@ -166,7 +192,19 @@
             { "file": "Act4/Lava/Specials.dt1", "o": 12, "key": "22-8", "at": [0, 0] }
           ]
         },
-        "worldstone": {
+        "hellpost-l": {
+          "palette": "global/palette/act5/pal.dat",
+          "pieces": [
+            { "file": "Expansion/Siege/hellgate.dt1", "o": 8, "key": "29-0", "at": [0, 0] }
+          ]
+        },
+        "hellpost-r": {
+          "palette": "global/palette/act5/pal.dat",
+          "pieces": [
+            { "file": "Expansion/Siege/hellgate.dt1", "o": 9, "key": "29-0", "at": [0, 0] }
+          ]
+        },
+        "shards": {
           "palette": "global/palette/act5/pal.dat",
           "pieces": [
             { "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-0", "at": [0, 0] },
@@ -174,6 +212,21 @@
             { "file": "Expansion/baallair/floor.dt1", "o": 12, "key": "5-3", "at": [0, 1] }
           ]
         }
+      },
+      "pad": {
+        "file": "Act4/Fort/plaza.dt1",
+        "tiles": ["0-61", "0-56", "0-48", "0-45", "0-40"]
+      },
+      "platform": {
+        "file": "Act4/Fort/foregate.dt1",
+        "tiles": ["1-25", "1-26", "1-27", "1-29", "1-30", "1-31"],
+        "halfWidth": 3.5,
+        "halfDepth": 2.5
+      },
+      "gate": {
+        "left": "hellpost-l",
+        "right": "hellpost-r",
+        "out": 2.5
       }
     }
   }

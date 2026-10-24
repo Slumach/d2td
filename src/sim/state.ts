@@ -97,15 +97,15 @@ export type CommandBody =
   | { type: 'sellDrop'; dropId: number }
   /** The trade window: handled by the match, which spans rings (src/sim/items/trade.ts). */
   | TradeCommand
-  /** Eternal Conflict (src/sim/battle.ts): hire a worker into this player's back row, for Souls each wave. */
+  /** Eternal Conflict (src/sim/battle.ts): hire a worker into this player's back row, to mine shards. */
   | { type: 'hire' }
   /** Eternal Conflict: a send (balance.json battle.sends) onto an enemy lane's next wave. The match handles it: it crosses teams. */
   | { type: 'send'; send: string; lane: number }
-  /** Eternal Conflict: gold into the team's king: the Worldstone's life, its regeneration or Tyrael's hits. */
+  /** Eternal Conflict: gold into the team's king: its life, its regeneration or its strike. */
   | { type: 'king'; upgrade: KingUpgrade };
 
-export type KingUpgrade = 'hp' | 'regen' | 'tyrael';
-export const KING_UPGRADES: readonly KingUpgrade[] = ['hp', 'regen', 'tyrael'];
+export type KingUpgrade = 'hp' | 'regen' | 'attack';
+export const KING_UPGRADES: readonly KingUpgrade[] = ['hp', 'regen', 'attack'];
 
 /** D2R-style loot filter: the default keeps magic and better, socketed and superior items, gems and runes; 'all' keeps everything. */
 export type LootFilter = 'default' | 'all';
@@ -168,10 +168,12 @@ export interface Monster {
   /** A raiser mid-cast stands still; the corpse rises when this reaches 0. */
   castTicks: number;
   castCorpse: number;
-  /** The blocker holding it and for how long; the blockers it has broken through. */
+  /** The blocker holding it (a summon, or in Eternal Conflict a fighter) and for how long; the blockers it has broken through. */
   blockedBy: number;
   blockedTicks: number;
   brokeThrough: number[];
+  /** Eternal Conflict: it has reached the king and stands at its feet, hitting it. */
+  atKing?: boolean;
 }
 
 /** A curse on a monster: the skill and tower level it was cast at, and how long it has left. */
@@ -219,6 +221,11 @@ export interface Tower {
   legend?: string;
   /** The legend tower this evolved tower is part of: it acts from there, unseen. */
   legendOf?: number;
+  /** Eternal Conflict: a fighter's life (1/256 HP) and its most; at zero it is down for the round. */
+  hp?: number;
+  maxHp?: number;
+  /** Eternal Conflict: rallied to the king while its lane is clear (x and y stand there; its tile is still its own). */
+  atKing?: boolean;
 }
 
 export interface Missile {
@@ -353,28 +360,31 @@ export interface SimState {
   belts: (Item | null)[][];
   /** Each player's loot filter (src/sim/items/loot.ts passesFilter). */
   lootFilters: LootFilter[];
-  /** Eternal Conflict only: this team's king, workers, Souls and income (src/sim/battle.ts). */
+  /** Eternal Conflict only: this team's king, workers, shards and income (src/sim/battle.ts). */
   battle?: BattleSimState;
 }
 
 /**
  * One team's side of a battle, kept on its battlefield's sim: the king the team shares, and
- * each seat's race, workers, Souls and income. Every array is by seat (the lane's player).
+ * each seat's race, workers, shards and income. Every array is by seat (the lane's player).
  */
 export interface BattleSimState {
-  /** The Worldstone's life (whole points, not 1/256) and the upgrade levels the team has bought. */
-  king: { hp: number; maxHp: number; hpLevel: number; regenLevel: number; tyraelLevel: number };
-  tyraelCooldown: number;
+  /** The king's life (whole points, not 1/256) and the upgrade levels the team has bought. */
+  king: { hp: number; maxHp: number; hpLevel: number; regenLevel: number; attackLevel: number };
+  kingCooldown: number;
   /** The class each seat plays: it builds only that class's towers. */
   races: string[];
   workers: number[];
-  souls: number[];
+  /** Shards mined, in thousandths of a shard. */
+  shards: number[];
   /** Gold paid at the end of every wave: the base income and what the seat's sends added. */
   income: number[];
   /** For the scoreboard: sends made, monsters that leaked from the seat's lane, and the king damage they did. */
   sendsMade: number[];
   leaks: number[];
   leakDamage: number[];
+  /** Gold the seat's kills paid in all. */
+  bounty: number[];
   /** Sends that join this team's next wave: the send, the lane it walks and the sender (match slot). */
   queued: { send: string; lane: number; from: number }[];
 }
@@ -413,9 +423,9 @@ export interface Sim {
    * what it paid its killer, gold find and Find Item included. Not state: cleared every step.
    */
   paid: PaidKill[];
-  /** Eternal Conflict: what reached the king this tick and what Tyrael struck, for the renderer. Not state. */
+  /** Eternal Conflict: what hit the king this tick and what the king struck, for the renderer. Not state. */
   kingHits?: { x: number; y: number; damage: number }[];
-  tyraelHits?: { x: number; y: number }[];
+  kingStrikes?: { x: number; y: number }[];
 }
 
 export interface PaidKill {

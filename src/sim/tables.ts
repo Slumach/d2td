@@ -11,6 +11,8 @@ export interface Tables {
   skilldesc: TableRow[];
   missiles: TableRow[];
   weapons: TableRow[];
+  /** Each class's starting stats and growth, for Eternal Conflict's fighters' life. */
+  charstats: TableRow[];
   superuniques: TableRow[];
   levels: TableRow[];
   /** D2R's monster names (local/lng/strings/monsters.json): Key, the NameStr or superunique Name, and enUS. */
@@ -37,7 +39,7 @@ export interface Tables {
 }
 
 export const TABLE_NAMES: readonly (keyof Tables)[] = [
-  'monstats', 'monlvl', 'monumod', 'monseq', 'skills', 'skilldesc', 'missiles', 'weapons', 'superuniques', 'levels', 'monstrings',
+  'monstats', 'monlvl', 'monumod', 'monseq', 'skills', 'skilldesc', 'missiles', 'weapons', 'charstats', 'superuniques', 'levels', 'monstrings',
   'armor', 'misc', 'uniqueitems', 'setitems', 'sets', 'magicprefix', 'magicsuffix', 'rareprefix', 'raresuffix', 'gems', 'runes', 'itemstatcost', 'itemtypes', 'properties', 'treasureclassex', 'itemratio', 'qualityitems', 'itemstrings',
 ];
 

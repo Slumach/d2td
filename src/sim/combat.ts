@@ -274,6 +274,7 @@ export function killMonster(sim: Sim, monster: Monster): void {
   const pct = r ? (sim.players > 1 ? idiv(r.goldPct * (r.teamGoldPct ?? 100), 100) : r.goldPct) : 100;
   const gold = idiv(found * pct, 100);
   s.gold[killer]! += gold;
+  if (s.battle) s.battle.bounty[killer]! += gold;
   sim.paid.push({ x: monster.x, y: monster.y, gold, player: killer, hp: monster.maxHp });
   s.kills++;
   s.killsBy[killer]!++;

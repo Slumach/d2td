@@ -2,7 +2,8 @@
 // path as blue-grey lines (each arc's in the colour of the player whose arc it is),
 // scenery as faint marks, a dot per monster (so a crowded arc shows), and the world
 // camera's view as a box. M or the panel's automap button toggles it; clicking it moves
-// the camera. It draws the ring in the same isometric view at 1/8 scale. In FFA a chip per
+// the camera. It draws the ring in the same isometric view at 1/8 scale (both of Eternal
+// Conflict's battlefields at 1/16, each where it lies in the world). In FFA a chip per
 // player sits under it, with their alive weight; clicking one shows their ring.
 
 import Phaser from 'phaser';
@@ -13,7 +14,13 @@ import { WORLD_HEIGHT, WORLD_WIDTH, project, tileDiamond } from './iso.ts';
 import { FONT } from './ui.ts';
 import type { WorldView } from './view.ts';
 
-const SCALE = 8;
+/** One ring drawn, and what it is shifted by in world pixels (Eternal Conflict's second battlefield). */
+export interface MinimapLayer {
+  sim: Sim;
+  dx: number;
+  dy: number;
+}
+
 /** Redraw the moving parts this often, in frames. */
 const EVERY = 6;
 /** D2's automap blue for walls and the sheet behind it. */
@@ -21,13 +28,13 @@ const WALL = 0x5c74b8;
 const SHEET_ALPHA = 0.55;
 
 export class Minimap {
-  readonly width = WORLD_WIDTH / SCALE;
-  readonly height = WORLD_HEIGHT / SCALE;
+  readonly width: number;
+  readonly height: number;
   private readonly ground: Phaser.GameObjects.Graphics;
   private readonly live: Phaser.GameObjects.Graphics;
   private readonly zone: Phaser.GameObjects.Zone;
   private frame = 0;
-  private drawnFor: Sim | undefined;
+  private drawnFor = '';
   private shown = true;
   private chips: Phaser.GameObjects.Text[] = [];
 
@@ -37,7 +44,11 @@ export class Minimap {
     private readonly x: number,
     private readonly y: number,
     depth: number,
+    extent: { width: number; height: number } = { width: WORLD_WIDTH, height: WORLD_HEIGHT },
+    private readonly scale = 8,
   ) {
+    this.width = extent.width / this.scale;
+    this.height = extent.height / this.scale;
     this.ground = scene.add.graphics().setDepth(depth);
     this.live = scene.add.graphics().setDepth(depth + 1);
     this.zone = scene.add
@@ -45,7 +56,7 @@ export class Minimap {
       .setOrigin(0)
       .setDepth(depth + 2)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', (p: Phaser.Input.Pointer) => view.centreOn((p.x - x) * SCALE, (p.y - y) * SCALE));
+      .on('pointerdown', (p: Phaser.Input.Pointer) => view.centreOn((p.x - x) * this.scale, (p.y - y) * this.scale));
   }
 
   get visible(): boolean {
@@ -93,37 +104,45 @@ export class Minimap {
 
   /** Draws `sim`'s ring; `colourOf(arc)` is the arc owner's colour. */
   draw(sim: Sim, colourOf: (arc: number) => number): void {
-    if (this.drawnFor !== sim) {
-      this.drawnFor = sim;
-      this.drawGround(sim, colourOf);
+    this.drawLayers([{ sim, dx: 0, dy: 0 }], (_z, arc) => colourOf(arc));
+  }
+
+  /** Draws every layer where it lies; `colourOf(zone, arc)` is the arc owner's colour. */
+  drawLayers(layers: MinimapLayer[], colourOf: (zone: number, arc: number) => number): void {
+    const key = layers.map((l) => `${l.dx},${l.dy}:${l.sim.map.length}:${l.sim.players}`).join('|');
+    if (this.drawnFor !== key) {
+      this.drawnFor = key;
+      this.ground.clear().fillStyle(0x000000, SHEET_ALPHA).fillRect(this.x - 2, this.y - 2, this.width + 4, this.height + 4);
+      layers.forEach((l, z) => this.drawGround(l, (arc) => colourOf(z, arc)));
     }
     if (!this.shown || this.frame++ % EVERY !== 0) return;
     const g = this.live.clear();
-    const at = (wx: number, wy: number) => ({ x: this.x + wx / SCALE, y: this.y + wy / SCALE });
-    for (const m of sim.state.monsters) {
-      const w = project(m.x, m.y);
-      const p = at(w.x, w.y);
-      const r = m.rank === 'normal' ? 1.5 : 2.5;
-      g.fillStyle(m.rank === 'normal' ? 0xe84838 : 0xffd040).fillCircle(p.x, p.y, r);
+    const at = (wx: number, wy: number) => ({ x: this.x + wx / this.scale, y: this.y + wy / this.scale });
+    for (const l of layers) {
+      for (const m of l.sim.state.monsters) {
+        const w = project(m.x, m.y);
+        const p = at(w.x + l.dx, w.y + l.dy);
+        const r = m.rank === 'normal' ? 1.5 : 2.5;
+        g.fillStyle(m.rank === 'normal' ? 0xe84838 : 0xffd040).fillCircle(p.x, p.y, r);
+      }
     }
     const v = this.view.world.worldView;
     const a = at(v.x, v.y);
-    g.lineStyle(1, 0xffffff, 0.8).strokeRect(a.x, a.y, v.width / SCALE, v.height / SCALE);
+    g.lineStyle(1, 0xffffff, 0.8).strokeRect(a.x, a.y, v.width / this.scale, v.height / this.scale);
   }
 
-  private drawGround(sim: Sim, colourOf: (arc: number) => number): void {
-    const g = this.ground.clear();
-    g.fillStyle(0x000000, SHEET_ALPHA).fillRect(this.x - 2, this.y - 2, this.width + 4, this.height + 4);
-    const { map } = sim;
-    const corner = (tx: number, ty: number) => tileDiamond(tx, ty).map((p) => new Phaser.Math.Vector2(this.x + p.x / SCALE, this.y + p.y / SCALE));
+  private drawGround(l: MinimapLayer, colourOf: (arc: number) => number): void {
+    const g = this.ground;
+    const { map } = l.sim;
+    const corner = (tx: number, ty: number) => tileDiamond(tx, ty).map((p) => new Phaser.Math.Vector2(this.x + (p.x + l.dx) / this.scale, this.y + (p.y + l.dy) / this.scale));
     // The map's edge, as D2 draws a level's walls
     const edge = [corner(0, 0)[0]!, corner(map.width - 1, 0)[1]!, corner(map.width - 1, map.height - 1)[2]!, corner(0, map.height - 1)[3]!];
     g.lineStyle(1, WALL, 0.9).strokePoints(edge, true);
     // Alone, the monsters' one spawn: a red mark where they come in, the suggested place to build near
-    if (sim.players === 1) {
+    if (l.sim.players === 1 && !map.open) {
       const sp = positionAt(map, map.arcs[0]!.spawn);
       const w = project(sp.x, sp.y);
-      const p = { x: this.x + w.x / SCALE, y: this.y + w.y / SCALE };
+      const p = { x: this.x + (w.x + l.dx) / this.scale, y: this.y + (w.y + l.dy) / this.scale };
       g.fillStyle(0xe84838, 1).fillTriangle(p.x, p.y - 7, p.x - 5, p.y + 3, p.x + 5, p.y + 3);
       g.lineStyle(1, 0xffffff, 0.9).strokeCircle(p.x, p.y, 8);
     }

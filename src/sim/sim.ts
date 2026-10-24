@@ -12,7 +12,7 @@ import { archetypeOf } from './archetypes/index.ts';
 import type { SkillDef, TowerBuff } from './archetypes/types.ts';
 import { activeSkill, computeAuras, EMPTY_FIELD } from './auras.ts';
 import type { GameData, WaveDef, WaveGroup } from './data.ts';
-import { hire, tyraelStrikes, upgradeKing } from './battle.ts';
+import { hire, kingStrikes, mine, standing, syncFighters, upgradeKing } from './battle.ts';
 import { TICKS_PER_SECOND, idiv } from './fixed.ts';
 import { createMap, type GameMap } from './map.ts';
 import { decayCorpses, spawnMonsters, updateMonsters } from './monsters.ts';
@@ -89,10 +89,14 @@ export function step(sim: Sim, commands: readonly Command[]): void {
   sim.paid = [];
   if (s.battle) {
     sim.kingHits = [];
-    sim.tyraelHits = [];
+    sim.kingStrikes = [];
   }
   if (s.status === 'playing') {
     for (const command of commands) applyCommand(sim, command);
+    if (s.battle) {
+      syncFighters(sim);
+      mine(sim);
+    }
     // Waves run on a fixed timer, whether the last one is dead or not; an open cow portal
     // takes the timer for its three waves. A battlefield's waves are the match's to start.
     if (!s.battle && s.tick >= s.nextWaveTick) {
@@ -104,7 +108,7 @@ export function step(sim: Sim, commands: readonly Command[]): void {
     updateMonsters(sim);
     updateSummons(sim);
     updateTowers(sim);
-    if (s.battle) tyraelStrikes(sim);
+    if (s.battle) kingStrikes(sim);
     updateMissiles(sim);
     decayCorpses(sim);
     collectCleared(sim);
@@ -289,6 +293,8 @@ export function attackInterval(sim: Sim, tower: Tower, skill: SkillDef, lvl: num
  */
 function updateTowers(sim: Sim): void {
   for (const tower of sim.state.towers) {
+    // A fighter that is down acts no more this round
+    if (!standing(sim, tower)) continue;
     sim.actor = tower.owner;
     sim.actorTower = tower.id;
     if (tower.summonCooldown > 0) tower.summonCooldown--;
@@ -344,7 +350,10 @@ function checkEnd(sim: Sim): void {
   const s = sim.state;
   // A battlefield falls with its king; the match decides the rest
   if (s.battle) {
-    if (s.battle.king.hp <= 0) s.status = 'lost';
+    if (s.battle.king.hp <= 0) {
+      s.battle.king.hp = 0;
+      s.status = 'lost';
+    }
     return;
   }
   if (s.alive >= aliveLimitOf(sim)) {

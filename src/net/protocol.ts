@@ -6,10 +6,11 @@
 // The host's own game is a player like the rest: it connects to its relay over loopback.
 
 import type { Command } from '../sim/state.ts';
+import type { BattleOptions } from '../sim/battle.ts';
 import type { BattleSetup, MatchMode, PlayerCommand } from '../sim/match.ts';
 
 /** Bumped whenever a message changes shape; players on different protocols cannot join. */
-export const PROTOCOL = 3;
+export const PROTOCOL = 4;
 export const DEFAULT_PORT = 47310;
 /** Ticks between match hash reports. */
 export const HASH_EVERY = 100;
@@ -37,8 +38,8 @@ export type ClientMessage =
       token?: string;
     }
   | { t: 'mode'; mode: MatchMode }
-  /** Eternal Conflict: the host sets the team size; anyone sets their own race and team. */
-  | { t: 'battle'; teamSize?: number; race?: string; team?: number }
+  /** Eternal Conflict: the host sets the team size and the game setup; anyone sets their own race and team. */
+  | { t: 'battle'; teamSize?: number; race?: string; team?: number; options?: BattleOptions }
   /** The host starts the match; with `resume`, from its saved checkpoint (JSON). */
   | { t: 'start'; resume?: string }
   | { t: 'cmd'; command: Command }
@@ -48,7 +49,7 @@ export type ClientMessage =
 export type HostMessage =
   | { t: 'welcome'; you: number; host: boolean }
   | { t: 'reject'; reason: string }
-  | { t: 'lobby'; players: LobbyPlayer[]; mode: MatchMode; teamSize?: number }
+  | { t: 'lobby'; players: LobbyPlayer[]; mode: MatchMode; teamSize?: number; options?: BattleOptions }
   | { t: 'start'; seed: number; mode: MatchMode; players: LobbyPlayer[]; you: number; resume?: string; battle?: BattleSetup }
   | { t: 'tick'; tick: number; cmds: PlayerCommand[] }
   | { t: 'left'; slot: number; name: string }

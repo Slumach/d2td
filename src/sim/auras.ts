@@ -99,6 +99,8 @@ export function computeAuras(sim: Sim): AuraField {
   const emitters: AuraEmitter[] = [];
 
   for (const tower of s.towers) {
+    // Eternal Conflict: a fighter that is down projects nothing
+    if (s.battle && (tower.legendOf !== undefined ? (s.towers.find((x) => x.id === tower.legendOf)?.hp ?? 1) : (tower.hp ?? 1)) <= 0) continue;
     for (const { skill, aura } of auraSources(sim, tower)) {
       emitters.push({ towerId: tower.id, skill: skill.id, radiusUnits: aura.radiusUnits });
       if (aura.towers) {

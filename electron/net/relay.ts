@@ -6,6 +6,7 @@
 import { randomInt } from 'node:crypto';
 import { createServer, type Server, type Socket } from 'node:net';
 
+import { battleOptions, DEFAULT_OPTIONS, type BattleOptions } from '../../src/sim/battle.ts';
 import { battleSetupFor, MAX_BATTLE_TEAM, MAX_LOBBY, MAX_PLAYERS, MAX_TEAM_PLAYERS, type BattleSetup, type MatchMode, type PlayerCommand } from '../../src/sim/match.ts';
 import { PROTOCOL, TICK_MS, type ClientMessage, type HostMessage, type LobbyPlayer } from '../../src/net/protocol.ts';
 import { validCommand } from '../../src/net/validate.ts';
@@ -48,8 +49,9 @@ export class Relay {
   private readonly opts: RelayOptions;
   private peers: Peer[] = [];
   private mode: MatchMode = 'team';
-  /** Eternal Conflict: players a team, set by the host. */
+  /** Eternal Conflict: players a team and the game setup, set by the host. */
   private teamSize = 1;
+  private options: BattleOptions = DEFAULT_OPTIONS;
   private started = false;
   private tick = 0;
   private queue: PlayerCommand[] = [];
@@ -95,7 +97,7 @@ export class Relay {
   }
 
   private sendLobby(): void {
-    this.broadcast({ t: 'lobby', players: this.lobbyPlayers(), mode: this.mode, ...(BATTLE_MODES.includes(this.mode) ? { teamSize: this.teamSize } : {}) });
+    this.broadcast({ t: 'lobby', players: this.lobbyPlayers(), mode: this.mode, ...(BATTLE_MODES.includes(this.mode) ? { teamSize: this.teamSize, options: this.options } : {}) });
   }
 
   private reject(socket: Socket, reason: string): void {
@@ -129,6 +131,7 @@ export class Relay {
     } else if (m.t === 'battle' && !this.started) {
       // The host sizes the teams; everyone picks their own race and team
       if (peer.host && Number.isInteger(m.teamSize) && m.teamSize! >= 1 && m.teamSize! <= MAX_BATTLE_TEAM) this.teamSize = m.teamSize!;
+      if (peer.host && m.options !== undefined) this.options = battleOptions(m.options);
       if (typeof m.race === 'string' && /^[a-z]{1,20}$/.test(m.race)) peer.race = m.race;
       if (m.team === 0 || m.team === 1) peer.team = m.team;
       this.sendLobby();
@@ -137,7 +140,7 @@ export class Relay {
       if (this.mode === 'team' && this.joined.length > MAX_TEAM_PLAYERS) return this.log(`relay: a team takes up to ${MAX_TEAM_PLAYERS} players`);
       if (this.mode === 'ffa' && this.joined.length > MAX_PLAYERS) return this.log(`relay: free for all takes up to ${MAX_PLAYERS} players`);
       if (BATTLE_MODES.includes(this.mode)) {
-        const setup = battleSetupFor(this.mode as 'battle' | 'coop', this.teamSize, this.joined.map((p) => ({ race: p.race, team: p.team })));
+        const setup = battleSetupFor(this.mode as 'battle' | 'coop', this.teamSize, this.joined.map((p) => ({ race: p.race, team: p.team })), this.options);
         if (!setup) return this.log(`relay: ${this.joined.length} players do not fit ${this.mode} teams of ${this.teamSize}`);
         return this.start(undefined, setup);
       }

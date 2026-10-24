@@ -14,6 +14,8 @@
 //   ui/frontend/pausebutton.png   D2R's pause-menu button: normal, hover, disabled, pressed
 //   ui/frontend/settingspanel.png D2R's in-game options panel, and optionsbg.png the
 //                             front end's (HD only)
+//   ui/frontend/checkbox.png  D2R's checkbox, twelve frames: unchecked, hover, pressed,
+//                             disabled, the same four checked, the same four indeterminate
 //   ui/frontend/frontend.json sizes and frame counts for the renderer
 
 import { decodeDc6, decodeDc6Frame } from '../lib/dc6.ts';
@@ -50,6 +52,7 @@ export interface FrontendManifest {
   pauseButton: FrontendSheet | null;
   settingsPanel: FrontendSheet | null;
   optionsBg: FrontendSheet | null;
+  checkbox: FrontendSheet | null;
 }
 
 interface Piece {
@@ -70,6 +73,8 @@ const PIECES: Piece[] = [
   { name: 'pauseButton', hd: 'hd/global/ui/pausemenu/pausebutton.sprite' },
   { name: 'settingsPanel', hd: 'hd/global/ui/pausemenu/settingspanel.sprite' },
   { name: 'optionsBg', hd: 'hd/global/ui/panel/options/frontendoptionsbg.sprite' },
+  // D2R's loot filter checkbox: unchecked, hover, pressed, disabled, then the same checked, then indeterminate
+  { name: 'checkbox', hd: 'hd/global/ui/panel/loot_filter/lootfilter_large_list_btn_checkbox.sprite' },
 ];
 const BG = { file: `${CLASSIC}gameselectscreenexp.dc6`, palette: PAL_SKY, cols: 4 };
 /** Where the backdrop says "Expansion Set / Lord of Destruction"; our title goes there instead. */

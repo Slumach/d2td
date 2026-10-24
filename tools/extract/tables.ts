@@ -7,7 +7,7 @@ import type { DataSource } from './source.ts';
 
 /** The excel tables the sim reads (assets-extracted/data/*.json). */
 export const TABLES = [
-  'monstats', 'monlvl', 'monumod', 'monseq', 'skills', 'missiles', 'weapons', 'superuniques', 'levels',
+  'monstats', 'monlvl', 'monumod', 'monseq', 'skills', 'missiles', 'weapons', 'charstats', 'superuniques', 'levels',
   // Which skill tree tab a skill sits on (SkillPage), for items' +skill tab stats
   'skilldesc',
   // Items: every equippable base, uniques, sets, affixes, gems and runes, and how they drop

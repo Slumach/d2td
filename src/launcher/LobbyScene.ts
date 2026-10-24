@@ -31,8 +31,8 @@ const MODE_TEXT: Record<MatchMode, { name: string; about: string }> = {
   team: { name: 'Team', about: 'One ring, an arc each (up to four players). Monsters lap the ring until someone kills them, kill gold goes to the killer, and the team loses when 100 are alive at once.' },
   ffa: { name: 'Free for all', about: 'Everyone gets their own ring and the same waves. Let 100 pile up on yours and you are out; the last ring standing wins.' },
   solo: { name: 'Solo', about: '' },
-  battle: { name: 'Eternal Conflict', about: 'Two teams, a lane each, a king at the back. Build your race, hire workers for Souls, and send monsters down the other team\'s lanes. First king to fall loses.' },
-  coop: { name: 'Eternal Conflict co-op', about: 'One team, a lane each, against 21 waves with sends arriving on a timer. Keep the Worldstone standing.' },
+  battle: { name: 'Eternal Conflict', about: 'Heaven against Hell, Legion style: two teams, a build pad each, a king at the back. Your towers are fighters that hold the creeps; hire workers to mine shards, and send monsters down the other team\'s pads. First king to fall loses.' },
+  coop: { name: 'Eternal Conflict co-op', about: 'One team, a pad each, against the waves with sends arriving on a timer. Keep your king standing.' },
 };
 
 type Phase = 'code' | 'connecting' | 'lobby';

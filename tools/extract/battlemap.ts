@@ -3,15 +3,18 @@
 // Fortress for the second, each once for every team size, on the lanes src/sim/map.ts
 // createLaneMap lays out.
 //
-//   map/battle-<keep>-<lanes>.png        the ground: floor, the road along every lane and its
-//                                        bend into the keep, and the scenery's shadows
+//   map/battle-<keep>-<lanes>.png        the ground: floor, each player's build pad, the road
+//                                        from the pads to the king's stone platform, and the
+//                                        scenery's shadows
 //   map/scenery/battle-<keep>/<name>.png one image per prefab
 //   map/maps.json battle                 where each ground sits and each object stands
 //
-// Scenery stands only on tiles the lane map blocks: tall pieces on the open ground behind
-// and left of the lanes, low ones on the two edges that face the camera (anything tall there
-// is drawn over the lanes in front of it), rocks along the columns between lanes, a little
-// scatter round the keep, and the Worldstone on the king's tile.
+// Scenery stands only on tiles the lane map blocks and never inside a pad: tall pieces on
+// the open ground behind and left of the pads, low ones on the two edges that face the
+// camera (anything tall there is drawn over the pads in front of it), rocks along the
+// columns between pads, a little scatter round the keep, a spawn gate at the top of every
+// pad (the Worldstone Keep's gateposts for Harrogath, a hell gate's for the Fortress) and a
+// pile of Worldstone shards beside each pad's workers.
 
 import battle from '../../src/data/map/battle.json';
 import { ORIGIN } from '../../src/render/iso.ts';
@@ -31,6 +34,11 @@ interface KeepLayout {
   seed: number;
   floor: { file: string; ground: string[] };
   road: { file: string; tiles: string[]; halfWidth: number; wobble: number; edge: number };
+  /** The build pads' ground, and the king's platform (its own palette when its tiles are another act's). */
+  pad: { file: string; tiles: string[] };
+  platform: { file: string; tiles: string[]; palette?: string; halfWidth: number; halfDepth: number };
+  /** The spawn gate's two posts, prefabs, and how far from the path each stands (tiles). */
+  gate: { left: string; right: string; out: number };
   /** Percent of the open tiles behind the lanes that take a tall piece, and of those in front a low one. */
   edge: { tall: string[]; low: string[]; tallPct: number; lowPct: number };
   divider: { prefabs: string[]; every: number };
@@ -54,8 +62,11 @@ export function battleInputs(): string[] {
   const palettes = new Set<string>();
   for (const k of Object.values(KEEPS)) {
     palettes.add(k.palette);
+    if (k.platform.palette) palettes.add(k.platform.palette);
     files.add(k.floor.file);
     files.add(k.road.file);
+    files.add(k.pad.file);
+    files.add(k.platform.file);
     for (const p of Object.values(k.prefabs)) {
       if (p.palette) palettes.add(p.palette);
       for (const piece of p.pieces) files.add(piece.file);
@@ -87,7 +98,7 @@ export function bakeBattle(source: DataSource, tiles: Tiles, out: OutputFile[], 
     };
     const maps: Record<string, BakedMap> = {};
     for (let lanes = 1; lanes <= 4; lanes++) {
-      const { image, objects } = bakeField(name, keep, lanes, tiles, palette, prefab);
+      const { image, objects } = bakeField(name, keep, lanes, tiles, palette, paletteOf(keep.platform.palette), prefab);
       out.push(image);
       maps[String(lanes)] = { ground: { image: image.path, originX: ORIGIN.x, originY: ORIGIN.y }, objects: objects.map((o) => ({ ...o, prefab: `battle-${name}/${o.prefab}` })) };
     }
@@ -100,11 +111,13 @@ export function bakeBattle(source: DataSource, tiles: Tiles, out: OutputFile[], 
   }
 }
 
-function bakeField(name: string, keep: KeepLayout, lanes: number, tiles: Tiles, palette: Palette, prefab: (id: string) => Built): { image: OutputFile; objects: { prefab: string; at: number[] }[] } {
+function bakeField(name: string, keep: KeepLayout, lanes: number, tiles: Tiles, palette: Palette, platformPalette: Palette, prefab: (id: string) => Built): { image: OutputFile; objects: { prefab: string; at: number[] }[] } {
   const seed = keep.seed + lanes * 17;
   const map = createLaneMap(lanes);
   const ground = new Canvas(W, H);
   const road = new Canvas(W, H);
+  const pad = new Canvas(W, H);
+  const platform = new Canvas(W, H);
   const span = Math.ceil((MAP_SIZE + 8) / CELL_TILES);
   for (let j = -4; j <= span; j++) {
     for (let i = -4; i <= span; i++) {
@@ -113,29 +126,53 @@ function bakeField(name: string, keep: KeepLayout, lanes: number, tiles: Tiles, 
       if (tl.x > W || tl.x + 160 < 0 || tl.y > H || tl.y + 80 < 0) continue;
       const g = tiles.pick(keep.floor.file, 0, keep.floor.ground, hash2(i, j, seed));
       const d = tiles.pick(keep.road.file, 0, keep.road.tiles, hash2(i, j, seed + 2));
+      const p = tiles.pick(keep.pad.file, 0, keep.pad.tiles, hash2(i, j, seed + 5));
+      const q = tiles.pick(keep.platform.file, 0, keep.platform.tiles, hash2(i, j, seed + 7));
       if (g) ground.blit(tiles.image(g), tl.x, tl.y, palette);
       if (d) road.blit(tiles.image(d), tl.x, tl.y, palette);
+      if (p) pad.blit(tiles.image(p), tl.x, tl.y, palette);
+      if (q) platform.blit(tiles.image(q), tl.x, tl.y, platformPalette);
     }
   }
-  // The road along every lane's segments, in sim tiles
-  const segs = map.segments.map((s) => [s.from.x / UNITS_PER_TILE, s.from.y / UNITS_PER_TILE, s.to.x / UNITS_PER_TILE, s.to.y / UNITS_PER_TILE] as const);
+  // The pads: each lane's columns from its first row to its last build row, crisp-edged
+  const columns: number[] = [];
+  for (let x = 0; x < map.width; x++) if (map.pathTiles[10 * map.width + x]) columns.push(x);
+  const half = Math.floor(LANE.width / 2);
+  const pads = columns.map((cx) => ({ x0: cx - half, x1: cx + half + 1, y0: LANE.firstRow, y1: LANE.lastBuildRow + 1 }));
+  const king = map.king!;
+  const plat = { x0: king.x + 0.5 - keep.platform.halfWidth, x1: king.x + 0.5 + keep.platform.halfWidth, y0: king.y + 0.5 - keep.platform.halfDepth, y1: king.y + 0.5 + keep.platform.halfDepth };
+  // The road only from the pads down to the platform: the lanes' bends into the keep
+  const segs = map.segments
+    .map((s) => [s.from.x / UNITS_PER_TILE, s.from.y / UNITS_PER_TILE, s.to.x / UNITS_PER_TILE, s.to.y / UNITS_PER_TILE] as const)
+    .map((s) => (s[1] < LANE.lastBuildRow ? ([s[0], LANE.lastBuildRow + 1, s[2], s[3]] as const) : s));
   const r = keep.road;
+  const inside = (u: number, v: number, b: { x0: number; x1: number; y0: number; y1: number }) => Math.min(u - b.x0, b.x1 - u, v - b.y0, b.y1 - v);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const a = (x - ORIGIN.x) / 32;
       const b = (y - ORIGIN.y) / 16;
       const u = (a + b) / 2;
       const v = (b - a) / 2;
+      const o = (y * W + x) * 4;
+      const put = (from: Canvas, alpha: number) => {
+        if (alpha <= 0 || !from.rgba[o + 3]) return;
+        for (let k = 0; k < 3; k++) ground.rgba[o + k] = Math.round(ground.rgba[o + k]! * (1 - alpha) + from.rgba[o + k]! * alpha);
+        ground.rgba[o + 3] = 255;
+      };
       let d = Infinity;
       for (const s of segs) d = Math.min(d, segDist(u, v, s[0], s[1], s[2], s[3]));
-      if (d > 2) continue;
-      const half = r.halfWidth + r.wobble * (valueNoise(u * 1.3, v * 1.3, seed) * 2 - 1);
-      let alpha = Math.max(0, Math.min(1, (half - d) / r.edge + 0.5));
-      if (alpha > 0 && alpha < 1) alpha = Math.max(0, Math.min(1, alpha + (hash2(x, y, seed + 3) - 0.5) * 0.5));
-      const o = (y * W + x) * 4;
-      if (alpha === 0 || !road.rgba[o + 3]) continue;
-      for (let k = 0; k < 3; k++) ground.rgba[o + k] = Math.round(ground.rgba[o + k]! * (1 - alpha) + road.rgba[o + k]! * alpha);
-      ground.rgba[o + 3] = 255;
+      if (d <= 2) {
+        const halfRoad = r.halfWidth + r.wobble * (valueNoise(u * 1.3, v * 1.3, seed) * 2 - 1);
+        let alpha = Math.max(0, Math.min(1, (halfRoad - d) / r.edge + 0.5));
+        if (alpha > 0 && alpha < 1) alpha = Math.max(0, Math.min(1, alpha + (hash2(x, y, seed + 3) - 0.5) * 0.5));
+        put(road, alpha);
+      }
+      for (const p of pads) {
+        const e = inside(u, v, p);
+        if (e > -0.2) put(pad, Math.max(0, Math.min(1, e / 0.12 + 0.6)));
+      }
+      const e = inside(u, v, plat);
+      if (e > -0.2) put(platform, Math.max(0, Math.min(1, e / 0.12 + 0.6)));
     }
   }
 
@@ -145,28 +182,22 @@ function bakeField(name: string, keep: KeepLayout, lanes: number, tiles: Tiles, 
   const size = map.width;
   const blocked = (x: number, y: number) => x >= 0 && y >= 0 && x < size && y < size && map.blocked[y * size + x] === true && !map.pathTiles[y * size + x];
   const laneCols = new Set<number>();
-  const columns: number[] = [];
-  for (let x = 0; x < size; x++) if (map.pathTiles[10 * size + x]) columns.push(x);
-  const half = Math.floor(LANE.width / 2);
   for (const cx of columns) for (let x = cx - half; x <= cx + half; x++) laneCols.add(x);
   const left = Math.min(...laneCols);
   const right = Math.max(...laneCols);
   const workers = new Set((map.workerSlots ?? []).flat().map((p) => `${p.x},${p.y}`));
-  const king = map.king!;
-  const tyrael = map.tyrael!;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       if (!blocked(x, y) || workers.has(`${x},${y}`)) continue;
-      // Clear ground round the king and Tyrael
-      if (Math.abs(x - king.x) <= 2 && Math.abs(y - king.y) <= 2) continue;
-      if (Math.abs(x - tyrael.x) <= 1 && Math.abs(y - tyrael.y) <= 1) continue;
+      // Clear ground on the king's platform
+      if (Math.abs(x + 0.5 - king.x - 0.5) <= keep.platform.halfWidth + 1 && Math.abs(y + 0.5 - king.y - 0.5) <= keep.platform.halfDepth + 1) continue;
       const inKeep = y >= LANE.bendRow - 1;
-      // Inside a lane's columns only its top edge takes scenery: the rows by the workers stay clear
-      if (laneCols.has(x) && !inKeep && y > 0) continue;
+      // Nothing inside a pad's columns: the gate stands at its top, the shards beside its workers
+      if (laneCols.has(x) && !inKeep) continue;
       const between = !inKeep && laneCols.has(x) === false && x > left && x < right;
       if (between) {
-        // The column between two lanes: a rock every few tiles
-        if (y % keep.divider.every === 1) objects.push({ prefab: pick(keep.divider.prefabs, x, y, 1), at: [x + 0.5, y + 0.5] });
+        // The column between two pads: a rock every few tiles, none where the shards lie
+        if (y % keep.divider.every === 1 && y < LANE.workerRows[0] - 1) objects.push({ prefab: pick(keep.divider.prefabs, x, y, 1), at: [x + 0.5, y + 0.5] });
         continue;
       }
       if (inKeep) {
@@ -181,9 +212,14 @@ function bakeField(name: string, keep: KeepLayout, lanes: number, tiles: Tiles, 
       objects.push({ prefab: pick(front ? keep.edge.low : keep.edge.tall, x, y, 3), at: [x + 0.5, y + 0.5] });
     }
   }
-  // The Worldstone on the king's tile, the keep's flank pieces either side of Tyrael and it
-  objects.push({ prefab: 'worldstone', at: [king.x + 0.5, king.y + 0.5] });
-  for (const dx of [-3, 3]) objects.push({ prefab: keep.keep.flank, at: [king.x + 0.5 + dx, king.y - 1.5] });
+  // The keep's flank pieces either side of the platform's mouth
+  for (const dx of [-keep.platform.halfWidth - 1, keep.platform.halfWidth + 1]) objects.push({ prefab: keep.keep.flank, at: [king.x + 0.5 + dx, king.y + 0.5 - keep.platform.halfDepth - 0.5] });
+  // Each pad's spawn gate at its top, and the shard pile beside its workers (in the divider column to its left)
+  for (const cx of columns) {
+    objects.push({ prefab: keep.gate.left, at: [cx + 0.5 - keep.gate.out, 0.5] });
+    objects.push({ prefab: keep.gate.right, at: [cx + 0.5 + keep.gate.out, 0.5] });
+    objects.push({ prefab: 'shards', at: [cx - half - 0.5, LANE.workerRows[1]! + 0.5] });
+  }
 
   // Shadows under each object's foot
   for (const obj of objects) {

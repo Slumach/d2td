@@ -61,10 +61,10 @@ export interface BattleResult {
   ticks: number;
 }
 
-/** The longest a match may run: every wave at its longest fight and build. */
+/** The longest a match may run: a fight has no clock, so each wave is allowed five minutes before the harness gives up. */
 function tickCap(data: GameData): number {
   const r = data.battle!.rules;
-  return r.firstBuildTicks + r.waves.length * (r.buildTicks + r.fightMaxTicks) + 100;
+  return r.firstBuildTicks + r.waves.length * (r.buildTicks + 6000) + 100;
 }
 
 /** One match, bots on every slot: race a's team on the first side, b's on the second. */
@@ -103,7 +103,7 @@ function logWave(m: Match): void {
     const b = z.state.battle!;
     const towers = z.state.towers.filter((tw) => tw.legendOf === undefined);
     const tiers = towers.map((tw) => (tw.evolved ? 'E' : `${tw.tier}.${tw.level}`)).join(' ');
-    return `T${t} king ${b.king.hp}/${b.king.maxHp} gold ${z.state.gold.join('/')} souls ${b.souls.join('/')} workers ${b.workers.join('/')} leaks ${b.leaks.join('/')} sends ${b.sendsMade.join('/')} [${tiers}]`;
+    return `T${t} king ${b.king.hp}/${b.king.maxHp} gold ${z.state.gold.join('/')} shards ${b.shards.map((x) => Math.floor(x / 1000)).join('/')} workers ${b.workers.join('/')} leaks ${b.leaks.join('/')} sends ${b.sendsMade.join('/')} [${tiers}]`;
   });
   console.log(`wave ${m.state.battle!.wave} tick ${m.state.tick}: ${parts.join(' | ')}`);
 }

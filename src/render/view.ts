@@ -25,6 +25,8 @@ export class WorldView {
   readonly world: Phaser.Cameras.Scene2D.Camera;
   readonly ui: Phaser.Cameras.Scene2D.Camera;
   private building = false;
+  /** The world's size: one ring, or (Eternal Conflict) both battlefields side by side. */
+  private extent = { width: WORLD_WIDTH, height: WORLD_HEIGHT };
   private keys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private press: { x: number; y: number; scrollX: number; scrollY: number; onUi: boolean; dragged: boolean } | undefined;
   /** How far the keys have pushed past an edge, in screen pixels. */
@@ -111,11 +113,17 @@ export class WorldView {
     cam.setScroll(cam.scrollX + before.x - after.x, cam.scrollY + before.y - after.y);
   }
 
+  /** Sizes the world: the camera pans over all of it. */
+  setExtent(width: number, height: number): void {
+    this.extent = { width, height };
+    this.world.setBounds(0, 0, width, height);
+  }
+
   /** The scroll x range the bounds allow, as Phaser clamps it (scroll is offset by half the zoomed-away width). */
   private scrollRange(): { min: number; max: number } {
     const shown = this.world.width / this.world.zoom;
     const min = (shown - this.world.width) / 2;
-    return { min, max: Math.max(min, min + WORLD_WIDTH - shown) };
+    return { min, max: Math.max(min, min + this.extent.width - shown) };
   }
 
   private clampX(x: number): number {

@@ -5,7 +5,7 @@ import { blockerAhead } from './archetypes/summon.ts';
 import { dealRaw, distSq, monsterFx } from './combat.ts';
 import { idiv } from './fixed.ts';
 import { ahead, laneOf, positionAt, wrap } from './map.ts';
-import { leak } from './battle.ts';
+import { atKingPoint, engagedAt, fighterAhead, hitKing, holdDist, leak } from './battle.ts';
 import { rollInt } from './rng.ts';
 import type { Monster, MonsterMod, Rank, Sim, Summon } from './state.ts';
 
@@ -181,7 +181,38 @@ export function updateMonsters(sim: Sim): void {
     }
     if (resurrect(sim, m)) continue;
 
+    // Eternal Conflict: at the king's feet it stands and hits the king on its own rate
+    if (m.atKing) {
+      const at = atKingPoint(sim, m);
+      m.x = at.x;
+      m.y = at.y;
+      if (m.attackCooldown === 0) {
+        hitKing(sim, m);
+        m.attackCooldown = rules.monsterAttackTicks;
+      }
+      continue;
+    }
     const speed = speedOf(sim, m);
+    // A fighter on its lane holds it: it steps off the path to fight the fighter, which it hits with its monstats damage
+    const fighter = fighterAhead(sim, m, speed);
+    if (fighter) {
+      if (m.blockedBy !== fighter.id) {
+        m.blockedBy = fighter.id;
+        m.blockedTicks = 0;
+      }
+      m.blockedTicks++;
+      const hold = holdDist(sim, fighter, laneOf(sim.map, m.dist)) ?? m.dist;
+      walk(sim, m, Math.max(0, hold - m.dist - rules.blockRangeUnits));
+      if (m.attackCooldown === 0) {
+        const hit = rollInt(s.rng, m.minDamage, m.maxDamage);
+        fighter.hp = Math.max(0, (fighter.hp ?? 0) - (hit - idiv(hit * Math.min(100, monsterFx(sim, m).damageDownPct), 100)));
+        m.attackCooldown = rules.monsterAttackTicks;
+      }
+      const at = engagedAt(sim, m, positionAt(sim.map, m.dist), fighter);
+      m.x = at.x;
+      m.y = at.y;
+      continue;
+    }
     const blocker = blockerAhead(sim, m, speed);
     if (blocker && m.blockedBy !== blocker.id) {
       m.blockedBy = blocker.id;
@@ -216,13 +247,14 @@ export function updateMonsters(sim: Sim): void {
   }
 }
 
-/** Moves a monster `step` units on around the ring; on a battle lane, to its end and the king. */
+/** Moves a monster `step` units on around the ring; on a battle lane, to its end and the king's feet. */
 function walk(sim: Sim, m: Monster, step: number): void {
   if (sim.map.open) {
     const end = sim.map.arcs[laneOf(sim.map, m.dist)]!.end ?? sim.map.length;
     if (m.dist + step >= end - 1) {
       m.walked += Math.max(0, end - 1 - m.dist);
       m.dist = end - 1;
+      m.blockedBy = 0;
       leak(sim, m);
       return;
     }

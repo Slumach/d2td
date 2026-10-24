@@ -121,7 +121,7 @@ export class SoundBank {
     this.play(this.manifest?.gold, 45);
   }
 
-  /** Eternal Conflict's moments: a send made, a leak at the Worldstone, Tyrael's strike, a won match. */
+  /** Eternal Conflict's moments: a send made, a hit on the king, the king's strike (the tyrael entry), a won match. */
   battle(moment: 'send' | 'kingHit' | 'tyrael' | 'victory'): void {
     this.play(this.manifest?.battle?.[moment], moment === 'tyrael' ? 45 : 80);
   }

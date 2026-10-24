@@ -181,29 +181,28 @@
     "streamTicks": 360,
     "bossSpeedPct": 40,
     "meleeReachTenths": 25,
-    "firstBuildTicks": 600,
+    "firstBuildTicks": 1200,
     "buildTicks": 400,
-    "fightMaxTicks": 2400,
     "startingGold": 1000,
-    "startingSouls": 0,
     "evolveCost": 20000,
     "legendCost": 60000,
     "bountyPerLevel": 3,
     "income": [250, 300, 360, 430, 520, 620, 750, 900, 1100, 1300, 1600, 1900, 2300, 2800, 3300, 4000, 4800, 5800, 7000, 8400, 10000],
-    "sendIncomePerSoul": 15,
-    "worker": { "cost": 250, "costPerWorker": 25, "soulsPerWave": 2, "max": 12 },
+    "sendIncomePerShard": 15,
+    "worker": { "cost": 250, "costPerWorker": 25, "shardsPerSecond": 100, "max": 12 },
+    "fighter": { "lifePct": 400, "tierPct": [100, 220, 500, 1000, 2000], "engageTenths": 12, "kingHoldTenths": 25 },
     "king": {
-      "hp": [45, 45, 70, 135],
-      "regenPerWave": 0,
-      "damagePerWeight": 2,
-      "damagePctPerWave": 20,
+      "hp": [600, 600, 900, 1500],
+      "regenPerSecond": 0,
+      "damagePerWeight": 1,
+      "damagePctPerWave": 15,
+      "attack": { "rateTicks": 20, "rangeTenths": 70, "hitPct": 15, "bossHitPct": 2 },
       "upgrades": {
-        "hp": { "cost": 500, "costPctPerLevel": 175, "add": 10, "maxLevel": 8 },
+        "hp": { "cost": 500, "costPctPerLevel": 175, "add": 100, "maxLevel": 8 },
         "regen": { "cost": 400, "costPctPerLevel": 150, "add": 1, "maxLevel": 10 },
-        "tyrael": { "cost": 600, "costPctPerLevel": 150, "add": 5, "maxLevel": 10 }
+        "attack": { "cost": 600, "costPctPerLevel": 150, "add": 5, "maxLevel": 10 }
       }
     },
-    "tyrael": { "rateTicks": 20, "rangeTenths": 70, "hitPct": 15, "bossHitPct": 2 },
     "races": {
       "paladin": { "goldPct": 67, "teamGoldPct": 110 },
       "sorceress": { "goldPct": 120, "teamGoldPct": 110 },
@@ -299,6 +298,7 @@
       { "id": "baal", "kind": "boss", "monster": "baal", "cost": 130, "costPctPerWave": 5, "fromWave": 19, "hpPct": 12 }
     ],
     "sendPotency": { "fromWave": 11, "hpPctPerWave": 30 },
+    "easy": { "wavePct": 70, "kingPct": 150 },
     "coop": {
       "sends": [[], [], ["cowking"], ["corpsefire"], ["bishibosh"], [], ["rakanishu"], ["countess"], ["fireeye"], [], ["radament", "champions-mummy"], ["countess"], ["champions-mummy"], [], ["pindleskin"], ["nihlathak"], [], ["ancients"], ["champions-bloodlord", "pindleskin"], ["ancients", "nihlathak"], []]
     }

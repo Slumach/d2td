@@ -128,7 +128,7 @@ describe('relay battle lobby', () => {
     host.conn.send({ t: 'start' });
     const start = (await ann.next('start')) as Extract<HostMessage, { t: 'start' }>;
     expect(start.mode).toBe('battle');
-    expect(start.battle).toEqual({ teamSize: 2, races: ['paladin', 'random', 'sorceress', 'random'], bots: [1, 3], seats: [0, 2] });
+    expect(start.battle).toEqual({ teamSize: 2, races: ['paladin', 'random', 'sorceress', 'random'], bots: [1, 3], seats: [0, 2], options: { pick: 'all', sends: 1, mirror: false, easy: false, long: false, champions: true } });
   });
 
   it.skipIf(!hasTables())('a 2v2 battle, two players and two bots, plays over TCP in lockstep', async () => {

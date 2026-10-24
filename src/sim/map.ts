@@ -56,9 +56,8 @@ export interface GameMap {
   open?: boolean;
   /** Eternal Conflict: the back-row tiles each lane's workers stand on, in hiring order. */
   workerSlots?: Point[][];
-  /** Eternal Conflict: the king's tile (the Worldstone) and Tyrael's beside it. */
+  /** Eternal Conflict: the king's tile, at the back where the lanes meet. */
   king?: Point;
-  tyrael?: Point;
 }
 
 /** A tile turned 90 degrees clockwise (on screen, sim +x right and +y down) about the grid centre, `times` times. */
@@ -226,13 +225,13 @@ export const LANE = {
   workerRows: [31, 32] as const,
   bendRow: 33,
   king: { x: 20, y: 39 },
-  tyrael: { x: 22, y: 38 },
 };
 
 /**
- * A team's battlefield: `lanes` straight lanes side by side down the grid (sim +y), one per
- * player, each a path with buildable ground on both sides, a back row for its workers, and
- * a bend into the keep where every lane meets the king. The lanes lie end to end in ring
+ * A team's battlefield: `lanes` build pads side by side down the grid (sim +y), one per
+ * player, each a path down its middle with buildable ground on both sides (the creeps walk
+ * straight down through the pad and its fighters), a back row for its workers, and a bend
+ * into the shared road to the king at the bottom. The lanes lie end to end in ring
  * distance, so a monster's distance says its lane; nothing wraps.
  */
 export function createLaneMap(lanes: number): GameMap {
@@ -279,7 +278,7 @@ export function createLaneMap(lanes: number): GameMap {
     }
   });
   for (let i = 0; i < size * size; i++) if (pathTiles[i]) blocked[i] = false;
-  return { width: size, height: size, segments, length: start, arcs, pathTiles, blocked, arcTiles, open: true, workerSlots, king: { ...LANE.king }, tyrael: { ...LANE.tyrael } };
+  return { width: size, height: size, segments, length: start, arcs, pathTiles, blocked, arcTiles, open: true, workerSlots, king: { ...LANE.king } };
 }
 
 /** Ring distance of the path point closest to `p`, by projecting onto each segment. */

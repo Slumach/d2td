@@ -59,11 +59,11 @@ A new version of the game may need a few more files from Diablo II: Resurrected.
 
 Heaven against Hell, Legion style: two teams race to bring down each other's king. Click **Eternal Conflict** in the main menu, pick the mode (**Battle**, or **Co-op** against the waves alone), the players a team and your race, then **Play against bots**, **Host online** or **Join online**. Bots take every seat no player fills.
 
-- You play one class, your race, and build only its towers beside your own lane. The match has 21 waves, the same for both teams: 20 seconds to build, then the fight.
-- Whatever walks the whole lane reaches your team's Worldstone and hurts it. Tyrael, beside it, strikes what gets close. The first Worldstone to fall loses; after wave 21 the one with more life wins.
-- **Hire a worker** in the panel on the left: workers bring Souls at the end of every wave. Souls buy **sends**: monsters that join the other team's next wave down the lane you choose, and every send raises your gold income for good.
-- Gold also buys the Worldstone more life, life back each wave, and a harder strike for Tyrael, for the whole team.
-- Drag past the edge of the map to look at the other team. **Tab** shows every player's race, kills, leaks and sends. There are no items in Eternal Conflict; your wins and losses are kept on the Eternal Conflict page.
+- You play one class, your race, and build only its towers on your own pad. The match has 21 waves, the same for both teams: 60 seconds to build before the first, then the fight, and the 20-second countdown to the next wave starts once every creep on both sides is dead.
+- Your towers are fighters: each has life, stands in the creeps' way and is hit by them. A fighter at zero life is down for the round and stands again at the next countdown. Once your pad is clear, your fighters run to the king to fight the leaks there. Whatever gets past reaches your team's king (Tyrael holds Harrogath, Baal the Fortress), stands at his feet and hits him; he strikes back. The first king to fall loses; after wave 21 the one with more life wins.
+- **Hire a worker** in the panel on the left: workers mine Worldstone shards all match long (the pile beside your pad counts them). Shards buy **sends** from the panel over the belt: monsters that join the other team's next wave down the lane you choose, and every send raises your gold income for good.
+- Gold also buys the king more life, life back each second, and a harder strike, for the whole team: click him for his panel.
+- Both battlefields are on one map: drag or use the arrow keys to look at the other team's. **Tab** shows every player's race, kills, leaks and sends. There are no items in Eternal Conflict; your wins and losses are kept on the Eternal Conflict page.
 
 ## Playing together
 

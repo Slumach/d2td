@@ -1,11 +1,12 @@
 // The scoreboard on Tab, in the manner of D2's party panel: a dark sheet in a bronze frame,
 // a row per player in their colour with kills, alive weight against the limit, gold, towers
-// and wave. Solo, team and FFA alike; in Eternal Conflict each player's race, team, kills, leaks,
-// sends, workers and towers. Reads the match, writes nothing.
+// and wave. Solo, team and FFA alike; in Eternal Conflict each player's race, team, value,
+// bounty, shards, leaks, sends and workers. Reads the match, writes nothing.
 
 import Phaser from 'phaser';
 
 import { aliveLimitOf } from '../sim/sim.ts';
+import { towerValue, wholeShards } from '../sim/battle.ts';
 import { ringOf, seatOf, teamOf, type Match } from '../sim/match.ts';
 import { FONT } from './ui.ts';
 
@@ -56,7 +57,7 @@ export function battleRows(match: Match, me: number, nameOf: (slot: number) => s
       colour: colourOf(p),
       you: p === me,
       out: sim.state.status === 'lost',
-      values: [race, String(teamOf(match, p) + 1), String(sim.state.killsBy[seat] ?? 0), String(b.leaks[seat] ?? 0), String(b.sendsMade[seat] ?? 0), String(b.workers[seat] ?? 0), String(sim.state.towers.filter((t) => t.owner === seat && t.legendOf === undefined).length)],
+      values: [race, String(teamOf(match, p) + 1), String(towerValue(sim, seat)), String(b.bounty[seat] ?? 0), String(wholeShards(b.shards[seat] ?? 0)), String(b.leaks[seat] ?? 0), String(b.sendsMade[seat] ?? 0), String(b.workers[seat] ?? 0)],
     };
   });
 }
@@ -73,12 +74,13 @@ export interface TableRow {
 export const BATTLE_COLUMNS: { title: string; x: number; align: 'left' | 'right' }[] = [
   { title: 'Player', x: 24, align: 'left' },
   { title: 'Race', x: 280, align: 'left' },
-  { title: 'Team', x: 470, align: 'right' },
-  { title: 'Kills', x: 570, align: 'right' },
-  { title: 'Leaks', x: 670, align: 'right' },
-  { title: 'Sends', x: 770, align: 'right' },
-  { title: 'Workers', x: 870, align: 'right' },
-  { title: 'Towers', x: 960, align: 'right' },
+  { title: 'Team', x: 440, align: 'right' },
+  { title: 'Value', x: 540, align: 'right' },
+  { title: 'Bounty', x: 640, align: 'right' },
+  { title: 'Shards', x: 730, align: 'right' },
+  { title: 'Leaks', x: 810, align: 'right' },
+  { title: 'Sends', x: 885, align: 'right' },
+  { title: 'Workers', x: 960, align: 'right' },
 ];
 
 const BRONZE = 0x8c7448;

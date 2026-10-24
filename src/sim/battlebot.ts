@@ -1,14 +1,15 @@
 // The battle bot: plays one slot of a battle or co-op match, inside the match step so every
 // client runs it alike (integer math only, nothing but the match state in). It plays its
 // race's two strongest attack lines, levels and tiers them by damage gained per gold, works
-// toward one of its class's evolutions, hires workers early, spends its Souls on sends at
-// the enemy lane that leaks most, and buys the king life when it is hurt.
+// toward one of its class's evolutions, hires workers early, spends its shards on sends at
+// the enemy lane that leaks most, and buys the king life when it is hurt. Tanks (melee and
+// summon lines) stand at the front of the pad, the rest behind them.
 //
 // Every BOT_PERIOD ticks (staggered by slot) it looks once and issues what it can afford.
 // Each bot slot has a temper drawn from the match seed: how many workers it hires, how far
-// ahead it saves, whether it banks Souls for the dear sends, and a little taste in towers.
+// ahead it saves, whether it banks shards for the dear sends, and a little taste in towers.
 
-import { kingUpgradeCost, sendCost, sendOpen, workerCost } from './battle.ts';
+import { kingUpgradeCost, sendCost, sendOpen, wholeShards, workerCost } from './battle.ts';
 import { standardDps } from './dps.ts';
 import { MAX_TIER, MAX_TOWER_LEVEL, type EvolutionDef } from './data.ts';
 import type { SkillDef } from './archetypes/types.ts';
@@ -29,7 +30,7 @@ interface Temper {
   workers: number;
   /** Waves of income it saves ahead for its best buy: 1 to 3. */
   saveWaves: number;
-  /** Souls it keeps over a send's cost before sending: x1 to x3. */
+  /** Shards it keeps over a send's cost before sending: x1 to x3. */
   sendHold: number;
   /** Per mille on each line's worth, so the two lines it builds may differ. */
   taste: number;
@@ -131,21 +132,21 @@ export function botCommands(match: Match, slot: number): Command[] {
     }
   }
   if (king.hp * 2 >= king.maxHp && wave >= 8 && gold > 0) {
-    const cost = kingUpgradeCost(sim, 'tyrael');
-    if (cost !== undefined && cost * 8 <= gold) out.push({ type: 'king', upgrade: 'tyrael' });
+    const cost = kingUpgradeCost(sim, 'attack');
+    if (cost !== undefined && cost * 8 <= gold) out.push({ type: 'king', upgrade: 'attack' });
   }
 
-  // Sends: the dearest open one the Souls buy, at the enemy lane that leaks most
+  // Sends: the dearest open one the shards buy, at the enemy lane that leaks most
   if (m.mode === 'battle' && b.phase === 'build') {
     const join = joiningWave(match);
-    const souls = bs.souls[seat]!;
+    const souls = wholeShards(bs.shards[seat]!);
     let best: { id: string; cost: number } | undefined;
     for (const send of rules.sends) {
       if (!sendOpen(send, join, b.made[slot]!)) continue;
       const cost = sendCost(send, join);
       if (cost <= souls && (!best || cost > best.cost)) best = { id: send.id, cost };
     }
-    // A patient bot holds its Souls for a dearer send than it can buy now
+    // A patient bot holds its shards for a dearer send than it can buy now
     if (best && best.cost * (1 + temper.sendHold) >= souls) {
       const enemy = match.zones[enemyOf(match, slot)]!;
       const eb = enemy.state.battle!;
@@ -282,10 +283,10 @@ function towerOptions(sim: Sim, seat: number, race: string, mine: Tower[], lines
 
   // A new tower on the next line in turn, or the plan's partner when the attack is far enough
   const build = buildCostFor(sim, seat);
-  const tile = freeTile(sim, seat, mine.length);
+  const line = lines[mine.length % lines.length]!;
+  const skill = cls.lines[line]!.tiers[0]![0]!;
+  const tile = freeTile(sim, seat, isTank(sim, skill));
   if (tile) {
-    const line = lines[mine.length % lines.length]!;
-    const skill = cls.lines[line]!.tiers[0]![0]!;
     const gain = skillDps(sim, skill, 0);
     out.push({ score: idiv(gain * PER, build) + (mine.length < 2 ? PER * 100 : 0), cost: build, command: { type: 'build', x: tile.x, y: tile.y, cls: race, skill } });
     const hasPartner = mine.some((t) => recipe && sim.data.classes[t.cls]?.lines[t.line]?.tiers.flat().includes(recipe.partner.skill));
@@ -293,11 +294,18 @@ function towerOptions(sim: Sim, seat: number, race: string, mine: Tower[], lines
       const pLine = Object.entries(cls.lines).find(([, l]) => l.tiers.flat().includes(recipe.partner.skill))?.[0];
       if (pLine && !lines.includes(pLine)) {
         const pSkill = cls.lines[pLine]!.tiers[0]![0]!;
-        out.push({ score: idiv(planGain * PER, build + 4 * levelPath(sim, 1)), cost: build, command: { type: 'build', x: tile.x, y: tile.y, cls: race, skill: pSkill } });
+        const pTile = freeTile(sim, seat, isTank(sim, pSkill)) ?? tile;
+        out.push({ score: idiv(planGain * PER, build + 4 * levelPath(sim, 1)), cost: build, command: { type: 'build', x: pTile.x, y: pTile.y, cls: race, skill: pSkill } });
       }
     }
   }
   return out;
+}
+
+/** A line that fights up close (melee, or summons that block) stands at the front of the pad. */
+function isTank(sim: Sim, skill: string): boolean {
+  const a = sim.data.skills[skill]?.archetype;
+  return a === 'melee' || a === 'summon';
 }
 
 /** What the tower's next level adds to its damage: its skill a level on, past 5 the skill levels it buys. */
@@ -314,23 +322,23 @@ function levelPath(sim: Sim, tier: number): number {
 }
 
 /**
- * Where the bot builds its next tower: beside its lane's path, the middle rows first, then
- * a column further out; deterministic.
+ * Where the bot builds its next tower: beside its lane's path, tanks from the front of the
+ * pad (the rows nearest the spawn) and the rest from behind them, a column further out when
+ * a column is full; deterministic.
  */
-function freeTile(sim: Sim, seat: number, _count: number): { x: number; y: number } | undefined {
+function freeTile(sim: Sim, seat: number, front: boolean): { x: number; y: number } | undefined {
   const lane = sim.arcOwners.indexOf(seat);
   const map = sim.map;
   let cx = -1;
   for (let x = 0; x < map.width; x++) if (map.pathTiles[10 * map.width + x] && map.arcTiles[10 * map.width + x] === lane) cx = x;
   if (cx < 0) return undefined;
-  const mid = 15;
+  const rows = front ? [8, 9, 10, 11, 12, 13, 7, 6, 14, 15] : [17, 18, 19, 20, 21, 16, 22, 23, 24, 15];
   for (let d = 1; d <= 4; d++) {
-    for (let r = 0; r <= 14; r++) {
-      for (const y of r === 0 ? [mid] : [mid - r, mid + r]) {
-        for (const x of [cx - d, cx + d]) if (canBuild(sim, x, y, seat)) return { x, y };
-      }
+    for (const y of rows) {
+      for (const x of [cx - d, cx + d]) if (canBuild(sim, x, y, seat)) return { x, y };
     }
   }
+  for (let d = 1; d <= 4; d++) for (let y = 1; y <= 29; y++) for (const x of [cx - d, cx + d]) if (canBuild(sim, x, y, seat)) return { x, y };
   return undefined;
 }
 

@@ -63,6 +63,29 @@ export function ellipseOf(radius: number): { w: number; h: number } {
   return { w: 2 * r * HALF_W, h: 2 * r * HALF_H };
 }
 
+/**
+ * Eternal Conflict: both battlefields lie in one world, the enemy's this many tiles on along
+ * sim x from your own, so the two armies face each other across the gap (zone 1 at the shift).
+ */
+export const ZONE_SHIFT_TILES = MAP_SIZE + 6;
+export const ZONE_SHIFT_UNITS = ZONE_SHIFT_TILES * UNITS_PER_TILE;
+/** The world pixels one zone shift moves a point. */
+export const ZONE_SHIFT_PX = { x: ZONE_SHIFT_TILES * HALF_W, y: ZONE_SHIFT_TILES * HALF_H };
+
+/** The world's size holding `zones` battlefields side by side. */
+export function worldExtent(zones: number): { width: number; height: number } {
+  return { width: WORLD_WIDTH + (zones - 1) * ZONE_SHIFT_PX.x, height: WORLD_HEIGHT + (zones - 1) * ZONE_SHIFT_PX.y };
+}
+
+/** The tile under a world point on any of `zones` battlefields, with its zone, or undefined off them all. */
+export function tileAtWorldIn(wx: number, wy: number, zones: number): { zone: number; x: number; y: number } | undefined {
+  for (let z = 0; z < zones; z++) {
+    const t = tileAtWorld(wx - z * ZONE_SHIFT_PX.x, wy - z * ZONE_SHIFT_PX.y);
+    if (t) return { zone: z, ...t };
+  }
+  return undefined;
+}
+
 /** The four corners of a tile's diamond, top, right, bottom, left. */
 export function tileDiamond(tx: number, ty: number): ScreenPoint[] {
   return [projectTile(tx, ty), projectTile(tx + 1, ty), projectTile(tx + 1, ty + 1), projectTile(tx, ty + 1)];

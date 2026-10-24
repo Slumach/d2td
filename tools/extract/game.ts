@@ -41,8 +41,11 @@ export const CHECKSUM_FILE = 'checksums.json';
  *     stsound (the War Cries, Bash, Arctic Blast, Tiger Strike), and more cast overlays.
  * 30: Eternal Conflict: the battlefields (Harrogath under siege and the Pandemonium Fortress,
  *     for one to four lanes, with the Worldstone) and the hirelings that stand as workers.
+ * 31: Eternal Conflict as Legion: charstats.txt for the fighters' life, the battlefields as
+ *     build pads with spawn gates and the king's stone platform, Baal standing as a king, and
+ *     D2R's checkbox for the game setup screen.
  */
-export const EXTRACT_VERSION = 30;
+export const EXTRACT_VERSION = 31;
 /** What verifyGame reports when the extraction is from an older version of the game. */
 export const OUTDATED = 'version';
 
