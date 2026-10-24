@@ -70,6 +70,8 @@ export class MenuScene extends Phaser.Scene {
   /** The update page's state, kept across pages while a download runs. */
   private updateState: { checking: boolean; check?: UpdateCheck; downloading: boolean; downloaded: boolean; status: string; notes: string } = { checking: false, downloading: false, downloaded: false, status: '', notes: '' };
   private updateTexts: { status: Phaser.GameObjects.Text; notes: Phaser.GameObjects.Text } | undefined;
+  /** The update page's changelog: the notes text, the window it scrolls in, and how far it has scrolled. */
+  private updateNotes: { text: Phaser.GameObjects.Text; bar: Phaser.GameObjects.Graphics; area: { x: number; y: number; w: number; h: number }; scroll: number } | undefined;
   /** The profile, for the character page. */
   private profile: Profile | undefined;
   private items: ItemData | undefined;
@@ -111,6 +113,8 @@ export class MenuScene extends Phaser.Scene {
     });
     const m = frontendManifest(this);
     this.hintTip = createTooltip(this, 0, 0);
+    // The update page's changelog scrolls on the wheel
+    this.input.on('wheel', (_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => this.scrollNotes(dy));
     this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x000000).setOrigin(0).setDepth(0);
     if (m) smoothHd(this, m);
     this.logo = burningLogo(this, CX, LOGO_TOP, LOGO_SCALE, 2);
@@ -159,7 +163,8 @@ export class MenuScene extends Phaser.Scene {
     this.clear();
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
     const d2 = frontendManifest(this) !== undefined;
-    for (const o of this.logo) (o as unknown as Phaser.GameObjects.Components.Visible).setVisible(this.page !== 'options' && this.page !== 'battle');
+    for (const o of this.logo) (o as unknown as Phaser.GameObjects.Components.Visible).setVisible(this.page !== 'options' && this.page !== 'battle' && this.page !== 'update');
+    this.updateNotes = undefined;
     add(this.add.text(16, GAME_HEIGHT - 28, `v${this.state.version}   non-commercial fan project, not affiliated with Blizzard`, { ...MUTED, fontSize: '14px' }).setDepth(3100));
 
     if (this.page === 'options') return this.drawOptions(d2);
@@ -188,7 +193,7 @@ export class MenuScene extends Phaser.Scene {
     const step = Math.min(BUTTON_STEP, Math.floor((GAME_HEIGHT - 70 - BUTTONS_TOP) / Math.max(1, items.length - 1)));
     items.forEach(([label, onClick, hint], i) => {
       const y = BUTTONS_TOP + i * step;
-      if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 330, ...(hint ? { hint, tooltip: this.hintTip } : {}) }));
+      if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 330, ...(label.length > 13 ? { fontSize: 20 } : {}), ...(hint ? { hint, tooltip: this.hintTip } : {}) }));
       else this.parts.push(...button(this, CX - 180, y - 18, { label, onClick, width: 360 }));
     });
   }
@@ -319,14 +324,32 @@ export class MenuScene extends Phaser.Scene {
     });
   }
 
-  /** The update page: asks the feed, shows the version and notes, downloads, installs on restart. */
+  /**
+   * The update page, in D2R's options panel: asks the feed, shows the version and the
+   * changelog in a window that scrolls on the wheel, and the buttons under it (download,
+   * restart and install, check again, back).
+   */
   private drawUpdate(d2: boolean): void {
     const add = <T extends Phaser.GameObjects.GameObject>(o: T): T => (this.parts.push(o), o);
-    const top = BUTTONS_TOP - 70;
-    add(this.add.rectangle(CX, top + 70, 680, 230, 0x000000, 0.8).setStrokeStyle(1, 0x7a6440).setDepth(3000));
-    add(this.add.text(CX, top - 10, `Update   (this is v${this.state.version})`, { ...TEXT, fontSize: '28px', color: '#c7b377' }).setOrigin(0.5).setDepth(3001));
-    const status = add(this.add.text(CX, top + 30, this.updateState.status, { ...TEXT, align: 'center', wordWrap: { width: 640 } }).setOrigin(0.5, 0).setDepth(3001));
-    const notes = add(this.add.text(CX, top + 70, this.updateState.notes, { ...MUTED, fontSize: '15px', align: 'left', wordWrap: { width: 640 } }).setOrigin(0.5, 0).setDepth(3001));
+    const height = 760;
+    const panel = d2 ? optionsPanel(this, CX, GAME_HEIGHT / 2 - 30, height, 'optionsBg') : undefined;
+    if (panel) add(panel);
+    const w = panel ? panel.displayWidth : 800;
+    const top = GAME_HEIGHT / 2 - 30 - height / 2;
+    const left = CX - w / 2 + w * 0.1;
+    const inner = w * 0.8;
+    add(this.add.text(CX, top + 54, `Update   (this is v${this.state.version})`, { ...TEXT, fontSize: '30px', color: '#c7b377' }).setOrigin(0.5).setDepth(3101));
+    const status = add(this.add.text(CX, top + 100, this.updateState.status, { ...TEXT, align: 'center', wordWrap: { width: inner } }).setOrigin(0.5, 0).setDepth(3101));
+    // The changelog's window: the notes slide under a mask, a thin bar at the right shows where they are
+    const area = { x: left, y: top + 150, w: inner, h: height - 150 - 150 };
+    add(this.add.rectangle(area.x - 8, area.y - 8, area.w + 16, area.h + 16, 0x000000, 0.35).setOrigin(0).setDepth(3100).setStrokeStyle(1, 0x6a5a3a, 0.8));
+    const notes = add(this.add.text(area.x, area.y, this.updateState.notes, { ...MUTED, fontSize: '15px', align: 'left', wordWrap: { width: area.w - 24 }, lineSpacing: 4 }).setOrigin(0, 0).setDepth(3101));
+    const shape = this.make.graphics({ x: 0, y: 0 }, false).fillRect(area.x, area.y, area.w, area.h);
+    notes.setMask(shape.createGeometryMask());
+    this.parts.push(shape);
+    const bar = add(this.add.graphics().setDepth(3102));
+    this.updateNotes = { text: notes, bar, area, scroll: 0 };
+    this.scrollNotes(0);
     this.updateTexts = { status, notes };
     const u = this.updateState;
     const items: [string, () => void][] = [];
@@ -334,12 +357,28 @@ export class MenuScene extends Phaser.Scene {
     if (u.downloaded) items.push(['Restart and install', () => this.api.updateInstall()]);
     items.push(['Check again', () => void this.checkUpdate()]);
     items.push(['Back', () => this.go('main')]);
+    const bw = 220;
     items.forEach(([label, onClick], i) => {
-      const y = BUTTONS_TOP + 190 + i * BUTTON_STEP;
-      if (d2) this.parts.push(...stoneButton(this, CX, y, label, onClick, { width: 330 }));
-      else this.parts.push(...button(this, CX - 180, y - 18, { label, onClick, width: 360 }));
+      const x = CX + (i - (items.length - 1) / 2) * (bw + 14);
+      if (d2) this.parts.push(...stoneButton(this, x, top + height - 70, label, onClick, { size: 'med', width: bw, fontSize: 15 }));
+      else this.parts.push(...button(this, x - bw / 2, top + height - 88, { label, onClick, width: bw }));
     });
     if (!u.check && !u.checking) void this.checkUpdate();
+  }
+
+  /** Scrolls the changelog by `dy` wheel pixels (0 only redraws the bar) and keeps it inside its window. */
+  private scrollNotes(dy: number): void {
+    const n = this.updateNotes;
+    if (!n || this.page !== 'update' || !n.text.active) return;
+    const overflow = Math.max(0, n.text.height - n.area.h);
+    n.scroll = Math.max(0, Math.min(overflow, n.scroll + dy * 0.5));
+    n.text.setY(n.area.y - n.scroll);
+    const g = n.bar.clear();
+    if (overflow <= 0) return;
+    const x = n.area.x + n.area.w - 6;
+    g.fillStyle(0x000000, 0.5).fillRect(x, n.area.y, 4, n.area.h);
+    const knob = Math.max(24, (n.area.h * n.area.h) / n.text.height);
+    g.fillStyle(0x8c7448, 1).fillRect(x, n.area.y + ((n.area.h - knob) * n.scroll) / overflow, 4, knob);
   }
 
   private async checkUpdate(): Promise<void> {
@@ -378,6 +417,7 @@ export class MenuScene extends Phaser.Scene {
   private refreshUpdate(): void {
     this.updateTexts?.status.setText(this.updateState.status);
     this.updateTexts?.notes.setText(this.updateState.notes);
+    this.scrollNotes(0);
   }
 
   /** New Game: start over entirely, after a warning. Clears the stash, the inventory, the belt, the best wave and every saved campaign. */
