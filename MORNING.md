@@ -1,6 +1,6 @@
-# Report (Oct 24, afternoon): Eternal Conflict, 0.4.2
+# Report (Oct 24, afternoon): Eternal Conflict, 0.4.2 and 0.4.3
 
-**0.4.2 is published** (https://github.com/Slumach/d2td/releases/tag/v0.4.2), and `main` is pushed. Tests: 337 pass; the payload check found zero Blizzard files. Every call made without asking is in design.md under **Pass three: Eternal Conflict (0.4.2)**, with a "Calls made" list after each group of items.
+**0.4.3 is published** (https://github.com/Slumach/d2td/releases/tag/v0.4.3; 0.4.2 went out an hour earlier and shipped random as random races), and `main` is pushed. Tests: 337 pass; the payload check found zero Blizzard files. Every call made without asking is in design.md under **Pass three: Eternal Conflict (0.4.2)**, with a "Calls made" list after each group of items.
 
 To try it: main menu, **Eternal Conflict**, set the game up, **Start game**. In a browser dev build: `?battle&team=2&race=paladin` (`&speed=4` to hurry). Bot against bot: `npm run battle` (`--team 2` for 2v2).
 
@@ -12,7 +12,8 @@ To try it: main menu, **Eternal Conflict**, set the game up, **Start game**. In 
 | 1 to 4: fighters, kings, shards, HUD | `fe49d76` | Towers are fighters with charstats life that hold the creeps and fall for the round, rallying to the king when their pad is clear; build pads with spawn gates, both battlefields in one world; Tyrael and Baal on their platforms, hit by the leaks and striking back, with attack, life and regen; shards mined every tick, the pile counting them; the Legion HUD (wave box, scoreboard, send tray with monster icons). Legion's wave timing: 60 s first, then the countdown only when every creep on both sides is dead. |
 | 5: game setup | `98fbc66` | D2R's options panel and D2R's checkboxes: random races or all pick, X1 to X4 sends, mirror, easy, the long game (waves 22 to 30), no champions; the host's setup shows in the lobby (protocol 4). |
 | 6: menus | `2e1a182` | The changelog scrolls inside D2R's panel under its buttons; the lobby wears the panel and stone buttons. |
-| 7: balance and release | see below | The harness rerun on the new fighters, races evened, 0.4.2 built, published and pushed. |
+| 7: balance and release | `1ed9a88` | The harness rerun on the new fighters, races evened, 0.4.2 built, published and pushed. |
+| Random towers (your correction) | `a140c5d` | Random is Legion's random builder: a fresh roll of four lines from different races every wave, only those build; the bot plays its roll. 0.4.3. |
 
 Items 1 to 4 are one commit: the HUD reads the state the fighters and shards changed and could not compile against the old sim on its own.
 
@@ -54,6 +55,7 @@ The levers (balance.json `battle.races`): gold 85% Paladin, 98% Sorceress, 128% 
 - **3v3 and 4v4** were checked for king falls only (43% and 45% on two seeds); their race tables were not tuned.
 - **references/d2td/** does not exist; the D2R screenshots in references/ stood in for "ours".
 - **Gold-only play** is noted as a setup switch for later, not built.
+- **Random towers** were not balanced or measured: the harness plays races; a random-builder harness run is one flag away (`tools/battle.ts` takes no setup options yet).
 - **Not tested in Electron or between two real PCs.** The sim, the lobby and the setup options are covered by tests (the relay's 2v2 over TCP included), and every screen was driven in a headless Chrome build with real clicks and screenshots.
 - **Not tested against a human.** Every number comes from bots playing bots. The bot does hold its pad (tanks in front, the rest behind), but a human's first wave with one fighter was not played.
 
