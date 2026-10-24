@@ -9,7 +9,7 @@
     "hitsToKill": 2.5,
     "tiers": { "normal": [0, 1, 2, 2, 2], "nightmare": [2, 3, 3, 3, 3], "hell": [3, 3, 3, 4, 4] },
     "levels": { "normal": [1, 5, 1, 3, 5], "nightmare": [5, 1, 2, 3, 4], "hell": [5, 6, 7, 5, 6] },
-    "difficultyPct": { "normal": 100, "nightmare": 100, "hell": 2400 }
+    "difficultyPct": { "normal": 100, "nightmare": 85, "hell": 2400 }
   },
   "endless": { "tierWaves": 10, "startLevel": 85, "levelPerWave": 1, "hpPctPerWave": 4, "damagePctPerWave": 3 },
   "drops": { "dropPct": 15, "gemRunePct": 40, "runeMultiplierPct": 125, "tierDropPct": 25, "smithsHammerPpm": 11 },

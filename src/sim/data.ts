@@ -1247,6 +1247,14 @@ export function rulesFrom(tables: Tables, balance: BalanceJson): Rules {
   };
 }
 
+/** A weapon base at a tier from 0: weapons.txt's normcode, ubercode and ultracode of its row. */
+export function weaponAtTier(tables: Tables, weapon: string | undefined, tier: number): string | undefined {
+  if (!weapon) return undefined;
+  const row = findRow(tables.weapons, 'name', weapon);
+  const code = str(row, ['normcode', 'ubercode', 'ultracode'][Math.min(2, Math.max(0, tier))]!);
+  return str(tables.weapons.find((r) => str(r, 'code') === code) ?? row, 'name');
+}
+
 export function resolveSkill(
   tables: Tables,
   json: SkillJson,
@@ -1418,10 +1426,19 @@ export function buildGameData(
   waveCount: number = Infinity,
   options: BuildOptions = {},
 ): GameData {
-  // A skill takes the weapon of the class whose lines use it
-  const weaponFor = (skillId: string) =>
-    design.classes.find((c) => Object.values(c.lines).some((l) => l.tiers.flat().includes(skillId)))?.weapon;
   const jsonById = new Map(design.skills.map((s) => [s.id, s]));
+  // A skill takes the weapon of the class whose lines use it; a melee skill swings it at its
+  // tier, as weapons.txt grades a base: T1 the normal base, T2 its exceptional, T3 its elite
+  const weaponFor = (skillId: string) => {
+    for (const c of design.classes) {
+      for (const line of Object.values(c.lines)) {
+        const tier = line.tiers.findIndex((t) => t.includes(skillId));
+        if (tier < 0) continue;
+        return jsonById.get(skillId)?.archetype === 'melee' ? weaponAtTier(tables, c.weapon, tier) : c.weapon;
+      }
+    }
+    return undefined;
+  };
   const laddered = new Set(design.classes.flatMap((c) => Object.values(c.lines).flatMap((l) => l.tiers.slice(1).flat())));
   const skills: Record<string, SkillDef> = {};
   for (const json of design.skills) {
