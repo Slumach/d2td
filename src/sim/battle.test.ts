@@ -366,6 +366,49 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     expect(two).toBe(Math.floor((real().battle!.waves[3]!.hpPct! * pct[1]!) / 100));
   });
 
+  it('random towers: a roll of lines from different classes each wave, and only the roll builds', () => {
+    const opts = { pick: 'random' as const, sends: 1, mirror: false, easy: false, long: false, champions: true };
+    const m = createMatch(real(), 6, 'battle', 2, { teamSize: 1, races: ['paladin', 'paladin'], bots: [], options: opts });
+    const sim = m.zones[0]!;
+    const n = real().battle!.rules.randomRoll.lines;
+    const roll = sim.state.battle!.randomRolls![0]!;
+    expect(roll).toHaveLength(n);
+    expect(new Set(roll.map((k) => k.split('/')[0])).size).toBe(n);
+    // A line off the roll will not build; one on it will, whatever its class
+    const off = Object.entries(real().classes).flatMap(([cls, c]) => Object.keys(c.lines).map((l) => `${cls}/${l}`)).find((k) => !roll.includes(k))!;
+    const skillOf = (k: string) => {
+      const [cls, line] = k.split('/') as [string, string];
+      return { cls, skill: real().classes[cls]!.lines[line]!.tiers[0]![0]! };
+    };
+    sim.state.gold[0] = 100_000;
+    stepMatch(m, [{ player: 0, command: { type: 'build', x: 19, y: 10, ...skillOf(off) } }]);
+    expect(sim.state.towers).toHaveLength(0);
+    stepMatch(m, [{ player: 0, command: { type: 'build', x: 19, y: 10, ...skillOf(roll[0]!) } }]);
+    expect(sim.state.towers).toHaveLength(1);
+    // The next countdown brings a new roll, the same on both teams in mirror mode
+    toFight(m);
+    for (const z of m.zones) {
+      z.state.spawns = [];
+      z.state.monsters = [];
+    }
+    stepMatch(m, []);
+    expect(m.state.battle!.phase).toBe('build');
+    expect(sim.state.battle!.randomRolls![0]).not.toEqual(roll);
+    const mirror = createMatch(real(), 6, 'battle', 2, { teamSize: 1, options: { ...opts, mirror: true } });
+    expect(mirror.zones[1]!.state.battle!.randomRolls).toEqual(mirror.zones[0]!.state.battle!.randomRolls);
+    expect(m.zones[1]!.state.battle!.randomRolls).not.toEqual(m.zones[0]!.state.battle!.randomRolls);
+  });
+
+  it('bots play the random builder to the end', () => {
+    const m = createMatch(real(), 8, 'battle', 2, { teamSize: 1, bots: [0, 1], options: { pick: 'random', sends: 1, mirror: false, easy: false, long: false, champions: true } });
+    while (m.state.status !== 'over' && m.state.tick < 60_000) stepMatch(m, []);
+    expect(m.state.status).toBe('over');
+    for (const z of m.zones) {
+      expect(z.state.towers.length).toBeGreaterThan(2);
+      expect(new Set(z.state.towers.map((t) => t.cls)).size).toBeGreaterThan(1);
+    }
+  });
+
   it('the long game plays waves 22 to 30 from Nightmare, Diablo on 26 and Baal on 30', () => {
     const m = createMatch(real(), 2, 'battle', 2, { teamSize: 1, races: ['paladin', 'paladin'], bots: [], options: { pick: 'all', sends: 1, mirror: false, easy: false, long: true, champions: true } });
     const waves = m.zones[0]!.data.waves;
@@ -381,7 +424,7 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     const mirror = createMatch(real(), 2, 'battle', 4, { ...base, options: { pick: 'all', sends: 1, mirror: true, easy: false, long: false, champions: true } });
     expect(mirror.state.battle!.races).toEqual(['paladin', 'druid', 'paladin', 'druid']);
     const random = createMatch(real(), 2, 'battle', 4, { ...base, options: { pick: 'random', sends: 1, mirror: false, easy: false, long: false, champions: true } });
-    expect(random.state.battle!.races).not.toEqual(base.races);
+    expect(random.state.battle!.races).toEqual(['random', 'random', 'random', 'random']);
     const easy = createMatch(real(), 2, 'battle', 2, { teamSize: 1, races: ['paladin', 'paladin'], bots: [], options: { pick: 'all', sends: 3, mirror: false, easy: true, long: false, champions: false } });
     const rules = real().battle!.rules;
     expect(easy.zones[0]!.state.battle!.king.maxHp).toBe(Math.floor((rules.king.hp[0]! * rules.easy.kingPct) / 100));

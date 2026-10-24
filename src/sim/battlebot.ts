@@ -9,7 +9,7 @@
 // Each bot slot has a temper drawn from the match seed: how many workers it hires, how far
 // ahead it saves, whether it banks shards for the dear sends, and a little taste in towers.
 
-import { kingUpgradeCost, sendCost, sendOpen, wholeShards, workerCost } from './battle.ts';
+import { allowedLines, kingUpgradeCost, sendCost, sendOpen, wholeShards, workerCost } from './battle.ts';
 import { standardDps } from './dps.ts';
 import { MAX_TIER, MAX_TOWER_LEVEL, type EvolutionDef } from './data.ts';
 import type { SkillDef } from './archetypes/types.ts';
@@ -68,8 +68,9 @@ export function botCommands(match: Match, slot: number): Command[] {
   let gold = sim.state.gold[seat]!;
   const mine = sim.state.towers.filter((t) => t.owner === seat && t.legendOf === undefined);
   const temper = temperOf(b.seed, slot);
-  const lines = attackLines(sim, race, temper);
-  const recipe = planRecipe(sim, race, lines);
+  const lines = attackLines(sim, seat, temper);
+  // The random builder's mixed classes make no evolution: a recipe needs two of one class
+  const recipe = bs.randomRolls ? undefined : planRecipe(sim, race, lines.map((l) => l.line));
 
   // Branches waiting to be picked: the stronger at its first level, or the plan's
   for (const t of mine) {
@@ -161,17 +162,24 @@ export function botCommands(match: Match, slot: number): Command[] {
   return out;
 }
 
-/** The race's attack lines, strongest first by their top tier's damage, as the bot's taste weighs them. */
-function attackLines(sim: Sim, race: string, temper: Temper): string[] {
-  const cls = sim.data.classes[race];
-  if (!cls) return [];
-  const scored = Object.entries(cls.lines).map(([id, line]) => {
+/** A line the bot may build: its class and line id. */
+interface LineChoice {
+  cls: string;
+  line: string;
+}
+
+/** The seat's attack lines (its race's, or this wave's roll), strongest first by their top tier's damage, as the bot's taste weighs them. */
+function attackLines(sim: Sim, seat: number, temper: Temper): LineChoice[] {
+  const scored = [...allowedLines(sim, seat)].flatMap((key) => {
+    const [cls, id] = key.split('/') as [string, string];
+    const line = sim.data.classes[cls]?.lines[id];
+    if (!line) return [];
     const top = line.tiers.at(-1)!.map((s) => skillDps(sim, s, MAX_TOWER_LEVEL - 1));
     // Taste: up to half again on one line's worth, a different line for each slot
     const lean = mix(temper.taste, id.length * 31 + id.charCodeAt(0)) % 500;
-    return { id, dps: idiv(Math.max(0, ...top) * (1000 + lean), 1000), first: skillDps(sim, line.tiers[0]![0]!, 0) };
+    return [{ cls, line: id, dps: idiv(Math.max(0, ...top) * (1000 + lean), 1000), first: skillDps(sim, line.tiers[0]![0]!, 0) }];
   });
-  return scored.filter((l) => l.dps > 0 && l.first > 0).sort((a, b) => b.dps - a.dps || (a.id < b.id ? -1 : 1)).slice(0, 2).map((l) => l.id);
+  return scored.filter((l) => l.dps > 0 && l.first > 0).sort((a, b) => b.dps - a.dps || (a.line < b.line ? -1 : 1)).slice(0, 2).map((l) => ({ cls: l.cls, line: l.line }));
 }
 
 function skillDps(sim: Sim, id: string, lvl: number): number {
@@ -232,10 +240,10 @@ function partnerOf(sim: Sim, t: Tower, recipe: EvolutionDef | undefined): boolea
 }
 
 /** Every purchase on the bot's towers, scored as damage gained per gold (per mille). */
-function towerOptions(sim: Sim, seat: number, race: string, mine: Tower[], lines: string[], recipe: EvolutionDef | undefined): Option[] {
+function towerOptions(sim: Sim, seat: number, race: string, mine: Tower[], lines: LineChoice[], recipe: EvolutionDef | undefined): Option[] {
   const out: Option[] = [];
   const cls = sim.data.classes[race];
-  if (!cls || lines.length === 0) return out;
+  if (lines.length === 0) return out;
   const attackers = mine.filter((t) => !partnerOf(sim, t, recipe) && towerDps(sim, t) > 0);
   const best = attackers.reduce((n, t) => Math.max(n, towerDps(sim, t)), 0);
   // The evolution's worth to the partner tower: three times the attack it lifts, over the gold to get there
@@ -252,7 +260,7 @@ function towerOptions(sim: Sim, seat: number, race: string, mine: Tower[], lines
     }
     const tc = tierCost(sim, t);
     if (tc !== undefined && t.tier < MAX_TIER) {
-      const line = cls.lines[t.line]!;
+      const line = sim.data.classes[t.cls]!.lines[t.line]!;
       const next = line.tiers[t.tier]!;
       const nextSkill = next.find((s) => s === recipe?.attack.skill || s === recipe?.partner.skill) ?? next[0]!;
       const def = sim.data.skills[nextSkill];
@@ -262,7 +270,7 @@ function towerOptions(sim: Sim, seat: number, race: string, mine: Tower[], lines
       if (gain > 0) out.push({ score: idiv(gain * PER, path), cost: tc, command: { type: 'upgradeTier', towerId: t.id } });
     }
     // A level short of 5 is also a step toward the next tier: the whole path valued at its end
-    const line = t.line && !t.evolved ? cls.lines[t.line] : undefined;
+    const line = t.line && !t.evolved ? sim.data.classes[t.cls]?.lines[t.line] : undefined;
     const next = line?.tiers[t.tier];
     if (up !== undefined && next && t.level < MAX_TOWER_LEVEL && t.tier < MAX_TIER) {
       const nextSkill = next.find((s) => s === recipe?.attack.skill || s === recipe?.partner.skill) ?? next[0]!;
@@ -283,16 +291,16 @@ function towerOptions(sim: Sim, seat: number, race: string, mine: Tower[], lines
 
   // A new tower on the next line in turn, or the plan's partner when the attack is far enough
   const build = buildCostFor(sim, seat);
-  const line = lines[mine.length % lines.length]!;
-  const skill = cls.lines[line]!.tiers[0]![0]!;
+  const choice = lines[mine.length % lines.length]!;
+  const skill = sim.data.classes[choice.cls]!.lines[choice.line]!.tiers[0]![0]!;
   const tile = freeTile(sim, seat, isTank(sim, skill));
   if (tile) {
     const gain = skillDps(sim, skill, 0);
-    out.push({ score: idiv(gain * PER, build) + (mine.length < 2 ? PER * 100 : 0), cost: build, command: { type: 'build', x: tile.x, y: tile.y, cls: race, skill } });
+    out.push({ score: idiv(gain * PER, build) + (mine.length < 2 ? PER * 100 : 0), cost: build, command: { type: 'build', x: tile.x, y: tile.y, cls: choice.cls, skill } });
     const hasPartner = mine.some((t) => recipe && sim.data.classes[t.cls]?.lines[t.line]?.tiers.flat().includes(recipe.partner.skill));
-    if (recipe && !hasPartner && attackers.some((t) => t.tier >= recipe.attack.minTier) && mine.length >= 3) {
+    if (cls && recipe && !hasPartner && attackers.some((t) => t.tier >= recipe.attack.minTier) && mine.length >= 3) {
       const pLine = Object.entries(cls.lines).find(([, l]) => l.tiers.flat().includes(recipe.partner.skill))?.[0];
-      if (pLine && !lines.includes(pLine)) {
+      if (pLine && !lines.some((l) => l.line === pLine)) {
         const pSkill = cls.lines[pLine]!.tiers[0]![0]!;
         const pTile = freeTile(sim, seat, isTank(sim, pSkill)) ?? tile;
         out.push({ score: idiv(planGain * PER, build + 4 * levelPath(sim, 1)), cost: build, command: { type: 'build', x: pTile.x, y: pTile.y, cls: race, skill: pSkill } });

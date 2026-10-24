@@ -310,6 +310,7 @@
     ],
     "sendPotency": { "fromWave": 11, "hpPctPerWave": 30 },
     "easy": { "wavePct": 70, "kingPct": 150 },
+    "randomRoll": { "lines": 4 },
     "teamWavePct": [100, 155, 175, 195],
     "coop": {
       "sends": [[], [], ["cowking"], ["corpsefire"], ["bishibosh"], [], ["rakanishu"], ["countess"], ["fireeye"], [], ["radament", "champions-mummy"], ["countess"], ["champions-mummy"], [], ["pindleskin"], ["nihlathak"], [], ["ancients"], ["champions-bloodlord", "pindleskin"], ["ancients", "nihlathak"], []]

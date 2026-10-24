@@ -51,7 +51,7 @@ export function battleRows(match: Match, me: number, nameOf: (slot: number) => s
     const sim = match.zones[ringOf(match, p)]!;
     const seat = seatOf(match, p);
     const b = sim.state.battle!;
-    const race = match.data.classes[b.races[seat]!]?.name ?? b.races[seat]!;
+    const race = b.races[seat] === 'random' ? 'Random' : (match.data.classes[b.races[seat]!]?.name ?? b.races[seat]!);
     return {
       name: nameOf(p),
       colour: colourOf(p),

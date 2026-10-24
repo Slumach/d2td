@@ -253,8 +253,8 @@ export class MenuScene extends Phaser.Scene {
 
     // The switches, Legion's three columns
     const rows: [number, number, string, boolean, () => void, string][] = [
-      [0, 0, 'Random races', o.pick === 'random', () => setOpt({ pick: 'random' }), 'Every race rolled from the seed'],
-      [0, 1, 'All pick', o.pick === 'all', () => setOpt({ pick: 'all' }), 'Picked races are kept'],
+      [0, 0, 'Random towers', o.pick === 'random', () => setOpt({ pick: 'random' }), 'A fresh roll from different races every wave'],
+      [0, 1, 'All pick', o.pick === 'all', () => setOpt({ pick: 'all' }), 'Pick your race and build it'],
       [0, 2, 'Mirror mode', o.mirror, () => setOpt({ mirror: !o.mirror }), 'Both teams play the same races'],
       [1, 0, 'X1 Normal mode', o.sends === 1, () => setOpt({ sends: 1 }), 'Sends are not multiplied'],
       [1, 1, 'X2 Double trouble', o.sends === 2, () => setOpt({ sends: 2 }), 'Sends walk twice over'],

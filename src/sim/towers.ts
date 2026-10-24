@@ -3,6 +3,7 @@
 // player builds only on the arcs they own, pays from their own gold, and changes only
 // their own towers.
 
+import { mayBuild } from './battle.ts';
 import { sendHome } from './items/loot.ts';
 import { MAX_TIER, MAX_TOWER_LEVEL, type EvolutionDef, type LegendDef, type OverLevels } from './data.ts';
 import { idiv } from './fixed.ts';
@@ -181,8 +182,8 @@ export function buildCostFor(sim: Sim, _player: number): number {
 export function build(sim: Sim, player: number, x: number, y: number, cls: string, skill?: string): void {
   const s = sim.state;
   const cost = buildCostFor(sim, player);
-  // Eternal Conflict: a player builds only their race's towers
-  if (s.battle && s.battle.races[player] !== cls) return;
+  // Eternal Conflict: a player builds only their race's towers, or this wave's roll
+  if (!mayBuild(sim, player, cls, skill)) return;
   if (!sim.data.classes[cls] || !canBuild(sim, x, y, player) || !pay(sim, player, cost)) return;
   const center = tileCenter({ x, y });
   const tower: Tower = {
@@ -212,6 +213,7 @@ export function build(sim: Sim, player: number, x: number, y: number, cls: strin
 
 export function pickSkill(sim: Sim, tower: Tower, skill: string): void {
   if (tower.line || tower.evolved) return;
+  if (sim.state.battle?.randomRolls && !mayBuild(sim, tower.owner, tower.cls, skill)) return;
   const lines = sim.data.classes[tower.cls]?.lines ?? {};
   const line = Object.entries(lines).find(([, l]) => l.tiers[0]?.includes(skill));
   if (!line) return;

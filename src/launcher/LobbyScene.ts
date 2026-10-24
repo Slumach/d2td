@@ -304,7 +304,7 @@ export class LobbyScene extends Phaser.Scene {
     }
     // The game setup, as the host set it on the Eternal Conflict page
     const o = this.options;
-    const flags = [o.pick === 'random' ? 'random races' : 'all pick', `X${o.sends} sends`, o.mirror ? 'mirror mode' : '', o.easy ? 'easy mode' : '', o.long ? 'long game (waves 22 to 30)' : '', !o.champions ? 'no champions' : ''].filter(Boolean);
+    const flags = [o.pick === 'random' ? 'random towers' : 'all pick', `X${o.sends} sends`, o.mirror ? 'mirror mode' : '', o.easy ? 'easy mode' : '', o.long ? 'long game (waves 22 to 30)' : '', !o.champions ? 'no champions' : ''].filter(Boolean);
     const setup = add(this.add.text(LEFT, y, `Game setup: ${flags.join(', ')}${this.isHost ? ' (set on the Eternal Conflict page before hosting)' : ''}`, MUTED).setDepth(3101));
     y += setup.height + 12;
     const race = mine?.race ?? 'random';

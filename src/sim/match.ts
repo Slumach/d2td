@@ -19,7 +19,7 @@ import { ARC_COUNT, createLaneMap } from './map.ts';
 import { createSim, startWave, step } from './sim.ts';
 import type { Command, Sim } from './state.ts';
 import { applyTrade, isTradeCommand, type Trade } from './items/trade.ts';
-import { battleData, battleOptions, battleStart, battleWaveCount, DEFAULT_OPTIONS, fightOver, payWave, rally, recall, sendCost, sendDef, sendGroups, sendOpen, wholeShards, type BattleOptions } from './battle.ts';
+import { battleData, battleOptions, battleStart, battleWaveCount, DEFAULT_OPTIONS, fightOver, payWave, rally, recall, rollLines, sendCost, sendDef, sendGroups, sendOpen, wholeShards, type BattleOptions } from './battle.ts';
 import { botCommands } from './battlebot.ts';
 import { createRng, rollInt } from './rng.ts';
 
@@ -149,13 +149,15 @@ function createBattleMatch(data: GameData, seed: number, mode: 'battle' | 'coop'
   const classes = Object.keys(data.classes);
   const options = battleOptions(setup.options ?? DEFAULT_OPTIONS);
   const rng = createRng((seed ^ 0x0ba771e5) >>> 0);
+  // All pick: each seat's race, a random class for a seat that picked none; the random builder plays no race
   const races = Array.from({ length: players }, (_, p) => {
-    const want = options.pick === 'all' ? setup.races?.[p] : undefined;
+    if (options.pick === 'random') return 'random';
+    const want = setup.races?.[p];
     return want && data.classes[want] ? want : classes[rollInt(rng, 0, classes.length - 1)]!;
   });
-  // Mirror mode: the second team plays the first team's races, seat for seat
+  // Mirror mode: the second team plays the first team's races, seat for seat (and rolls its rolls)
   if (options.mirror && teams === 2) for (let p = 0; p < n; p++) races[n + p] = races[p]!;
-  const zones = Array.from({ length: teams }, (_, t) => createBattlefield(data, seed, races.slice(t * n, t * n + n), options));
+  const zones = Array.from({ length: teams }, (_, t) => createBattlefield(data, seed, races.slice(t * n, t * n + n), options, t));
   const first = data.battle!.rules.firstBuildTicks;
   return {
     data,
@@ -173,10 +175,10 @@ function createBattleMatch(data: GameData, seed: number, mode: 'battle' | 'coop'
 }
 
 /** One team's battlefield: a lane per seat, each seat playing its race. */
-export function createBattlefield(data: GameData, seed: number, races: readonly string[], options: BattleOptions = DEFAULT_OPTIONS): Sim {
+export function createBattlefield(data: GameData, seed: number, races: readonly string[], options: BattleOptions = DEFAULT_OPTIONS, team = 0): Sim {
   const bd = battleData(data, options, races.length);
   const sim = createSim(bd, seed, { players: races.length, map: createLaneMap(races.length) });
-  sim.state.battle = battleStart(bd, races, options);
+  sim.state.battle = battleStart(bd, races, options, seed, team);
   return sim;
 }
 
@@ -326,6 +328,8 @@ function stepBattle(match: Match): void {
       for (const zone of match.zones) {
         payWave(zone, b.wave - 1);
         recall(zone);
+        // The random builder: a fresh roll for the coming wave
+        rollLines(zone, b.wave);
       }
       b.phase = 'build';
       b.phaseTick = m.tick + rules.buildTicks;

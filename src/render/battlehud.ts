@@ -174,7 +174,7 @@ export class BattleHud {
     const o = b.options;
     const n = b.teamSize;
     const mode = match.state.mode === 'coop' ? `co-op, ${n} ${n === 1 ? 'player' : 'players'}` : `${n}v${n}`;
-    const flags = [o.sends > 1 ? `X${o.sends} sends` : '', o.mirror ? 'mirror' : '', o.easy ? 'easy' : '', o.long ? 'long game' : '', !o.champions ? 'no champions' : '', o.pick === 'random' ? 'random races' : ''].filter(Boolean);
+    const flags = [o.sends > 1 ? `X${o.sends} sends` : '', o.mirror ? 'mirror' : '', o.easy ? 'easy' : '', o.long ? 'long game' : '', !o.champions ? 'no champions' : '', o.pick === 'random' ? 'random towers' : ''].filter(Boolean);
     t[0]!.setText(`Eternal Conflict: ${mode}${flags.length ? `  (${flags.join(', ')})` : ''}`);
     const heads = ['Player', 'Value', 'Income', 'Shards', 'Bounty'];
     let i = 2;
@@ -217,20 +217,27 @@ export class BattleHud {
     const rules = match.data.battle!.rules;
     const gold = sim.state.gold[seat] ?? 0;
     const shards = bs.shards[seat] ?? 0;
+    const roll = bs.randomRolls?.[seat];
     const enemy = match.state.mode === 'battle' ? match.zones[enemyOf(match, me)]! : undefined;
     const lanes = enemy?.map.arcs.length ?? 0;
     if (this.lane < 0 || this.lane >= lanes) this.lane = Math.min(seat, Math.max(0, lanes - 1));
-    const key = JSON.stringify([gold, wholeShards(shards), Math.floor(shards / 100), bs.workers[seat], b.phase, b.wave, bs.king, this.lane, match.state.status]);
+    const key = JSON.stringify([gold, wholeShards(shards), Math.floor(shards / 100), bs.workers[seat], b.phase, b.wave, bs.king, this.lane, match.state.status, roll]);
     if (key === this.key) return;
     this.key = key;
     for (const o of this.parts) o.destroy();
     this.parts = [];
 
-    const race = match.data.classes[bs.races[seat]!]?.name ?? bs.races[seat];
+    const race = roll ? 'Random towers' : (match.data.classes[bs.races[seat]!]?.name ?? bs.races[seat]);
     const base = rules.income[Math.max(0, b.phase === 'build' ? b.wave : b.wave - 1)] ?? rules.income.at(-1) ?? 0;
     const rate = (shardsPerTick(sim, seat) * TICKS_PER_SECOND) / 1000;
+    const lineName = (k: string) => {
+      const [cls, line] = k.split('/') as [string, string];
+      const c = match.data.classes[cls];
+      return `${c?.name ?? cls} ${c?.lines[line]?.name ?? line}`;
+    };
     const lines = [
       `${race}, ${KEEP_NAMES[teamOf(match, me)]}`,
+      ...(roll ? [`This wave's roll: ${roll.map(lineName).join(', ')}`] : []),
       `Gold ${gold}, +${base + (bs.income[seat] ?? 0)} a wave`,
       `Shards ${wholeShards(shards)}.${Math.floor((shards % 1000) / 100)}, +${rate.toFixed(1)} a second`,
       `Workers ${bs.workers[seat]} of ${rules.worker.max}`,

@@ -372,8 +372,13 @@ export interface BattleSimState {
   /** The king's life (whole points, not 1/256) and the upgrade levels the team has bought. */
   king: { hp: number; maxHp: number; hpLevel: number; regenLevel: number; attackLevel: number };
   kingCooldown: number;
-  /** The class each seat plays: it builds only that class's towers. */
+  /** The class each seat plays: it builds only that class's towers ('random' with the random builder). */
   races: string[];
+  /** The random builder: each seat's roll this wave, lines from different classes as 'class/line'; absent when races are played. */
+  randomRolls?: string[][];
+  /** The match seed and the team, for the rolls. */
+  rollSeed: number;
+  team: number;
   workers: number[];
   /** Shards mined, in thousandths of a shard. */
   shards: number[];

@@ -23,6 +23,7 @@ import type { GameData, WaveDef, WaveGroup } from './data.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE, idiv } from './fixed.ts';
 import { gearOf } from './items/tower.ts';
 import { arcAt, laneOf, tileCenter } from './map.ts';
+import { createRng, rollInt } from './rng.ts';
 import type { BattleSimState, KingUpgrade, Monster, MonsterMod, Rank, Sim, Tower } from './state.ts';
 
 /** One battle wave: a stream of one monster, or an act boss, at a fixed difficulty and level. */
@@ -75,7 +76,7 @@ interface KingUpgradeJson {
 
 /** What the game setup screen sets for a match. */
 export interface BattleOptions {
-  /** 'random': every race is rolled; 'all': picked races are kept. */
+  /** 'all': every player picks a race and builds it; 'random': Legion's random builder, a fresh roll of lines from different classes every wave. */
   pick: 'random' | 'all';
   /** Every send walks this many times over. */
   sends: number;
@@ -162,6 +163,8 @@ export interface BattleJson {
   sendPotency: { fromWave: number; hpPctPerWave: number };
   /** Easy mode: percent on every wave's HP, and on the king's life. */
   easy: { wavePct: number; kingPct: number };
+  /** The random builder: how many lines a wave's roll holds, each from a different class. */
+  randomRoll: { lines: number };
   /** Percent on every wave's HP by the team's size (one lane, two, three, four): more pads of fighters rally to one king. */
   teamWavePct: number[];
   /** Co-op: the sends that arrive with each wave, by wave, onto lanes in turn. */
@@ -219,14 +222,16 @@ export function kingLife(r: BattleJson, seats: number, easy = false): number {
   return easy ? idiv(hp * r.easy.kingPct, 100) : hp;
 }
 
-/** A battlefield's starting state for its team: each seat's race, and the king. */
-export function battleStart(data: GameData, races: readonly string[], options: BattleOptions = DEFAULT_OPTIONS): BattleSimState {
+/** A battlefield's starting state for its team: each seat's race (or its first roll), and the king. */
+export function battleStart(data: GameData, races: readonly string[], options: BattleOptions = DEFAULT_OPTIONS, seed = 0, team = 0): BattleSimState {
   const r = data.battle!.rules;
   const hp = kingLife(r, races.length, options.easy);
-  return {
+  const state: BattleSimState = {
     king: { hp, maxHp: hp, hpLevel: 0, regenLevel: 0, attackLevel: 0 },
     kingCooldown: 0,
     races: [...races],
+    rollSeed: seed >>> 0,
+    team: options.mirror ? 0 : team,
     workers: races.map(() => 0),
     shards: races.map(() => 0),
     income: races.map(() => 0),
@@ -236,6 +241,59 @@ export function battleStart(data: GameData, races: readonly string[], options: B
     bounty: races.map(() => 0),
     queued: [],
   };
+  if (options.pick === 'random') state.randomRolls = races.map((_, seat) => rollOf(data, state, seat, 0));
+  return state;
+}
+
+/** The key a roll holds a line under. */
+export function lineKey(cls: string, line: string): string {
+  return `${cls}/${line}`;
+}
+
+/**
+ * One seat's roll for a wave: battle.randomRoll.lines lines, each from a different class, from
+ * a stream of the match seed, the wave, the seat and the team (both teams roll alike in mirror
+ * mode), so every client rolls the same and the fight's dice are untouched.
+ */
+export function rollOf(data: GameData, b: BattleSimState, seat: number, wave: number): string[] {
+  const n = data.battle!.rules.randomRoll.lines;
+  const rng = createRng((b.rollSeed ^ Math.imul(wave + 1, 0x9e3779b1) ^ Math.imul(seat + 1, 0x85ebca6b) ^ Math.imul(b.team + 1, 0xc2b2ae35)) >>> 0);
+  const classes = Object.keys(data.classes);
+  const out: string[] = [];
+  while (out.length < Math.min(n, classes.length) && classes.length > 0) {
+    const cls = classes.splice(rollInt(rng, 0, classes.length - 1), 1)[0]!;
+    const lines = Object.keys(data.classes[cls]!.lines);
+    if (lines.length === 0) continue;
+    out.push(lineKey(cls, lines[rollInt(rng, 0, lines.length - 1)]!));
+  }
+  return out;
+}
+
+/** The random builder: every seat's roll for the coming wave. */
+export function rollLines(sim: Sim, wave: number): void {
+  const b = sim.state.battle;
+  if (!b?.randomRolls) return;
+  b.randomRolls = b.races.map((_, seat) => rollOf(sim.data, b, seat, wave));
+}
+
+/** The lines a seat may build this wave, as 'class/line' keys: its roll, or every line of its race. */
+export function allowedLines(sim: Sim, seat: number): Set<string> {
+  const b = sim.state.battle;
+  if (!b) return new Set(Object.entries(sim.data.classes).flatMap(([cls, c]) => Object.keys(c.lines).map((l) => lineKey(cls, l))));
+  const roll = b.randomRolls?.[seat];
+  if (roll) return new Set(roll);
+  const race = b.races[seat] ?? '';
+  return new Set(Object.keys(sim.data.classes[race]?.lines ?? {}).map((l) => lineKey(race, l)));
+}
+
+/** Whether a seat may build a tower of `cls` with `skill` as its first pick, under its race or its roll. */
+export function mayBuild(sim: Sim, seat: number, cls: string, skill?: string): boolean {
+  const b = sim.state.battle;
+  if (!b) return true;
+  if (!b.randomRolls) return b.races[seat] === cls;
+  if (!skill) return false;
+  const line = Object.entries(sim.data.classes[cls]?.lines ?? {}).find(([, l]) => l.tiers[0]?.includes(skill))?.[0];
+  return line !== undefined && allowedLines(sim, seat).has(lineKey(cls, line));
 }
 
 function rulesOf(sim: Sim): BattleJson {

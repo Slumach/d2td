@@ -79,7 +79,7 @@ import { tradeOf } from '../sim/items/trade.ts';
 import { angle64, spriteDirection } from './directions.ts';
 import { LocalDriver, NetDriver, type Driver, type LocalBattle } from './driver.ts';
 import { BattleHud, KEEP_NAMES, KING_NAMES } from './battlehud.ts';
-import { kingLevel, kingUpgradeCost, wholeShards } from '../sim/battle.ts';
+import { allowedLines, kingLevel, kingUpgradeCost, lineKey, wholeShards } from '../sim/battle.ts';
 import { facingFromVector, type Facing8 } from './facing.ts';
 import { ISO_H, ISO_W, ORIGIN, WORLD_WIDTH, ZONE_SHIFT_PX, ZONE_SHIFT_UNITS, ellipseOf, project, screenVector, tileAtWorld, tileAtWorldIn, tileDiamond, worldExtent } from './iso.ts';
 import { GAME_HEIGHT, GAME_WIDTH, HUD_HEIGHT, PANEL_TOP } from './layout.ts';
@@ -564,7 +564,8 @@ export class GameScene extends Phaser.Scene {
       });
       this.stageText.setVisible(false);
       this.aliveText.setVisible(false);
-      this.toast(`You play the ${this.gameData.classes[this.buildClass]?.name ?? this.buildClass}. Build on your pad before the first wave: your fighters hold the creeps and fall if they are overrun.`);
+      const roll = this.sim.state.battle?.randomRolls?.[this.seat];
+      this.toast(roll ? 'Random towers: a fresh roll of lines from different classes every wave. The roll is in the panel on the left.' : `You play the ${this.gameData.classes[this.buildClass]?.name ?? this.buildClass}. Build on your pad before the first wave: your fighters hold the creeps and fall if they are overrun.`);
     }
     if (this.d2) {
       // D2 shows no status line: lives, gold and the wave live in the panel; hints sit just above it
@@ -748,7 +749,7 @@ export class GameScene extends Phaser.Scene {
           const top = positionAt(map, arc.start + UNITS_PER_TILE);
           const at = this.at(z, top.x, top.y);
           const race = d.match.state.battle?.races[owner];
-          const label = `${this.nameOf(owner)}${race ? `, ${this.gameData.classes[race]?.name ?? race}` : ''}`;
+          const label = `${this.nameOf(owner)}${race ? `, ${race === 'random' ? 'random towers' : (this.gameData.classes[race]?.name ?? race)}` : ''}`;
           this.keepParts.push(
             this.add.text(Math.round(at.x), Math.round(at.y) - 16, label, { fontFamily: FONT, fontSize: '13px', color: hex(colour), stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setDepth(DEPTH.overlay),
           );
@@ -2222,7 +2223,7 @@ click to return to the menu`).setFontSize(40).setVisible(true);
       const sum = (xs: number[]) => xs.reduce((n, x) => n + x, 0);
       text(cy - 90 + t * 110, `${team}, ${KEEP_NAMES[t]}`, 22, '#c7b377');
       text(cy - 58 + t * 110, `${KING_NAMES[t]} ${Math.max(0, b.king.hp)} of ${b.king.maxHp}   Kills ${zone.state.kills}   Leaks ${sum(b.leaks)}   Sends ${sum(b.sendsMade)}`, 19, '#e8e0c8');
-      text(cy - 32 + t * 110, b.races.map((r, seat) => `${this.nameOf(slotOf(match, t, seat))}: ${this.gameData.classes[r]?.name ?? r}`).join('   '), 16, '#a8a088');
+      text(cy - 32 + t * 110, b.races.map((r, seat) => `${this.nameOf(slotOf(match, t, seat))}: ${r === 'random' ? 'random towers' : (this.gameData.classes[r]?.name ?? r)}`).join('   '), 16, '#a8a088');
     });
     parts.push(...stoneButton(this, cx, cy + 190, 'Return to menu', () => (d.online ? this.leaveOnline() : this.quitToMenu()), { width: 300 }).map((o) => (o as Phaser.GameObjects.Image).setDepth(6003)));
     return true;
@@ -2349,7 +2350,7 @@ click to return to the menu`).setFontSize(40).setVisible(true);
     const sel = this.selection;
     const tower = sel?.kind === 'tower' ? towerById(sim, sel.id) : undefined;
     const king = sim.state.battle?.king;
-    const key = JSON.stringify([this.view, sel, this.buildClass, tower && [tower.tier, tower.level, tower.picks, tower.targeting, tower.hp !== undefined && tower.hp <= 0], this.gold, sim.state.towers.length, king && [king.hpLevel, king.regenLevel, king.attackLevel]]);
+    const key = JSON.stringify([this.view, sel, this.buildClass, tower && [tower.tier, tower.level, tower.picks, tower.targeting, tower.hp !== undefined && tower.hp <= 0], this.gold, sim.state.towers.length, king && [king.hpLevel, king.regenLevel, king.attackLevel], sim.state.battle?.randomRolls?.[this.seat]]);
     if (key === this.panelKey) return;
     this.panelKey = key;
     for (const o of this.panel) o.destroy();
@@ -2387,10 +2388,10 @@ click to return to the menu`).setFontSize(40).setVisible(true);
 
     if (sel?.kind === 'tile') {
       this.info.setText(`Build a tower (${buildCostFor(sim, this.seat)}g): its class and T1 skill fix its line`);
-      const battleRace = this.driver?.match.state.battle?.races[this.driver.me];
+      const allowed = allowedLines(sim, this.seat);
       for (const [cls, c] of Object.entries(sim.data.classes)) {
-        if (battleRace && cls !== battleRace) continue;
-        for (const line of Object.values(c.lines)) {
+        for (const [lineId, line] of Object.entries(c.lines)) {
+          if (!allowed.has(lineKey(cls, lineId))) continue;
           const skill = line.tiers[0]![0]!;
           specs.push(
             this.skillButton(skill, `${line.name}: ${this.skillName(skill)}`, () => {
@@ -2414,13 +2415,15 @@ click to return to the menu`).setFontSize(40).setVisible(true);
     const e = sim.data.economy;
     const d2 = this.d2!;
     if (sel?.kind === 'tile') {
-      // A tab per class over the belt; the belt holds the chosen class's first skills
-      const cls = sim.data.classes[this.buildClass] ? this.buildClass : Object.keys(sim.data.classes)[0]!;
+      // A tab per class over the belt (in Eternal Conflict your race's, or this wave's roll's classes); the belt holds the chosen class's first skills
+      const allowed = allowedLines(sim, this.seat);
+      const classes = Object.keys(sim.data.classes).filter((id) => Object.keys(sim.data.classes[id]!.lines).some((l) => allowed.has(lineKey(id, l))));
+      const cls = classes.includes(this.buildClass) ? this.buildClass : (classes[0] ?? Object.keys(sim.data.classes)[0]!);
       const c = sim.data.classes[cls]!;
-      this.info.setText(`Build a ${c.name} tower (${buildCostFor(sim, this.seat)} gold): its first skill fixes its line`);
-      const battleRace = this.driver?.match.state.battle?.races[this.driver.me];
+      const roll = sim.state.battle?.randomRolls !== undefined;
+      this.info.setText(`Build a ${c.name} tower (${buildCostFor(sim, this.seat)} gold): its first skill fixes its line${roll ? '; the tabs are the roll' : ''}`);
       d2.setTabs(
-        Object.keys(sim.data.classes).filter((id) => !battleRace || id === battleRace).map((id) => ({
+        classes.map((id) => ({
           label: sim.data.classes[id]!.name,
           chosen: id === cls,
           onClick: () => {
@@ -2429,7 +2432,7 @@ click to return to the menu`).setFontSize(40).setVisible(true);
           },
         })),
       );
-      const items: SlotItem[] = Object.values(c.lines).map((line) => {
+      const items: SlotItem[] = Object.entries(c.lines).filter(([lineId]) => allowed.has(lineKey(cls, lineId))).map(([, line]) => {
         const skill = line.tiers[0]![0]!;
         const spec = this.skillButton(skill, '', () => undefined);
         return {
@@ -2505,6 +2508,13 @@ click to return to the menu`).setFontSize(40).setVisible(true);
       default:
         return 'Aura tower';
     }
+  }
+
+  /** A 'class/line' key as its names: "Paladin Zealot". */
+  private lineName(key: string): string {
+    const [cls, line] = key.split('/') as [string, string];
+    const c = this.sim.data.classes[cls];
+    return `${c?.name ?? cls} ${c?.lines[line]?.name ?? line}`;
   }
 
   /** Eternal Conflict: the king's stone panel, the team's three upgrades and what they stand at. */
