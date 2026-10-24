@@ -97,16 +97,7 @@ export function botCommands(match: Match, slot: number): Command[] {
     }
   }
 
-  // The king: life when it is hurt, Tyrael when gold is plentiful
   const king = bs.king;
-  if (king.hp * 10 < king.maxHp * 7) {
-    const cost = kingUpgradeCost(sim, 'hp');
-    if (cost !== undefined && gold >= cost) {
-      out.push({ type: 'king', upgrade: 'hp' });
-      gold -= cost;
-    }
-  }
-
   // Towers: the best damage per gold, saving for it when it is close
   const options = towerOptions(sim, seat, race, mine, lines, recipe);
   options.sort((x, y) => y.score - x.score || x.cost - y.cost);
@@ -114,6 +105,7 @@ export function botCommands(match: Match, slot: number): Command[] {
   // Under pressure (two enemies sending at its lane, or the king badly hurt) it buys damage now instead of saving
   const lane = sim.arcOwners.indexOf(seat);
   const pressed = new Set(bs.queued.filter((q) => q.lane === lane).map((q) => q.from)).size >= 2 || king.hp * 10 < king.maxHp * 6;
+  let saving = false;
   for (const o of options) {
     if (o.cost <= gold) {
       out.push(o.command);
@@ -123,9 +115,21 @@ export function botCommands(match: Match, slot: number): Command[] {
     }
     // Worth saving for: within the temper's waves of income, an evolution within four
     if (pressed) continue;
-    if (o.cost <= gold + income * (o.command.type === 'evolve' ? 4 : temper.saveWaves)) break;
+    if (o.cost <= gold + income * (o.command.type === 'evolve' ? 4 : temper.saveWaves)) {
+      saving = true;
+      break;
+    }
   }
 
+  // The king: life when it is hurt, from what the towers left and not from gold saved for one
+  // (a lane that holds saves more life than the upgrade adds), Tyrael when gold is plentiful
+  if (king.hp * 10 < king.maxHp * 7 && !saving) {
+    const cost = kingUpgradeCost(sim, 'hp');
+    if (cost !== undefined && gold >= cost) {
+      out.push({ type: 'king', upgrade: 'hp' });
+      gold -= cost;
+    }
+  }
   if (king.hp * 2 >= king.maxHp && wave >= 8 && gold > 0) {
     const cost = kingUpgradeCost(sim, 'tyrael');
     if (cost !== undefined && cost * 8 <= gold) out.push({ type: 'king', upgrade: 'tyrael' });

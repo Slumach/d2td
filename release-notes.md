@@ -1,3 +1,13 @@
+0.4.1
+
+- Fixed: Amazon towers could not wear a bow, and the message blamed a shield that was not there. Amazon towers now wear bows and crossbows, and her bow skills fire the bow she wears. When an item will not go on a tower, the message gives the real reason.
+- Melee towers swing a better weapon at each tier, in the campaign and in Battle Mode: the normal weapon at T1, its exceptional version at T2 and its elite version at T3 (a Barbarian's Double Axe becomes a Twin Axe, then an Ettin Axe). A weapon a tower wears still replaces it. Nightmare's monsters were evened so the other classes do not fall behind.
+- Battle Mode: Worldstones fall. It has less life and gains less from its upgrades, leaks hurt it more as the waves go on, and sends late in the match are tougher. About half of even matches now end before wave 21.
+- Battle Mode: every tower costs the same 600 gold to build again, however many you own.
+- Battle Mode: the first waves are a little easier, so one or two towers hold them.
+- Battle Mode: the Barbarian no longer gets extra damage; with its new weapons it holds its own. The races' gold is evened again.
+- Battle bots keep their towers ahead of the Worldstone's life: they buy it life only with gold they are not saving for a tower.
+
 0.4.0
 
 - Battle Mode, Legion TD style: two teams, a lane each, running into the team's Worldstone with Tyrael beside it. Harrogath under siege against the Pandemonium Fortress. Pick a race (any class, or random), build its towers beside your lane, and survive 21 waves from the Fallen to Baal. The first Worldstone to fall loses; after wave 21 the one with more life wins.

@@ -204,6 +204,15 @@ function report(races: string[], results: BattleResult[], team: number): void {
   const byWave = new Map<number, number>();
   for (const w of fell) byWave.set(w, (byWave.get(w) ?? 0) + 1);
   console.log(`Falls by wave: ${[...byWave].map(([w, n]) => `${w}:${n}`).join(' ')}`);
+  // A king that falls before the last wave ended the match early; mirrors are the even matches
+  const last = balance().battle!.waves.length;
+  const early = (xs: BattleResult[]) => xs.filter((x) => x.winner >= 0 && x.kings[1 - x.winner]! <= 0 && x.wave < last).length;
+  const pctOf = (n: number, of: number) => (of ? Math.round((100 * n) / of) : 0);
+  const mirrors = results.filter((x) => x.a === x.b);
+  const lost = (x: BattleResult) => (x.winner === 0 ? x.b : x.a);
+  const fallsOf = (r: string) => results.filter((x) => x.winner >= 0 && x.kings[1 - x.winner]! <= 0 && lost(x) === r).map((x) => x.wave).sort((p, q) => p - q);
+  console.log(`Kings fell by race: ${races.map((r) => { const f = fallsOf(r); return `${r} ${f.length}${f.length ? ` (from wave ${f[0]}, median ${f[f.length >> 1]})` : ''}`; }).join(', ')}`);
+  console.log(`Kings fell before wave ${last}: ${pctOf(early(results), results.length)}% of all matches, ${pctOf(early(mirrors), mirrors.length)}% of mirror matches (${early(mirrors)} of ${mirrors.length})`);
   console.log(flags.length ? `Flags: ${flags.join('; ')}` : 'No race outside 40 to 60%.');
 }
 

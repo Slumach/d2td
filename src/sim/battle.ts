@@ -79,8 +79,6 @@ export interface BattleJson {
   fightMaxTicks: number;
   startingGold: number;
   startingSouls: number;
-  /** Each tower a player owns raises their next build by this percent. */
-  buildCostPctPerTower: number;
   /** A match is 21 waves, not a campaign: an evolution and a legend cost this much here. */
   evolveCost: number;
   legendCost: number;
@@ -91,7 +89,12 @@ export interface BattleJson {
   /** A send raises its sender's income by this much gold a wave for every Soul it cost. */
   sendIncomePerSoul: number;
   worker: { cost: number; costPerWorker: number; soulsPerWave: number; max: number };
-  king: { hp: number; regenPerWave: number; damagePerWeight: number; upgrades: Record<KingUpgrade, KingUpgradeJson> };
+  /**
+   * The king's life by its team's size (hp[0] alone, hp[3] for four; every lane leaks into it).
+   * A leak takes its alive weight times damagePerWeight off it, and damagePctPerWave more for
+   * each wave before its own.
+   */
+  king: { hp: number[]; regenPerWave: number; damagePerWeight: number; damagePctPerWave: number; upgrades: Record<KingUpgrade, KingUpgradeJson> };
   /** Tyrael strikes a leak in range every rateTicks for hitPct of its life (bossHitPct on bosses), magic, through every resistance. */
   tyrael: { rateTicks: number; rangeTenths: number; hitPct: number; bossHitPct: number };
   /**
@@ -103,6 +106,8 @@ export interface BattleJson {
   races: Record<string, { goldPct: number; teamGoldPct?: number; damagePct?: number }>;
   waves: BattleWaveJson[];
   sends: SendJson[];
+  /** A send joining wave fromWave or later walks with hpPctPerWave more HP for each wave past fromWave's. */
+  sendPotency: { fromWave: number; hpPctPerWave: number };
   /** Co-op: the sends that arrive with each wave, by wave, onto lanes in turn. */
   coop: { sends: string[][] };
 }
@@ -145,7 +150,7 @@ export function battleData(data: GameData): GameData {
 export function battleStart(data: GameData, races: readonly string[]): BattleSimState {
   const r = data.battle!.rules;
   return {
-    king: { hp: r.king.hp, maxHp: r.king.hp, hpLevel: 0, regenLevel: 0, tyraelLevel: 0 },
+    king: { hp: kingLife(r, races.length), maxHp: kingLife(r, races.length), hpLevel: 0, regenLevel: 0, tyraelLevel: 0 },
     tyraelCooldown: 0,
     races: [...races],
     workers: races.map(() => 0),
@@ -156,6 +161,11 @@ export function battleStart(data: GameData, races: readonly string[]): BattleSim
     leakDamage: races.map(() => 0),
     queued: [],
   };
+}
+
+/** A team's king's starting life, for its number of seats. */
+export function kingLife(r: BattleJson, seats: number): number {
+  return r.king.hp[Math.min(r.king.hp.length, Math.max(1, seats)) - 1]!;
 }
 
 function rulesOf(sim: Sim): BattleJson {
@@ -237,7 +247,8 @@ export function leak(sim: Sim, m: Monster): void {
   const b = sim.state.battle;
   if (!b) return;
   const seat = seatOfMonster(sim, m);
-  const damage = sim.data.rules.aliveWeight[m.rank] * rulesOf(sim).king.damagePerWeight;
+  const k = rulesOf(sim).king;
+  const damage = idiv(sim.data.rules.aliveWeight[m.rank] * k.damagePerWeight * (100 + k.damagePctPerWave * m.wave), 100);
   b.king.hp -= damage;
   b.leaks[seat]!++;
   b.leakDamage[seat]! += damage;
@@ -295,22 +306,30 @@ export function sendOpen(send: SendJson, wave: number, made: readonly string[]):
   return wave + 1 >= send.fromWave && !(send.kind === 'boss' && made.includes(send.id));
 }
 
-/** The groups a send adds to a lane's wave, at that wave's difficulty and level. */
-export function sendGroups(data: GameData, send: SendJson, wave: WaveDef): WaveGroup[] {
+/** A send's HP percent when it joins wave `wave` (an index from 0): its own, raised late in the match. */
+export function sendHpPct(data: GameData, send: SendJson, wave: number): number {
+  const p = data.battle?.rules.sendPotency;
+  const past = p ? Math.max(0, wave + 1 - p.fromWave) : 0;
+  return idiv(send.hpPct * (100 + (p?.hpPctPerWave ?? 0) * past), 100);
+}
+
+/** The groups a send adds to a lane's wave (`index` from 0), at that wave's difficulty and level. */
+export function sendGroups(data: GameData, send: SendJson, wave: WaveDef, index: number): WaveGroup[] {
   const d = wave.difficulty;
+  const hpPct = sendHpPct(data, send, index);
   const groups: WaveGroup[] = [];
   const named = [send.monster].flat();
   for (const id of named) {
     const def = data.monsters[data.monsterVariant(id, d, wave.level)]!;
     if (send.kind === 'champions') {
-      groups.push({ monster: def.id, count: send.count ?? 3, spacingTicks: 20, rank: 'champion', mods: [...(send.mods ?? [])], hpPct: send.hpPct, pack: send.id });
+      groups.push({ monster: def.id, count: send.count ?? 3, spacingTicks: 20, rank: 'champion', mods: [...(send.mods ?? [])], hpPct, pack: send.id });
       continue;
     }
     if (def.minion) {
       const minion = data.monsterVariant(def.minion.monster, d, wave.level);
-      groups.push({ monster: minion, count: def.minion.count, spacingTicks: 15, rank: 'normal', mods: [], hpPct: send.hpPct, pack: id });
+      groups.push({ monster: minion, count: def.minion.count, spacingTicks: 15, rank: 'normal', mods: [], hpPct, pack: id });
     }
-    groups.push({ monster: def.id, count: 1, spacingTicks: 20, rank: send.kind === 'boss' ? 'boss' : 'unique', mods: [...def.mods, ...(send.mods ?? [])], hpPct: send.hpPct, pack: id });
+    groups.push({ monster: def.id, count: 1, spacingTicks: 20, rank: send.kind === 'boss' ? 'boss' : 'unique', mods: [...def.mods, ...(send.mods ?? [])], hpPct, pack: id });
   }
   if (groups[0]) groups[0].delayTicks = 20;
   return groups;

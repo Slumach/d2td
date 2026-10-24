@@ -186,7 +186,6 @@
     "fightMaxTicks": 2400,
     "startingGold": 1000,
     "startingSouls": 0,
-    "buildCostPctPerTower": 20,
     "evolveCost": 20000,
     "legendCost": 60000,
     "bountyPerLevel": 3,
@@ -194,30 +193,31 @@
     "sendIncomePerSoul": 15,
     "worker": { "cost": 250, "costPerWorker": 25, "soulsPerWave": 2, "max": 12 },
     "king": {
-      "hp": 120,
+      "hp": [45, 45, 70, 135],
       "regenPerWave": 0,
       "damagePerWeight": 2,
+      "damagePctPerWave": 20,
       "upgrades": {
-        "hp": { "cost": 500, "costPctPerLevel": 175, "add": 15, "maxLevel": 8 },
-        "regen": { "cost": 400, "costPctPerLevel": 150, "add": 2, "maxLevel": 10 },
+        "hp": { "cost": 500, "costPctPerLevel": 175, "add": 10, "maxLevel": 8 },
+        "regen": { "cost": 400, "costPctPerLevel": 150, "add": 1, "maxLevel": 10 },
         "tyrael": { "cost": 600, "costPctPerLevel": 150, "add": 5, "maxLevel": 10 }
       }
     },
     "tyrael": { "rateTicks": 20, "rangeTenths": 70, "hitPct": 15, "bossHitPct": 2 },
     "races": {
-      "paladin": { "goldPct": 88, "teamGoldPct": 127 },
-      "sorceress": { "goldPct": 165, "teamGoldPct": 100 },
-      "necromancer": { "goldPct": 100, "teamGoldPct": 100 },
-      "amazon": { "goldPct": 120, "teamGoldPct": 105 },
-      "barbarian": { "goldPct": 100, "teamGoldPct": 100, "damagePct": 250 },
-      "druid": { "goldPct": 125, "teamGoldPct": 110 },
-      "assassin": { "goldPct": 75, "teamGoldPct": 90 }
+      "paladin": { "goldPct": 67, "teamGoldPct": 110 },
+      "sorceress": { "goldPct": 120, "teamGoldPct": 110 },
+      "necromancer": { "goldPct": 122, "teamGoldPct": 135 },
+      "amazon": { "goldPct": 182, "teamGoldPct": 105 },
+      "barbarian": { "goldPct": 128, "teamGoldPct": 100 },
+      "druid": { "goldPct": 128, "teamGoldPct": 160 },
+      "assassin": { "goldPct": 80, "teamGoldPct": 100 }
     },
     "waves": [
-      { "monster": "fallen1", "kind": "swarm", "act": 1, "difficulty": 0, "level": 2, "hpPct": 250, "area": "Blood Moor" },
-      { "monster": "quillrat1", "kind": "swarm", "act": 1, "difficulty": 0, "level": 3, "hpPct": 350, "area": "Blood Moor" },
-      { "monster": "zombie1", "kind": "tank", "act": 1, "difficulty": 0, "level": 4, "hpPct": 378, "area": "Den of Evil" },
-      { "monster": "goatman1", "kind": "tank", "act": 1, "difficulty": 0, "level": 6, "hpPct": 267, "area": "Stony Field" },
+      { "monster": "fallen1", "kind": "swarm", "act": 1, "difficulty": 0, "level": 2, "hpPct": 160, "area": "Blood Moor" },
+      { "monster": "quillrat1", "kind": "swarm", "act": 1, "difficulty": 0, "level": 3, "hpPct": 230, "area": "Blood Moor" },
+      { "monster": "zombie1", "kind": "tank", "act": 1, "difficulty": 0, "level": 4, "hpPct": 245, "area": "Den of Evil" },
+      { "monster": "goatman1", "kind": "tank", "act": 1, "difficulty": 0, "level": 6, "hpPct": 175, "area": "Stony Field" },
       { "monster": "skeleton1", "kind": "tank", "act": 1, "difficulty": 0, "level": 8, "hpPct": 161, "champions": true, "area": "Burial Grounds" },
       { "boss": "andariel", "act": 1, "difficulty": 0, "level": 12, "hpPct": 100, "bossHpPct": 12, "area": "Catacombs" },
       { "monster": "sandraider1", "kind": "swarm", "act": 2, "difficulty": 0, "level": 14, "hpPct": 62, "area": "Rocky Waste" },
@@ -298,6 +298,7 @@
       { "id": "diablo", "kind": "boss", "monster": "diablo", "cost": 100, "costPctPerWave": 5, "fromWave": 17, "hpPct": 12 },
       { "id": "baal", "kind": "boss", "monster": "baal", "cost": 130, "costPctPerWave": 5, "fromWave": 19, "hpPct": 12 }
     ],
+    "sendPotency": { "fromWave": 11, "hpPctPerWave": 30 },
     "coop": {
       "sends": [[], [], ["cowking"], ["corpsefire"], ["bishibosh"], [], ["rakanishu"], ["countess"], ["fireeye"], [], ["radament", "champions-mummy"], ["countess"], ["champions-mummy"], [], ["pindleskin"], ["nihlathak"], [], ["ancients"], ["champions-bloodlord", "pindleskin"], ["ancients", "nihlathak"], []]
     }

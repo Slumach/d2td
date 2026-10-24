@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { DESIGN } from '../data/design.ts';
 import { hasTables, loadTables } from '../../tools/lib/load-tables.ts';
-import { battleData, kingUpgradeCost, sendCost, sendDef, workerCost } from './battle.ts';
+import { battleData, kingUpgradeCost, sendCost, sendDef, sendGroups, sendHpPct, workerCost } from './battle.ts';
 import { buildGameData, type GameData } from './data.ts';
 import { UNITS_PER_TILE } from './fixed.ts';
 import { createLaneMap, isBlocked, isPathTile, laneOf, LANE, positionAt, wrap } from './map.ts';
@@ -116,6 +116,31 @@ describe.skipIf(!hasTables())('Battle Mode (real tables)', () => {
     expect(sim.kingHits).toHaveLength(1);
   });
 
+  it('a later wave leak hurts the king more, and the king has life for each seat', () => {
+    const m = duel();
+    const sim = m.zones[0]!;
+    const k = real().battle!.rules.king;
+    expect(sim.state.battle!.king.maxHp).toBe(k.hp[0]);
+    expect(createMatch(real(), 1, 'battle', 4, { teamSize: 2, races: ['paladin', 'paladin', 'sorceress', 'sorceress'], bots: [] }).zones[0]!.state.battle!.king.maxHp).toBe(k.hp[1]);
+    const arc = sim.map.arcs[0]!;
+    for (let i = 0; i < 10; i++) sim.state.waves.push({ remaining: 1 });
+    const mo = createMonster(sim, real().battle!.waves[0]!.groups[0]!.monster, 9, 'normal', [], arc.end! - 50);
+    sim.state.monsters.push(mo);
+    const before = sim.state.battle!.king.hp;
+    step(sim, []);
+    expect(before - sim.state.battle!.king.hp).toBe(Math.floor((real().rules.aliveWeight.normal * k.damagePerWeight * (100 + 9 * k.damagePctPerWave)) / 100));
+  });
+
+  it('sends grow stronger late in the match', () => {
+    const data = real();
+    const p = data.battle!.rules.sendPotency;
+    const send = sendDef(data, 'pindleskin')!;
+    const late = data.battle!.waves.length - 1;
+    expect(sendHpPct(data, send, p.fromWave - 2)).toBe(send.hpPct);
+    expect(sendHpPct(data, send, late)).toBe(Math.floor((send.hpPct * (100 + p.hpPctPerWave * (late + 1 - p.fromWave))) / 100));
+    expect(sendGroups(data, send, data.battle!.waves[late]!, late).every((g) => g.hpPct === sendHpPct(data, send, late))).toBe(true);
+  });
+
   it('Tyrael strikes a monster in his reach for his percent of its life', () => {
     const m = duel();
     const sim = m.zones[0]!;
@@ -142,15 +167,13 @@ describe.skipIf(!hasTables())('Battle Mode (real tables)', () => {
     expect(m.zones[1]!.state.towers).toHaveLength(0);
   });
 
-  it('battle towers cost more for each one owned', () => {
+  it('battle towers cost the same however many are owned', () => {
     const m = duel();
     const lane = m.zones[0]!;
     lane.state.gold[0] = 100_000;
-    const pct = real().battle!.rules.buildCostPctPerTower;
     stepMatch(m, [{ player: 0, command: { type: 'build', x: 19, y: 10, cls: 'paladin', skill: 'holy-bolt' } }]);
     stepMatch(m, [{ player: 0, command: { type: 'build', x: 19, y: 11, cls: 'paladin', skill: 'holy-bolt' } }]);
-    const base = real().economy.buildCost;
-    expect(100_000 - lane.state.gold[0]!).toBe(base + Math.floor((base * (100 + pct)) / 100));
+    expect(100_000 - lane.state.gold[0]!).toBe(2 * real().economy.buildCost);
   });
 
   it('workers cost gold and bring Souls at the end of every wave', () => {

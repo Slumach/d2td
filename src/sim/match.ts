@@ -297,12 +297,12 @@ function stepBattle(match: Match): void {
   if (b.phase === 'build' && m.tick >= b.phaseTick) {
     match.zones.forEach((zone, t) => {
       const wave = zone.data.waves[b.wave]!;
-      const extra = zone.state.battle!.queued.map((q) => ({ lane: q.lane, groups: sendGroups(match.data, sendDef(match.data, q.send)!, wave) }));
+      const extra = zone.state.battle!.queued.map((q) => ({ lane: q.lane, groups: sendGroups(match.data, sendDef(match.data, q.send)!, wave, b.wave) }));
       // Co-op: the schedule's sends, onto the lanes in turn
       if (m.mode === 'coop') {
         (rules.coop.sends[b.wave] ?? []).forEach((id, i) => {
           const send = sendDef(match.data, id);
-          if (send) extra.push({ lane: (b.wave + i + t) % zone.map.arcs.length, groups: sendGroups(match.data, send, wave) });
+          if (send) extra.push({ lane: (b.wave + i + t) % zone.map.arcs.length, groups: sendGroups(match.data, send, wave, b.wave) });
         });
       }
       zone.state.battle!.queued = [];
