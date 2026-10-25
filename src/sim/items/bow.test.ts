@@ -19,7 +19,19 @@ describe.skipIf(!hasTables())('bows on Amazon towers (real tables)', () => {
     expect(canWear(real().items, bow, 'weapon', 'amazon', {})).toBe(true);
     expect(wearProblem(real().items, bow, 'weapon', 'paladin', {})).toBe('bow');
     expect(wearProblem(real().items, bow, 'weapon', 'amazon', { shield: plain(codeOf('Buckler')) })).toBe('shieldWorn');
-    expect(wearProblem(real().items, plain(codeOf('Javelin')), 'weapon', 'amazon', {})).toBe('thrown');
+    // Javelins are hers too; knives and axes are nobody's
+    expect(canWear(real().items, plain(codeOf('Javelin')), 'weapon', 'amazon', {})).toBe(true);
+    expect(wearProblem(real().items, plain(codeOf('Javelin')), 'weapon', 'paladin', {})).toBe('javelin');
+    expect(wearProblem(real().items, plain(codeOf('Throwing Knife')), 'weapon', 'amazon', {})).toBe('thrown');
+  });
+
+  it('a worn javelin lends its stats and nothing else: a bow skill keeps the class bow', () => {
+    const sim = testSim(real());
+    const tower = placeTower(sim, 19, 10, 'poison-javelin');
+    tower.gear = { weapon: plain(codeOf('Javelin')) };
+    const bow = sim.data.skills['magic-arrow']!;
+    const kept = geared(sim, tower, bow);
+    expect(kept.archetype === 'projectile' && kept.weapon).toEqual(bow.archetype === 'projectile' && bow.weapon);
   });
 
   it("a bow skill fires the worn bow instead of the class bow; a worn sword leaves it the class bow", () => {

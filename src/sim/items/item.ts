@@ -324,17 +324,20 @@ export function itemName(data: ItemData, item: Item): string {
 }
 
 /** itemtypes.txt types no tower can use: thrown weapons (no tower throws; a melee skill needs a melee weapon, as in D2). */
-const NO_TOWER_WEAPON = ['thro', 'jave', 'taxe', 'tkni'];
-/** Bows and crossbows: only the Amazon's towers wear them, for her bow skills. */
+const NO_TOWER_WEAPON = ['thro', 'taxe', 'tkni'];
+/** Bows and crossbows, and javelins: only the Amazon's towers wear them, for her bow and javelin skills. */
 const BOW_CLASSES = ['amazon'];
 
 /** Why a tower cannot wear an item in a slot, or undefined when it can, given what it already wears. */
-export function wearProblem(data: ItemData, item: Item, slot: Slot, towerClass: string, worn: Partial<Record<Slot, Item>>): 'slot' | 'class' | 'bow' | 'thrown' | 'twoHandedWorn' | 'shieldWorn' | undefined {
+export function wearProblem(data: ItemData, item: Item, slot: Slot, towerClass: string, worn: Partial<Record<Slot, Item>>): 'slot' | 'class' | 'bow' | 'javelin' | 'thrown' | 'twoHandedWorn' | 'shieldWorn' | undefined {
   const base = data.bases[item.code];
   if (!base || !base.slots.includes(slot)) return 'slot';
   if (base.classOnly && base.classOnly !== CLASS_CODES[towerClass]) return 'class';
   if (slot === 'weapon' && isType(data, base, 'miss') && !BOW_CLASSES.includes(towerClass)) return 'bow';
-  if (slot === 'weapon' && NO_TOWER_WEAPON.some((t) => isType(data, base, t))) return 'thrown';
+  // A javelin is a thrown weapon too: the Amazon's, before the rule that refuses the rest
+  if (slot === 'weapon' && isType(data, base, 'jave')) {
+    if (!BOW_CLASSES.includes(towerClass)) return 'javelin';
+  } else if (slot === 'weapon' && NO_TOWER_WEAPON.some((t) => isType(data, base, t))) return 'thrown';
   // Two-handed weapons need the shield hand free, and a shield needs a one-handed weapon
   if (slot === 'shield' && worn.weapon && data.bases[worn.weapon.code]?.twoHanded) return 'twoHandedWorn';
   if (slot === 'weapon' && base.twoHanded && worn.shield) return 'shieldWorn';

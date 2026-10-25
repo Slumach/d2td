@@ -109,6 +109,8 @@ export interface TowerGear {
    */
   weapon?: { min: number; max: number };
   missile?: boolean;
+  /** The worn weapon is a javelin: the Amazon's javelin skills throw it. */
+  javelin?: boolean;
 }
 
 export const NO_GEAR: TowerGear = {
@@ -290,6 +292,7 @@ export function towerGear(
     const min = Math.max(1, eth(weaponBase.minDamage) + addMin);
     g.weapon = { min, max: Math.max(min, eth(weaponBase.maxDamage) + addMax) };
     if (isType(data, weaponBase, 'miss')) g.missile = true;
+    if (isType(data, weaponBase, 'jave')) g.javelin = true;
     // rangeadder counts D2 subtiles; a sim tile is two of them
     g.rangeTenths = weaponBase.rangeAdder * 5;
   }

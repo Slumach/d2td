@@ -49,13 +49,14 @@ export function plusLevels(sim: Sim, gear: TowerGear, skill: SkillDef): number {
 /**
  * The skill as the tower casts it in its gear: its levels raised by the gear's +skills,
  * a melee skill swinging the worn weapon instead of the class weapon, and a bow skill firing a
- * worn bow or crossbow instead of the class bow.
+ * worn bow or crossbow instead of the class bow (a worn javelin lends its stats alone: the
+ * javelin skills' damage is the table's own, poison and lightning, not the javelin's).
  */
 export function geared(sim: Sim, tower: Tower, skill: SkillDef): SkillDef {
   const gear = gearOf(sim, tower);
   const plus = plusLevels(sim, gear, skill) + boughtLevels(sim, tower);
   const bowSkill = skill.archetype === 'projectile' && skill.weapon !== undefined;
-  const weapon = (skill.archetype === 'melee' && !gear.missile) || (bowSkill && gear.missile) ? gear.weapon : undefined;
+  const weapon = (skill.archetype === 'melee' && !gear.missile && !gear.javelin) || (bowSkill && gear.missile) ? gear.weapon : undefined;
   // An evolved tower's attack and its casting partner hit with the recipe's evolution bonus;
   // a partner aura or curse keeps its own effect
   const recipe = tower.evolved ? sim.data.evolutions.find((e) => e.id === tower.evolved) : undefined;

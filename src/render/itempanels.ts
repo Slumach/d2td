@@ -868,8 +868,10 @@ function wearRefusal(data: ItemData, item: Item, slot: Slot, problem: NonNullabl
       return `Only ${CLASS_ONLY[b?.classOnly ?? ''] ?? 'another class'} towers can use that`;
     case 'bow':
       return 'Only Amazon towers can fire bows and crossbows';
+    case 'javelin':
+      return 'Only Amazon towers can throw javelins';
     case 'thrown':
-      return 'No tower throws weapons';
+      return 'No tower throws knives or axes';
     case 'twoHandedWorn':
       return 'Two-handed weapons leave no hand for a shield';
     case 'shieldWorn':
