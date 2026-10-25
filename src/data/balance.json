@@ -205,13 +205,13 @@
       }
     },
     "races": {
-      "paladin": { "goldPct": 85, "teamGoldPct": 100 },
-      "sorceress": { "goldPct": 98, "teamGoldPct": 102 },
-      "necromancer": { "goldPct": 128, "teamGoldPct": 122 },
-      "amazon": { "goldPct": 86, "teamGoldPct": 99 },
-      "barbarian": { "goldPct": 170, "teamGoldPct": 150 },
-      "druid": { "goldPct": 66, "teamGoldPct": 80 },
-      "assassin": { "goldPct": 120, "teamGoldPct": 90 }
+      "paladin": { "goldPct": 95, "teamGoldPct": 100 },
+      "sorceress": { "goldPct": 125, "teamGoldPct": 102 },
+      "necromancer": { "goldPct": 110, "teamGoldPct": 122 },
+      "amazon": { "goldPct": 115, "teamGoldPct": 99 },
+      "barbarian": { "goldPct": 120, "teamGoldPct": 150 },
+      "druid": { "goldPct": 60, "teamGoldPct": 80 },
+      "assassin": { "goldPct": 125, "teamGoldPct": 90 }
     },
     "waves": [
       { "monster": "fallen1", "kind": "swarm", "act": 1, "difficulty": 0, "level": 2, "hpPct": 160, "area": "Blood Moor" },
