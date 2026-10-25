@@ -41,8 +41,12 @@ describe.skipIf(!hasTables())('T5 legends (real tables)', () => {
     sim.state.towers.push(c);
     expect(legendOptions(sim, a).map((o) => o.legend.name)).toEqual(['Tyrael']);
     sim.state.gold[0] = 10_000_000;
+    // The best-levelled of the three sets the legend's level: no bought level is lost
+    a.level = 9;
+    b.level = 15;
     step(sim, [{ type: 'ascend', towerA: a.id, towerB: b.id, towerC: c.id }]);
     expect(a.legend).toBe('tyrael');
+    expect([a.level, b.level, c.level]).toEqual([15, 15, 15]);
     expect([b.legendOf, c.legendOf]).toEqual([a.id, a.id]);
     expect([b.tileX, b.tileY]).toEqual([a.tileX, a.tileY]);
     const refund = sellValue(sim, a);

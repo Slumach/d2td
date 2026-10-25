@@ -125,8 +125,9 @@ export function legendOptions(sim: Sim, tower: Tower): { legend: LegendDef; othe
 /**
  * T5: the three become the legend on a's tile, a being the tower selected. All three stay
  * towers, so every skill they had keeps acting: a shows (as the legend's NPC) and the other
- * two ride on it unseen, freeing their tiles. Their levels reset to 5 and the legend's ladder
- * takes them on.
+ * two ride on it unseen, freeing their tiles. The legend starts at the highest level of the
+ * three (none of their bought levels is lost: a level 15 Templar makes a level 15 Tyrael) and
+ * the legend's ladder takes them on from there.
  */
 export function ascend(sim: Sim, a: Tower, b: Tower, c: Tower): void {
   const legend = legendFor(sim, a, b, c);
@@ -135,8 +136,9 @@ export function ascend(sim: Sim, a: Tower, b: Tower, c: Tower): void {
   a.legend = legend.id;
   a.tier = MAX_TIER + 2;
   a.spent += cost;
+  const level = Math.max(MAX_TOWER_LEVEL, a.level, b.level, c.level);
   for (const t of [a, b, c]) {
-    t.level = MAX_TOWER_LEVEL;
+    t.level = level;
     t.cooldown = 0;
     t.partnerCooldown = 0;
   }

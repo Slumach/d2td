@@ -2566,7 +2566,14 @@ click to return to the menu`).setFontSize(40).setVisible(true);
       const partnerSkill = tower.evolved && tower.partnerSkill ? geared(sim, tower, sim.data.skills[tower.partnerSkill]!) : undefined;
       const partnerDps = partnerSkill && !isAura(partnerSkill) ? standardDps(partnerSkill, tower.partnerLevel) : 0;
       const recipe = tower.evolved ? sim.data.evolutions.find((r) => r.id === tower.evolved) : undefined;
-      const base = standardDps(active.skill, active.lvl, recipe?.ignoreSkillDelay === true) + partnerDps;
+      // A legend's riders keep casting unseen: their attacks count in its damage
+      const riderDps = (tower.legend ? ridersOf(sim, tower) : []).reduce((n, r) => {
+        const ra = activeSkill(sim, r);
+        const rp = r.evolved && r.partnerSkill ? geared(sim, r, sim.data.skills[r.partnerSkill]!) : undefined;
+        const rr = r.evolved ? sim.data.evolutions.find((x) => x.id === r.evolved) : undefined;
+        return n + (ra ? standardDps(ra.skill, ra.lvl, rr?.ignoreSkillDelay === true) : 0) + (rp && !isAura(rp) ? standardDps(rp, r.partnerLevel) : 0);
+      }, 0);
+      const base = standardDps(active.skill, active.lvl, recipe?.ignoreSkillDelay === true) + partnerDps + riderDps;
       // 1/256 HP per 1000 ticks, at 20 ticks a second; the auras this tower stands in broken out
       const perSecond = (damagePct: number, speedPct: number) => Math.round((((base * TICKS_PER_SECOND) / 1000 / 256) * (100 + damagePct) * (100 + speedPct)) / 10000);
       const dps = perSecond(buff?.damagePct ?? 0, buff?.attackSpeedPct ?? 0);
