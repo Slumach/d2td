@@ -35,6 +35,16 @@ describe.skipIf(!hasTables())('the Barbarian and the Assassin (real tables)', ()
     expect(cry.levels[0]!.damageDownPct).toBe(25);
   });
 
+  it("Berserk's magic hit leaves a monster's life whole (it froze a team game as NaN)", () => {
+    const s = sim();
+    placeTower(s, 6, 4, 'berserk', { tier: 3 });
+    const m = addMonster(s, 'zombie1', BESIDE, { hp: 100_000_000 });
+    freeze(m);
+    ticks(s, 30);
+    expect(Number.isInteger(m.hp)).toBe(true);
+    expect(m.hp).toBeLessThan(100_000_000);
+  });
+
   it('Shout gives the towers in reach defence for their summons, Battle Orders damage', () => {
     const s = sim();
     const shout = placeTower(s, 6, 5, 'shout', { tier: 2 });

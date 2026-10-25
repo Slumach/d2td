@@ -92,7 +92,8 @@ export const melee: ArchetypeModule<MeleeDef> = {
       dealDamage(sim, target, hit, physical, ALL);
       if (gear) onHit(sim, tower, target, gear, hpBefore, hit);
       for (const e of elements) {
-        if (e === 'phys') continue;
+        // The physical hit (or the element it lands as, Berserk's magic) was dealt above; the rest are the skill's shares of the roll
+        if (e === physical || !(elementalPct[e]! > 0)) continue;
         dealDamage(sim, target, withBonus(idiv(roll * elementalPct[e]!, 100), buff.damagePct), e, ALL);
       }
       if (buff.fireMax > 0) dealDamage(sim, target, rollInt(sim.state.rng, buff.fireMin, buff.fireMax), 'fire', ALL);
