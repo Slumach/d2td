@@ -1,3 +1,12 @@
+0.4.6
+
+- Eternal Conflict: the road through the build pad is gone. Creeps come through the gate anywhere across the pad and cross it on their own feet, round your fighters where you leave a way and into them where you wall it; a fighter beside their way is met in passing. Build-block is real.
+- Eternal Conflict: sends arrive as one group, a second behind the wave, and land across the whole line.
+- Eternal Conflict: thirty sends, opening and closing by wave so the tray stays a dozen at a time: Blood Raven, Griswold, the Smith, Bloodwitch, Bremm Sparkfist with a Might aura, the High Council, Hephasto with a Holy Freeze aura, Diablo's Seals under Fanaticism, Izual, Frozenstein, Shenk and Eldritch, and Pandemonium (Hephasto, Izual and De Seis at 120% life, 110 shards). A send's aura buffs every monster near it, or slows the fighters round it; the tooltip says which.
+- A legend keeps the highest level of the three towers that made it (a level 15 Templar makes a level 15 Tyrael), and its panel's damage counts its riders.
+- Past Hell Baal the drop rate climbs 3% every wave, compounding, instead of 25% every ten.
+- Amazon towers wear javelins.
+
 0.4.5
 
 - Fixed saves not loading: a save with missiles in flight, or one past Hell Baal in the endless run, crashed on its first tick because the loaded game had not yet built the skill variants and endless waves the save named. They are built on load now.
