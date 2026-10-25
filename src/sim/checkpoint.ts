@@ -71,8 +71,27 @@ export function restoreMatch(data: GameData, cp: Checkpoint): Match {
   const match = createMatch(data, cp.seed, cp.mode, cp.players);
   if (match.zones.length !== cp.zones.length) throw new Error('This save does not fit its mode and players');
   match.state = copy(cp.match);
-  match.zones.forEach((z, i) => (z.state = copy(cp.zones[i]!)));
+  match.zones.forEach((z, i) => {
+    z.state = copy(cp.zones[i]!);
+    // Endless waves are built as a run reaches them: the saved wave's monsters need theirs now
+    z.data.extendWaves?.(z.state.wave + 1);
+    // Skill variants (a tower's skill at its plus, weapon, bonus and reach) are built when a tower
+    // acts: the missiles and summons the save holds name variants this game has not built yet
+    raiseVariants(z.data, z.state);
+  });
   return match;
+}
+
+const VARIANT = /^([a-z0-9-]+)\+(\d+)(?:@(\d+)-(\d+))?(?:\*(\d+))?(?:~(\d+))?$/;
+
+/** Builds every skill variant a restored state names, from the keys themselves. */
+function raiseVariants(data: GameData, value: unknown): void {
+  if (typeof value === 'string') {
+    const m = VARIANT.exec(value);
+    if (!m || data.skills[value] || !data.skills[m[1]!]) return;
+    data.skillVariant(m[1]!, Number(m[2]), m[3] !== undefined ? { min: Number(m[3]), max: Number(m[4]) } : undefined, m[5] !== undefined ? Number(m[5]) : 1000, m[6] !== undefined ? Number(m[6]) : 0);
+  } else if (Array.isArray(value)) value.forEach((v) => raiseVariants(data, v));
+  else if (value && typeof value === 'object') Object.values(value).forEach((v) => raiseVariants(data, v));
 }
 
 /** True on the tick a ring started the first wave of a new act (not the run's first). */

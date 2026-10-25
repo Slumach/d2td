@@ -171,6 +171,30 @@ describe('checkpoints', () => {
       hashValue({ match: { ...m.state, trades: [] }, zones: m.zones.map((z) => ({ ...z.state, drops: [], inventories: z.state.inventories.map(() => []) })) }, 'bare');
     expect(bare(b)).toBe(bare(a));
   });
+
+  it('restores into a fresh game: missiles in flight name skill variants and endless waves the new data has not built', () => {
+    const design = fixtureDesign({ ...DESIGN, balance: { ...DESIGN.balance, startingGold: 20_000 } });
+    const fresh = () => buildGameData(FIXTURE_TABLES, design, undefined, FIXTURE_BUILD);
+    const a = createMatch(fresh(), 9, 'solo', 1);
+    const botA = createBot('PALADIN', a.zones[0]!);
+    while (a.zones[0]!.state.missiles.length === 0 && a.state.tick < 12_000) stepMatch(a, botA.decide(a.zones[0]!).map((command) => ({ player: 0, command })));
+    expect(a.zones[0]!.state.missiles.length).toBeGreaterThan(0);
+    const saved = JSON.parse(JSON.stringify(takeCheckpoint(a, 9, []))) as Checkpoint;
+    const b = restoreMatch(fresh(), saved);
+    for (let i = 0; i < 200; i++) {
+      stepMatch(a, []);
+      stepMatch(b, []);
+    }
+    expect(matchHash(b)).toBe(matchHash(a));
+    // A save past the campaign's end: its waves exist once restored
+    const far = JSON.parse(JSON.stringify(saved)) as Checkpoint;
+    const data = fresh();
+    far.zones[0]!.wave = data.waves.length + 3;
+    far.zones[0]!.monsters = [];
+    far.zones[0]!.spawns = [];
+    const c = restoreMatch(data, far);
+    expect(c.zones[0]!.data.waves.length).toBeGreaterThanOrEqual(far.zones[0]!.wave + 1);
+  });
 });
 
 describe('lockstep', () => {

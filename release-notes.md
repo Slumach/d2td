@@ -1,3 +1,7 @@
+0.4.5
+
+- Fixed saves not loading: a save with missiles in flight, or one past Hell Baal in the endless run, crashed on its first tick because the loaded game had not yet built the skill variants and endless waves the save named. They are built on load now.
+
 0.4.4
 
 - Fixed a freeze in team games: a Berserk tower's hit set a monster's life to a non-number, which the lockstep check caught and stopped the match on.
