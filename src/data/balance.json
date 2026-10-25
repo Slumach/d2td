@@ -184,6 +184,7 @@
     "firstBuildTicks": 1200,
     "buildTicks": 400,
     "startingGold": 1000,
+    "buildCost": 300,
     "evolveCost": 20000,
     "legendCost": 60000,
     "bountyPerLevel": 3,

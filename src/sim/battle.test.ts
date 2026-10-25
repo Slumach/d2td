@@ -252,13 +252,14 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     expect(m.zones[1]!.state.towers).toHaveLength(0);
   });
 
-  it('battle towers cost the same however many are owned', () => {
+  it('battle towers cost the battle price, the same however many are owned', () => {
     const m = duel();
     const lane = m.zones[0]!;
     lane.state.gold[0] = 100_000;
     stepMatch(m, [{ player: 0, command: { type: 'build', x: 19, y: 10, cls: 'paladin', skill: 'holy-bolt' } }]);
     stepMatch(m, [{ player: 0, command: { type: 'build', x: 19, y: 11, cls: 'paladin', skill: 'holy-bolt' } }]);
-    expect(100_000 - lane.state.gold[0]!).toBe(2 * real().economy.buildCost);
+    expect(100_000 - lane.state.gold[0]!).toBe(2 * real().battle!.rules.buildCost);
+    expect(real().battle!.rules.buildCost).toBeLessThan(real().economy.buildCost);
   });
 
   it('workers cost gold and mine shards every tick', () => {

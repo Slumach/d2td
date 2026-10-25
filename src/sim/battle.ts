@@ -116,6 +116,8 @@ export interface BattleJson {
   firstBuildTicks: number;
   buildTicks: number;
   startingGold: number;
+  /** A tower's build price here: a match starts with little gold and Legion's fighters are cheap. */
+  buildCost: number;
   /** A match is 21 waves, not a campaign: an evolution and a legend cost this much here. */
   evolveCost: number;
   legendCost: number;
@@ -207,7 +209,7 @@ export function battleData(data: GameData, options: BattleOptions = DEFAULT_OPTI
   const out: GameData = {
     ...data,
     waves,
-    economy: { ...data.economy, startingGold: b.rules.startingGold, bountyPerLevel: b.rules.bountyPerLevel, evolveCost: b.rules.evolveCost, legend: { ...data.economy.legend, cost: b.rules.legendCost } },
+    economy: { ...data.economy, startingGold: b.rules.startingGold, buildCost: b.rules.buildCost, bountyPerLevel: b.rules.bountyPerLevel, evolveCost: b.rules.evolveCost, legend: { ...data.economy.legend, cost: b.rules.legendCost } },
     rules: { ...data.rules, bossHpPct: {}, stageHpPct: {} },
     noLoot: true,
   };
