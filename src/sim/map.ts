@@ -56,6 +56,8 @@ export interface GameMap {
   open?: boolean;
   /** Eternal Conflict: the back-row tiles each lane's workers stand on, in hiring order. */
   workerSlots?: Point[][];
+  /** Eternal Conflict: each lane's middle column, the creeps' gate above it. */
+  laneColumns?: number[];
   /** Eternal Conflict: the king's tile, at the back where the lanes meet. */
   king?: Point;
 }
@@ -229,8 +231,8 @@ export const LANE = {
 
 /**
  * A team's battlefield: `lanes` build pads side by side down the grid (sim +y), one per
- * player, each a path down its middle with buildable ground on both sides (the creeps walk
- * straight down through the pad and its fighters), a back row for its workers, and a bend
+ * player, buildable right across (the creeps cross it on their own feet, round or into its
+ * fighters: padpath.ts), a back row for its workers, and a bend
  * into the shared road to the king at the bottom. The lanes lie end to end in ring
  * distance, so a monster's distance says its lane; nothing wraps.
  */
@@ -262,8 +264,10 @@ export function createLaneMap(lanes: number): GameMap {
       for (const t of tileWalk(corners[i - 1]!, corners[i]!)) pathTiles[t.y * size + t.x] = true;
     }
     arcs.push({ start: laneStart, spawn: laneStart, end: start });
+    // No road through the pad: the creeps cross it on their own feet (padpath.ts), so its whole width builds
+    for (let y = LANE.firstRow; y <= LANE.lastBuildRow; y++) pathTiles[y * size + cx] = false;
   });
-  // Buildable: each lane's columns from its first row to its last build row, off the path
+  // Buildable: each lane's columns from its first row to its last build row
   const arcTiles = new Array<number>(size * size).fill(0);
   const blocked = new Array<boolean>(size * size).fill(true);
   const workerSlots: Point[][] = cols.map(() => []);
@@ -278,7 +282,7 @@ export function createLaneMap(lanes: number): GameMap {
     }
   });
   for (let i = 0; i < size * size; i++) if (pathTiles[i]) blocked[i] = false;
-  return { width: size, height: size, segments, length: start, arcs, pathTiles, blocked, arcTiles, open: true, workerSlots, king: { ...LANE.king } };
+  return { width: size, height: size, segments, length: start, arcs, pathTiles, blocked, arcTiles, open: true, workerSlots, king: { ...LANE.king }, laneColumns: cols };
 }
 
 /** Ring distance of the path point closest to `p`, by projecting onto each segment. */

@@ -18,13 +18,13 @@
 // schedule instead of from an enemy team.
 
 import { activeSkill } from './auras.ts';
-import { dealRaw, distSq } from './combat.ts';
+import { dealRaw, distSq, monsterFx } from './combat.ts';
 import type { GameData, WaveDef, WaveGroup } from './data.ts';
 import { TICKS_PER_SECOND, UNITS_PER_TILE, idiv } from './fixed.ts';
 import { gearOf } from './items/tower.ts';
 import { arcAt, laneOf, tileCenter } from './map.ts';
 import { createRng, rollInt } from './rng.ts';
-import type { BattleSimState, KingUpgrade, Monster, MonsterMod, Rank, Sim, Tower } from './state.ts';
+import type { BattleSimState, KingUpgrade, Monster, MonsterAura, MonsterBuff, MonsterMod, Rank, Sim, Tower } from './state.ts';
 
 /** One battle wave: a stream of one monster, or an act boss, at a fixed difficulty and level. */
 export interface BattleWaveJson {
@@ -58,8 +58,11 @@ export interface SendJson {
   /** Shards at wave 1, and the percent it rises each wave after. */
   cost: number;
   costPctPerWave: number;
-  /** The first wave it can join, from 1. */
+  /** The first wave it can join, from 1, and the last (open to the end when absent). */
   fromWave: number;
+  toWave?: number;
+  /** An aura the named monster projects on its fellows: a Paladin aura's id and level index (might, fanaticism, holy-freeze). */
+  aura?: MonsterAura;
   /** Percent on its monsters' HP (they walk at the joined wave's level and HP percent). */
   hpPct: number;
   /** The name the panel shows, when it is not the monster's own. */
@@ -132,8 +135,8 @@ export interface BattleJson {
   /**
    * Fighters: a tower's life is its class's charstats life at its skill's level (hpadd plus
    * vit, LifePerLevel a level in fourths), times lifePct, times tierPct for its tier (T1 to T3,
-   * evolved, legend), its gear's durability on top. engageTenths is how far off the path a
-   * creep steps to fight it; kingHoldTenths how far before the king rallied fighters hold.
+   * evolved, legend), its gear's durability on top. engageTenths is how near a creep must pass
+   * a fighter to stop and fight it; kingHoldTenths how far before the king rallied fighters hold.
    */
   fighter: { lifePct: number; tierPct: number[]; engageTenths: number; kingHoldTenths: number };
   /**
@@ -434,14 +437,15 @@ export function leak(sim: Sim, m: Monster): void {
   m.y = at.y;
   // It swings as it arrives, then on its own rate
   hitKing(sim, m);
-  m.attackCooldown = sim.data.rules.monsterAttackTicks;
+  m.attackCooldown = monsterRate(sim, m);
 }
 
 /** A creep at the king's feet swings at it. */
 export function hitKing(sim: Sim, m: Monster): void {
   const b = sim.state.battle;
   if (!b) return;
-  const damage = leakDamage(sim, m);
+  const weight = leakDamage(sim, m);
+  const damage = weight + idiv(weight * monsterBuff(sim, m).damagePct, 100);
   b.king.hp -= damage;
   b.leakDamage[seatOfMonster(sim, m)]! += damage;
   (sim.kingHits ??= []).push({ x: m.x, y: m.y, damage });
@@ -617,9 +621,9 @@ export function sendCost(send: SendJson, wave: number): number {
   return idiv(send.cost * (100 + send.costPctPerWave * Math.max(0, wave)), 100);
 }
 
-/** Whether a seat may still make a send for the coming wave: open by then, and a boss only once. */
+/** Whether a seat may still make a send for the coming wave: open by then, not yet closed, and a boss only once. */
 export function sendOpen(send: SendJson, wave: number, made: readonly string[]): boolean {
-  return wave + 1 >= send.fromWave && !(send.kind === 'boss' && made.includes(send.id));
+  return wave + 1 >= send.fromWave && (send.toWave === undefined || wave + 1 <= send.toWave) && !(send.kind === 'boss' && made.includes(send.id));
 }
 
 /** A send's HP percent when it joins wave `wave` (an index from 0): its own, raised late in the match. */
@@ -629,28 +633,56 @@ export function sendHpPct(data: GameData, send: SendJson, wave: number): number 
   return idiv(send.hpPct * (100 + (p?.hpPctPerWave ?? 0) * past), 100);
 }
 
-/** The groups a send adds to a lane's wave (`index` from 0), at that wave's difficulty and level, `times` over. */
+/**
+ * The groups a send adds to a lane's wave (`index` from 0), at that wave's difficulty and level,
+ * `times` over. A send arrives as one group, every monster on the same tick (Legion's sends land
+ * together and overwhelm a line that a stream would not), a second behind the lane's own wave.
+ */
 export function sendGroups(data: GameData, send: SendJson, wave: WaveDef, index: number, times = 1): WaveGroup[] {
   const d = wave.difficulty;
   const groups: WaveGroup[] = [];
   const hpPct = sendHpPct(data, send, index);
   const named = [send.monster].flat();
+  const aura = send.aura ? { aura: { ...send.aura } } : {};
   for (let k = 0; k < Math.max(1, times); k++) {
     for (const id of named) {
       const def = data.monsters[data.monsterVariant(id, d, wave.level)]!;
       if (send.kind === 'champions') {
-        groups.push({ monster: def.id, count: send.count ?? 3, spacingTicks: 20, rank: 'champion', mods: [...(send.mods ?? [])], hpPct, pack: send.id });
+        groups.push({ monster: def.id, count: send.count ?? 3, spacingTicks: 0, rank: 'champion', mods: [...(send.mods ?? [])], hpPct, pack: send.id, ...aura });
         continue;
       }
       if (def.minion) {
         const minion = data.monsterVariant(def.minion.monster, d, wave.level);
-        groups.push({ monster: minion, count: def.minion.count, spacingTicks: 15, rank: 'normal', mods: [], hpPct, pack: id });
+        groups.push({ monster: minion, count: def.minion.count, spacingTicks: 0, rank: 'normal', mods: [], hpPct, pack: id });
       }
-      groups.push({ monster: def.id, count: 1, spacingTicks: 20, rank: send.kind === 'boss' ? 'boss' : 'unique', mods: [...def.mods, ...(send.mods ?? [])], hpPct, pack: id });
+      groups.push({ monster: def.id, count: 1, spacingTicks: 0, rank: send.kind === 'boss' ? 'boss' : 'unique', mods: [...def.mods, ...(send.mods ?? [])], hpPct, pack: id, ...aura });
     }
   }
   if (groups[0]) groups[0].delayTicks = 20;
   return groups;
+}
+
+/** How near a creep must pass a fighter (or a summon) to stop and fight it, in units. */
+export function engageUnits(sim: Sim): number {
+  return idiv(rulesOf(sim).fighter.engageTenths * UNITS_PER_TILE, 10);
+}
+
+/** What a monster's auras add to its hits. */
+export function monsterBuff(sim: Sim, m: Monster): MonsterBuff {
+  return sim.fx.monsterBuffs?.[m.id] ?? NO_MONSTER_BUFF;
+}
+const NO_MONSTER_BUFF: MonsterBuff = { damagePct: 0, attackSpeedPct: 0 };
+
+/** A monster's swing at a fighter, a summon or the king: its monstats roll, its fellows' Might on top, a curse's cut off. */
+export function monsterSwing(sim: Sim, m: Monster): number {
+  const roll = rollInt(sim.state.rng, m.minDamage, m.maxDamage);
+  const hit = roll + idiv(roll * monsterBuff(sim, m).damagePct, 100);
+  return hit - idiv(hit * Math.min(100, monsterFx(sim, m).damageDownPct), 100);
+}
+
+/** Ticks between a monster's swings: monsterAttackTicks, quicker under Fanaticism. */
+export function monsterRate(sim: Sim, m: Monster): number {
+  return Math.max(5, idiv(sim.data.rules.monsterAttackTicks * 100, 100 + monsterBuff(sim, m).attackSpeedPct));
 }
 
 /** Pays a seat's end-of-wave gold: base income for the wave and its sends' income. */

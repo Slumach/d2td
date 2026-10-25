@@ -10,7 +10,7 @@ import { within } from './combat.ts';
 import { baseSkillId, EVOLVED_LEVEL_INDEX, MAX_TOWER_LEVEL } from './data.ts';
 import { gearOf, geared, itemSkill } from './items/tower.ts';
 import { idiv } from './fixed.ts';
-import { ELEMENTS, type AuraEmitter, type AuraField, type Monster, type Sim, type Tower } from './state.ts';
+import { ELEMENTS, type AuraEmitter, type AuraField, type Monster, type MonsterBuff, type Sim, type Tower } from './state.ts';
 
 /** The key all of a monster's curses share in the field, so they never add up. */
 const CURSES = 'curses';
@@ -123,6 +123,27 @@ export function computeAuras(sim: Sim): AuraField {
     const fx = m.hp > 0 ? curseFx(sim, m) : undefined;
     if (fx) (monsterBy[m.id] ??= {})[CURSES] = fx;
   }
+  // Eternal Conflict: a send's named monster projects a Paladin aura on its fellows (Might, Fanaticism:
+  // the same aura from two of them counts once, strongest), or Holy Freeze on the fighters round it
+  const buffBy: Record<number, Record<string, MonsterBuff>> = {};
+  const chill: Record<number, number> = {};
+  for (const m of s.monsters) {
+    if (m.hp <= 0 || !m.aura) continue;
+    const skill = sim.data.skills[m.aura.skill];
+    if (skill?.archetype === 'buffAura') {
+      const l = skill.levels[Math.min(m.aura.lvl, skill.levels.length - 1)]!;
+      for (const o of s.monsters) {
+        if (o.hp <= 0 || !within(m, o, l.radiusUnits)) continue;
+        const per = (buffBy[o.id] ??= {});
+        const b = (per[m.aura.skill] ??= { damagePct: 0, attackSpeedPct: 0 });
+        b.damagePct = Math.max(b.damagePct, l.damagePct);
+        b.attackSpeedPct = Math.max(b.attackSpeedPct, l.attackSpeedPct);
+      }
+    } else if (skill?.archetype === 'control' && skill.mode === 'aura') {
+      const l = skill.levels[Math.min(m.aura.lvl, skill.levels.length - 1)]!;
+      for (const t of s.towers) if (t.legendOf === undefined && within(m, t, l.radiusUnits)) chill[t.id] = Math.max(chill[t.id] ?? 0, l.slowPct);
+    }
+  }
 
   // Different auras stack
   const towers: Record<number, TowerBuff> = {};
@@ -138,6 +159,20 @@ export function computeAuras(sim: Sim): AuraField {
     }
     towers[Number(id)] = sum;
   }
+  // A chilled fighter swings slower, never under a quarter of its pace
+  for (const [id, slow] of Object.entries(chill)) {
+    const t = (towers[Number(id)] ??= noBuff());
+    t.attackSpeedPct = Math.max(-75, t.attackSpeedPct - slow);
+  }
+  const monsterBuffs: Record<number, MonsterBuff> = {};
+  for (const [id, per] of Object.entries(buffBy)) {
+    const sum = { damagePct: 0, attackSpeedPct: 0 };
+    for (const b of Object.values(per)) {
+      sum.damagePct += b.damagePct;
+      sum.attackSpeedPct += b.attackSpeedPct;
+    }
+    monsterBuffs[Number(id)] = sum;
+  }
   const monsters: Record<number, MonsterAuraFx> = {};
   for (const [id, per] of Object.entries(monsterBy)) {
     const sum = noFx();
@@ -152,7 +187,7 @@ export function computeAuras(sim: Sim): AuraField {
     }
     monsters[Number(id)] = sum;
   }
-  return { towers, monsters, emitters };
+  return { towers, monsters, emitters, monsterBuffs };
 }
 
 export const EMPTY_FIELD: AuraField = { towers: {}, monsters: {}, emitters: [] };

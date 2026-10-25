@@ -336,17 +336,13 @@ function levelPath(sim: Sim, tier: number): number {
  */
 function freeTile(sim: Sim, seat: number, front: boolean): { x: number; y: number } | undefined {
   const lane = sim.arcOwners.indexOf(seat);
-  const map = sim.map;
-  let cx = -1;
-  for (let x = 0; x < map.width; x++) if (map.pathTiles[10 * map.width + x] && map.arcTiles[10 * map.width + x] === lane) cx = x;
-  if (cx < 0) return undefined;
-  const rows = front ? [8, 9, 10, 11, 12, 13, 7, 6, 14, 15] : [17, 18, 19, 20, 21, 16, 22, 23, 24, 15];
-  for (let d = 1; d <= 4; d++) {
-    for (const y of rows) {
-      for (const x of [cx - d, cx + d]) if (canBuild(sim, x, y, seat)) return { x, y };
-    }
-  }
-  for (let d = 1; d <= 4; d++) for (let y = 1; y <= 29; y++) for (const x of [cx - d, cx + d]) if (canBuild(sim, x, y, seat)) return { x, y };
+  const cx = sim.map.laneColumns?.[lane];
+  if (cx === undefined) return undefined;
+  // Tanks make a wall right across row 10, then rows behind it; the damage stands two rows back, middle first
+  const rows = front ? [10, 11, 9, 12, 8] : [14, 15, 16, 17, 18, 19, 20, 21, 22];
+  const across = [0, -1, 1, -2, 2, -3, 3, -4, 4];
+  for (const y of rows) for (const d of across) if (canBuild(sim, cx + d, y, seat)) return { x: cx + d, y };
+  for (let y = 1; y <= 29; y++) for (const d of across) if (canBuild(sim, cx + d, y, seat)) return { x: cx + d, y };
   return undefined;
 }
 

@@ -172,6 +172,8 @@ export interface Monster {
   blockedBy: number;
   blockedTicks: number;
   brokeThrough: number[];
+  /** Eternal Conflict: an aura this monster projects on its fellows (a send's), as a skill id and level index. */
+  aura?: MonsterAura;
   /** Eternal Conflict: it has reached the king and stands at its feet, hitting it. */
   atKing?: boolean;
 }
@@ -311,6 +313,7 @@ export interface Spawn {
   hpPct?: number;
   cow?: boolean;
   pack?: string;
+  aura?: MonsterAura;
 }
 
 export interface WaveProgress {
@@ -409,6 +412,19 @@ export interface AuraField {
   towers: Record<number, TowerBuff>;
   monsters: Record<number, MonsterAuraFx>;
   emitters: AuraEmitter[];
+  /** Eternal Conflict: what a send's aura gives the monsters in its radius. */
+  monsterBuffs?: Record<number, MonsterBuff>;
+}
+
+export interface MonsterAura {
+  skill: string;
+  lvl: number;
+}
+
+/** A monster's gain from its fellows' auras: harder and faster hits. */
+export interface MonsterBuff {
+  damagePct: number;
+  attackSpeedPct: number;
 }
 
 export interface Sim {
@@ -431,6 +447,8 @@ export interface Sim {
   /** Eternal Conflict: what hit the king this tick and what the king struck, for the renderer. Not state. */
   kingHits?: { x: number; y: number; damage: number }[];
   kingStrikes?: { x: number; y: number }[];
+  /** Eternal Conflict: each pad's cost fields, by the walls they were built from (padpath.ts). Not state. */
+  padFields?: Record<string, import('./padpath.ts').PadField>;
 }
 
 export interface PaidKill {

@@ -135,8 +135,7 @@ function bakeField(name: string, keep: KeepLayout, lanes: number, tiles: Tiles, 
     }
   }
   // The pads: each lane's columns from its first row to its last build row, crisp-edged
-  const columns: number[] = [];
-  for (let x = 0; x < map.width; x++) if (map.pathTiles[10 * map.width + x]) columns.push(x);
+  const columns = map.laneColumns ?? [];
   const half = Math.floor(LANE.width / 2);
   const pads = columns.map((cx) => ({ x0: cx - half, x1: cx + half + 1, y0: LANE.firstRow, y1: LANE.lastBuildRow + 1 }));
   const king = map.king!;

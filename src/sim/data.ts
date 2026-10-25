@@ -4,6 +4,7 @@
 
 import { ARCHETYPES } from './archetypes/index.ts';
 import type { HitFilter, SkillDef, SkillJson } from './archetypes/types.ts';
+import type { MonsterAura } from './state.ts';
 import { auraMultiplier, isAura, pairValue, singleHit, standardDps, withDamageBonus, withTierBonus } from './dps.ts';
 import { VELOCITY_TO_UNITS_PER_TICK, UNITS_PER_TILE, compoundPct, d2FramesToTicks, idiv } from './fixed.ts';
 import { DIFFICULTIES, DIFFICULTY_NAMES, levelVariantId, variantId, type DifficultyName } from './difficulty.ts';
@@ -430,6 +431,8 @@ export interface WaveGroup {
   pack?: string;
   /** Percent on its monsters' HP: a superunique or champion pack fitted to its wave's budget (see fitPacks). */
   hpPct?: number;
+  /** Eternal Conflict: the aura the group's monsters project on their fellows (a send's named monster). */
+  aura?: MonsterAura;
 }
 
 export interface WaveDef {

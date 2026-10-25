@@ -40,6 +40,24 @@ const PANEL = { x: 10, y: 84, width: 300 };
 const BOARD = { x: GAME_WIDTH - 404, y: 84, width: 392, row: 24 };
 const TIMER = { width: 340, height: 40, y: 8 };
 const TRAY = { x: 880, columns: 9, pitch: 56, size: 50 };
+const MOD_NAMES: Record<string, string> = {
+  extraFast: 'Extra Fast',
+  extraStrong: 'Extra Strong',
+  stoneSkin: 'Stone Skin',
+  magicResistant: 'Magic Resistant',
+  magicImmune: 'Magic Immune',
+  poisonResistant: 'Poison Resistant',
+  poisonImmune: 'Poison Immune',
+  physicalImmune: 'Physical Immune',
+  fireEnchanted: 'Fire Enchanted',
+  coldEnchanted: 'Cold Enchanted',
+  lightningEnchanted: 'Lightning Enchanted',
+  cursed: 'Cursed',
+  spectralHit: 'Spectral Hit',
+  manaBurn: 'Mana Burn',
+  teleportation: 'Teleportation',
+  auraEnchanted: 'Aura Enchanted',
+};
 const BRONZE = 0x8c7448;
 const GOLD = '#c7b377';
 const UPGRADE_TEXT: Record<KingUpgrade, (add: number) => string> = {
@@ -302,7 +320,7 @@ export class BattleHud {
     this.trayKey = key;
     for (const o of this.trayParts) o.destroy();
     this.trayParts = [];
-    const top = this.host.barTop + 8;
+    const top = this.host.barTop + 4;
     open.forEach((s, i) => {
       const col = i % TRAY.columns;
       const row = Math.floor(i / TRAY.columns);
@@ -363,9 +381,35 @@ export class BattleHud {
 
   private sendBody(match: Match, s: SendJson, cost: number): string {
     const b = match.state.battle!;
+    const data = match.data;
     const times = b.options.sends > 1 ? `, ${b.options.sends} times over` : '';
-    const what = s.kind === 'champions' ? `${s.count ?? 3} champions` : s.kind === 'boss' ? 'An act boss, once a match' : 'A superunique and its pack';
-    const income = cost * match.data.battle!.rules.sendIncomePerShard;
-    return `${what}${times}, joining the enemy lane's next wave.\n${cost} shards; your gold income rises ${income} a wave for good.`;
+    const named = [s.monster].flat();
+    const defs = named.map((id) => data.monsters[data.monsterVariant(id, 0)]).flatMap((d) => (d ? [d] : []));
+    const pack = defs.reduce((n, d) => n + (d.minion?.count ?? 0), 0);
+    const what =
+      s.kind === 'champions' ? `${s.count ?? 3} ${MOD_NAMES[s.mods?.[0] ?? ''] ?? ''} champions`.replace('  ', ' ')
+      : s.kind === 'boss' ? 'An act boss, once a match'
+      : named.length > 1 ? `${defs.map((d) => this.host.monsterName(d.id)).join(', ')}${pack ? ` and ${pack} of their own` : ''}`
+      : pack ? `${this.host.monsterName(defs[0]?.id ?? named[0]!)} and ${pack} of its own` : this.host.monsterName(defs[0]?.id ?? named[0]!);
+    const mods = [...new Set(defs.flatMap((d) => d.mods))].map((m) => MOD_NAMES[m] ?? m);
+    const aura = s.aura ? this.auraLine(match, s.aura) : '';
+    const income = cost * data.battle!.rules.sendIncomePerShard;
+    return `${what}${times}, together, joining the enemy lane's next wave.${mods.length ? `\n${mods.join(', ')}.` : ''}${aura ? `\n${aura}` : ''}\n${cost} shards; your gold income rises ${income} a wave for good.`;
+  }
+
+  /** What a send's aura does, from the Paladin skill it borrows. */
+  private auraLine(match: Match, aura: { skill: string; lvl: number }): string {
+    const skill = match.data.skills[aura.skill];
+    const name = skill?.name ?? aura.skill;
+    if (skill?.archetype === 'buffAura') {
+      const l = skill.levels[Math.min(aura.lvl, skill.levels.length - 1)]!;
+      const parts = [...(l.damagePct ? [`+${l.damagePct}% damage`] : []), ...(l.attackSpeedPct ? [`+${l.attackSpeedPct}% attack speed`] : [])];
+      return `${name} aura: every monster near it hits with ${parts.join(' and ')}.`;
+    }
+    if (skill?.archetype === 'control' && skill.mode === 'aura') {
+      const l = skill.levels[Math.min(aura.lvl, skill.levels.length - 1)]!;
+      return `${name} aura: fighters near it swing ${l.slowPct}% slower.`;
+    }
+    return `${name} aura.`;
   }
 }

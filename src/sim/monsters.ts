@@ -5,7 +5,11 @@ import { blockerAhead } from './archetypes/summon.ts';
 import { dealRaw, distSq, monsterFx } from './combat.ts';
 import { idiv } from './fixed.ts';
 import { ahead, laneOf, positionAt, wrap } from './map.ts';
-import { atKingPoint, engagedAt, fighterAhead, hitKing, holdDist, leak } from './battle.ts';
+import { atKingPoint, engagedAt, engageUnits, fighterAhead, hitKing, holdDist, leak, monsterRate, monsterSwing, standing } from './battle.ts';
+import { LANE, tileCenter } from './map.ts';
+import { costAt, INF, nextTile, padField } from './padpath.ts';
+import { UNITS_PER_TILE } from './fixed.ts';
+import type { Tower } from './state.ts';
 import { rollInt } from './rng.ts';
 import type { Monster, MonsterMod, Rank, Sim, Summon } from './state.ts';
 
@@ -85,6 +89,15 @@ export function spawnMonsters(sim: Sim): void {
   while (s.spawns.length > 0 && s.spawns[0]!.tick <= s.tick) {
     const spawn = s.spawns.shift()!;
     const m = createMonster(sim, spawn.def, spawn.wave, spawn.rank, spawn.mods, spawn.dist, undefined, spawn.hpPct ?? 100);
+    if (spawn.aura) m.aura = { ...spawn.aura };
+    // Eternal Conflict: through the gate anywhere across the pad's width, so a group lands as a line, not a file
+    if (s.battle && sim.map.open && sim.map.laneColumns) {
+      const cx = sim.map.laneColumns[laneOf(sim.map, spawn.dist)] ?? 0;
+      const h = Math.imul(m.id + 1, 2654435761) >>> 0;
+      const half = idiv(LANE.width, 2) - 1;
+      m.x = cx * UNITS_PER_TILE + idiv(UNITS_PER_TILE, 2) + ((h % (2 * half + 1)) - half) * UNITS_PER_TILE + (((h >>> 8) % 601) - 300);
+      m.y = idiv(UNITS_PER_TILE, 2) + ((h >>> 16) % 301) - 150;
+    }
     if (spawn.cow) {
       m.cow = true;
       m.runeBoost = sim.data.cow.runeBoost;
@@ -193,7 +206,9 @@ export function updateMonsters(sim: Sim): void {
       continue;
     }
     const speed = speedOf(sim, m);
-    // A fighter on its lane holds it: it steps off the path to fight the fighter, which it hits with its monstats damage
+    // Eternal Conflict: across the build pad on its own feet, fighting what it meets (padStep); then the road to the king
+    if (s.battle && sim.map.open && padStep(sim, m, speed)) continue;
+    // Rallied fighters hold the road before the king: a creep steps off the path to fight one, which it hits with its monstats damage
     const fighter = fighterAhead(sim, m, speed);
     if (fighter) {
       if (m.blockedBy !== fighter.id) {
@@ -204,9 +219,8 @@ export function updateMonsters(sim: Sim): void {
       const hold = holdDist(sim, fighter, laneOf(sim.map, m.dist)) ?? m.dist;
       walk(sim, m, Math.max(0, hold - m.dist - rules.blockRangeUnits));
       if (m.attackCooldown === 0) {
-        const hit = rollInt(s.rng, m.minDamage, m.maxDamage);
-        fighter.hp = Math.max(0, (fighter.hp ?? 0) - (hit - idiv(hit * Math.min(100, monsterFx(sim, m).damageDownPct), 100)));
-        m.attackCooldown = rules.monsterAttackTicks;
+        fighter.hp = Math.max(0, (fighter.hp ?? 0) - monsterSwing(sim, m));
+        m.attackCooldown = monsterRate(sim, m);
       }
       const at = engagedAt(sim, m, positionAt(sim.map, m.dist), fighter);
       m.x = at.x;
@@ -230,11 +244,8 @@ export function updateMonsters(sim: Sim): void {
       m.blockedTicks++;
       walk(sim, m, Math.max(0, ahead(sim.map, m.dist, blocker.dist) - rules.blockRangeUnits));
       if (m.attackCooldown === 0) {
-        if (landsOn(sim, m, blocker)) {
-          const hit = rollInt(s.rng, m.minDamage, m.maxDamage);
-          blocker.hp -= hit - idiv(hit * Math.min(100, monsterFx(sim, m).damageDownPct), 100);
-        }
-        m.attackCooldown = rules.monsterAttackTicks;
+        if (landsOn(sim, m, blocker)) blocker.hp -= monsterSwing(sim, m);
+        m.attackCooldown = monsterRate(sim, m);
       }
     } else {
       m.blockedBy = 0;
@@ -242,9 +253,118 @@ export function updateMonsters(sim: Sim): void {
       walk(sim, m, speed);
     }
     const p = positionAt(sim.map, m.dist);
-    m.x = p.x;
+    // Off a pad's width onto the road: it drifts to the road's middle over a few steps
+    const lateral = sim.map.open ? m.x - p.x : 0;
+    m.x = p.x + (Math.abs(lateral) > 150 ? lateral - Math.sign(lateral) * 150 : 0);
     m.y = p.y;
   }
+}
+
+/** The pad row a creep's crossing ends on: the first row past the buildable ground, where the road begins. */
+const EXIT_Y = (LANE.lastBuildRow + 1) * UNITS_PER_TILE;
+
+/**
+ * Eternal Conflict: one tick of a creep's crossing of a build pad. It stops to fight the
+ * nearest standing fighter it comes within reach of (engageTenths; a wall is met head on, a
+ * fighter beside its way is met in passing), or a summon, which holds it for its tower's hold
+ * time before it shoves past; otherwise it steps along the pad's cost field (padpath.ts),
+ * round the fighters where there is a way and into them where there is none. Its ring
+ * distance follows its row, so lanes, rallies and first/last targeting read as before.
+ * False once it is past the pad: the road to the king is the lane's own path.
+ */
+function padStep(sim: Sim, m: Monster, speed: number): boolean {
+  if (m.y >= EXIT_Y) return false;
+  const s = sim.state;
+  const lane = laneOf(sim.map, m.dist);
+  const arc = sim.map.arcs[lane]!;
+  const reach = engageUnits(sim);
+  const fighter = nearestFighter(sim, m, reach);
+  if (fighter) {
+    if (m.blockedBy !== fighter.id) {
+      m.blockedBy = fighter.id;
+      m.blockedTicks = 0;
+    }
+    m.blockedTicks++;
+    if (m.attackCooldown === 0) {
+      fighter.hp = Math.max(0, (fighter.hp ?? 0) - monsterSwing(sim, m));
+      m.attackCooldown = monsterRate(sim, m);
+    }
+    return true;
+  }
+  const unit = nearestSummon(sim, m, reach);
+  if (unit && m.blockedBy !== unit.id) {
+    m.blockedBy = unit.id;
+    m.blockedTicks = 0;
+  }
+  if (unit && m.blockedTicks >= holdTicks(sim, unit)) {
+    // Held long enough: it breaks through and shoves the summon aside, which survives
+    m.brokeThrough = [...m.brokeThrough.filter((id) => s.summons.some((u) => u.id === id)), unit.id];
+    m.blockedBy = 0;
+    m.blockedTicks = 0;
+    unit.shovedTicks = SHOVE_TICKS;
+  } else if (unit) {
+    m.blockedTicks++;
+    if (m.attackCooldown === 0) {
+      if (landsOn(sim, m, unit)) unit.hp -= monsterSwing(sim, m);
+      m.attackCooldown = monsterRate(sim, m);
+    }
+    return true;
+  } else {
+    m.blockedBy = 0;
+    m.blockedTicks = 0;
+  }
+  // A step along the field: round the fighters, or straight at them when the pad is walled across
+  const tx = idiv(m.x, UNITS_PER_TILE);
+  const ty = idiv(m.y, UNITS_PER_TILE);
+  let field = padField(sim, lane);
+  if (costAt(field, tx, ty) >= INF) field = padField(sim, lane, true);
+  const next = nextTile(field, tx, ty);
+  const goal = next ? tileCenter(next) : { x: m.x, y: m.y + speed };
+  const dx = goal.x - m.x;
+  const dy = goal.y - m.y;
+  const d = Math.max(1, Math.round(Math.sqrt(dx * dx + dy * dy)));
+  if (d <= speed) {
+    m.x = goal.x;
+    m.y = goal.y;
+    m.walked += d;
+  } else {
+    m.x += idiv(dx * speed, d);
+    m.y += idiv(dy * speed, d);
+    m.walked += speed;
+  }
+  m.dist = Math.max(arc.start, arc.start + m.y - idiv(UNITS_PER_TILE, 2));
+  return true;
+}
+
+/** The nearest standing fighter within reach of a creep on its pad (rallied ones are at the king). */
+function nearestFighter(sim: Sim, m: Monster, reach: number): Tower | undefined {
+  let best: Tower | undefined;
+  let bestD = reach * reach + 1;
+  for (const t of sim.state.towers) {
+    if (t.legendOf !== undefined || t.atKing || !standing(sim, t)) continue;
+    const d = distSq(t, m);
+    if (d < bestD || (d === bestD && best && t.id < best.id)) {
+      best = t;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+/** The nearest blocking summon within reach that the creep has not already shoved past. */
+function nearestSummon(sim: Sim, m: Monster, reach: number): Summon | undefined {
+  if (m.rank === 'boss') return undefined;
+  let best: Summon | undefined;
+  let bestD = reach * reach + 1;
+  for (const u of sim.state.summons) {
+    if (u.kind === 'ranged' || u.kind === 'trap' || u.hp <= 0 || m.brokeThrough.includes(u.id)) continue;
+    const d = distSq(u, m);
+    if (d < bestD || (d === bestD && best && u.id < best.id)) {
+      best = u;
+      bestD = d;
+    }
+  }
+  return best;
 }
 
 /** Moves a monster `step` units on around the ring; on a battle lane, to its end and the king's feet. */

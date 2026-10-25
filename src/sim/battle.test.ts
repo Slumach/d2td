@@ -44,14 +44,20 @@ describe('battle lanes', () => {
     }
   });
 
-  it('has buildable ground on both sides of every lane and none in the keep', () => {
+  it('has a pad buildable right across every lane, no road through it, and none in the keep', () => {
     const map = createLaneMap(2);
-    for (const arc of map.arcs) {
+    expect(map.laneColumns).toHaveLength(2);
+    for (const [lane, arc] of map.arcs.entries()) {
       const p = positionAt(map, arc.start + 10 * UNITS_PER_TILE);
       const x = Math.floor(p.x / UNITS_PER_TILE);
       const y = Math.floor(p.y / UNITS_PER_TILE);
-      expect(isPathTile(map, x, y)).toBe(true);
-      for (const dx of [-4, -1, 1, 4]) expect(isBlocked(map, x + dx, y)).toBe(false);
+      expect(map.laneColumns![lane]).toBe(x);
+      for (const dx of [-4, -1, 0, 1, 4]) {
+        expect(isPathTile(map, x + dx, y)).toBe(false);
+        expect(isBlocked(map, x + dx, y)).toBe(false);
+      }
+      // The road begins past the pad
+      expect(isPathTile(map, x, 30)).toBe(true);
     }
     for (let x = 0; x < map.width; x++) if (!isPathTile(map, x, 36)) expect(isBlocked(map, x, 36)).toBe(true);
   });
@@ -152,15 +158,15 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     expect(t.hp).toBe(t.maxHp);
     const arc = sim.map.arcs[0]!;
     sim.state.waves.push({ remaining: 1 });
-    const mo = createMonster(sim, real().battle!.waves[0]!.groups[0]!.monster, 0, 'normal', [], arc.start + 8 * UNITS_PER_TILE, 100_000_000);
+    // A creep coming down the fighter's own column meets it
+    const mo = createMonster(sim, real().battle!.waves[0]!.groups[0]!.monster, 0, 'normal', [], arc.start + 7 * UNITS_PER_TILE, 100_000_000);
+    mo.x = (19 + 0.5) * UNITS_PER_TILE;
     sim.state.monsters.push(mo);
     for (let i = 0; i < 60; i++) step(sim, []);
-    // Held at the fighter's row, off the path toward it, hitting it
+    // Held short of the fighter, hitting it
     expect(mo.blockedBy).toBe(t.id);
     expect(mo.dist).toBeLessThan(arc.start + 10 * UNITS_PER_TILE);
-    expect(mo.dist).toBeGreaterThan(arc.start + 8 * UNITS_PER_TILE);
-    // The fighter stands left of the path (x 19 beside the path's 20): the creep steps that way
-    expect(mo.x).toBeLessThan(positionAt(sim.map, mo.dist).x);
+    expect(mo.dist).toBeGreaterThan(arc.start + 7 * UNITS_PER_TILE);
     expect(t.hp).toBeLessThan(t.maxHp!);
     // Down, it stops the creep no more
     t.hp = 0;
@@ -168,6 +174,70 @@ describe.skipIf(!hasTables())('Eternal Conflict (real tables)', () => {
     expect(mo.blockedBy).not.toBe(t.id);
     expect(mo.dist).toBeGreaterThan(arc.start + 11 * UNITS_PER_TILE);
     expect(t.hp).toBe(0);
+  });
+
+  it('creeps cross the pad round the fighters: a wall across it is fought, a wide gap is walked through, a fighter beside the way is met in passing', () => {
+    const m = duel();
+    const sim = m.zones[0]!;
+    sim.state.gold[0] = 1_000_000;
+    const cx = sim.map.laneColumns![0]!;
+    // A wall right across row 10
+    for (let d = -4; d <= 4; d++) stepMatch(m, [{ player: 0, command: { type: 'build', x: cx + d, y: 10, cls: 'paladin', skill: 'holy-bolt' } }]);
+    expect(sim.state.towers).toHaveLength(9);
+    const arc = sim.map.arcs[0]!;
+    const creep = (col: number) => {
+      sim.state.waves.push({ remaining: 1 });
+      const mo = createMonster(sim, real().battle!.waves[0]!.groups[0]!.monster, 0, 'normal', [], arc.start + 2 * UNITS_PER_TILE, 100_000_000);
+      mo.x = (col + 0.5) * UNITS_PER_TILE;
+      sim.state.monsters.push(mo);
+      return mo;
+    };
+    const a = creep(cx);
+    for (let i = 0; i < 100; i++) step(sim, []);
+    expect(a.blockedBy).not.toBe(0);
+    expect(a.dist).toBeLessThan(arc.start + 10 * UNITS_PER_TILE);
+    // Three fighters down in the middle: a gap two tiles clear of the rest, and the creep walks through it
+    for (const d of [-1, 0, 1]) towerAt(sim, cx + d, 10)!.hp = 0;
+    sim.state.monsters = [];
+    const b = creep(cx);
+    for (let i = 0; i < 160; i++) step(sim, []);
+    expect(b.blockedBy).toBe(0);
+    expect(b.dist).toBeGreaterThan(arc.start + 12 * UNITS_PER_TILE);
+    // A creep down the next column passes within reach of the gap's edge and stops to fight it
+    sim.state.monsters = [];
+    const c = creep(cx + 2);
+    for (let i = 0; i < 100; i++) step(sim, []);
+    expect(c.blockedBy).toBe(towerAt(sim, cx + 2, 10)!.id);
+  });
+
+  it('a send arrives as one group, and a send with an aura buffs its fellows and chills the fighters near it', () => {
+    const data = real();
+    const seals = sendDef(data, 'seals')!;
+    const groups = sendGroups(data, seals, data.battle!.waves[14]!, 14);
+    expect(groups.every((g) => g.spacingTicks === 0)).toBe(true);
+    expect(groups.filter((g) => g.aura?.skill === 'fanaticism')).toHaveLength(3);
+    const m = duel();
+    const sim = m.zones[0]!;
+    sim.state.gold[0] = 1_000_000;
+    const cx = sim.map.laneColumns![0]!;
+    stepMatch(m, [{ player: 0, command: { type: 'build', x: cx, y: 10, cls: 'paladin', skill: 'holy-bolt' } }]);
+    const t = towerAt(sim, cx, 10)!;
+    const arc = sim.map.arcs[0]!;
+    sim.state.waves.push({ remaining: 2 });
+    const lead = createMonster(sim, data.monsterVariant('hephasto', 0), 0, 'unique', [], arc.start + 9 * UNITS_PER_TILE, 100_000_000);
+    lead.aura = { skill: 'holy-freeze', lvl: 2 };
+    const buffer = createMonster(sim, data.monsterVariant('deseis', 0), 0, 'unique', [], arc.start + 9 * UNITS_PER_TILE, 100_000_000);
+    buffer.aura = { skill: 'might', lvl: 2 };
+    const plain = createMonster(sim, data.battle!.waves[0]!.groups[0]!.monster, 0, 'normal', [], arc.start + 9 * UNITS_PER_TILE, 100_000_000);
+    sim.state.monsters.push(lead, buffer, plain);
+    step(sim, []);
+    const might = data.skills['might']!;
+    expect(might.archetype).toBe('buffAura');
+    const expected = (might as { levels: { damagePct: number }[] }).levels[2]!.damagePct;
+    expect(expected).toBeGreaterThan(0);
+    expect(sim.fx.monsterBuffs![plain.id]!.damagePct).toBe(expected);
+    expect(sim.fx.monsterBuffs![buffer.id]!.damagePct).toBe(expected);
+    expect(sim.fx.towers[t.id]!.attackSpeedPct).toBeLessThan(0);
   });
 
   it('a cleared lane sends its fighters to the king, and the countdown brings them home at full life', () => {
