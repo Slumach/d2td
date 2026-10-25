@@ -617,9 +617,9 @@ export interface DropRules {
   gemRunePct: number;
   /** Weight of rune entries in a treasure class, percent of D2R's (125: a quarter more runes). */
   runeMultiplierPct: number;
-  /** Each endless Tier multiplies the drop rate by this percent more, compounding (shrinks NoDrop). */
-  tierDropPct: number;
-  /** Smith's Hammer's chance per kill, parts per million, before Tier scaling. */
+  /** Each endless wave past Hell multiplies the drop rate by this percent more, compounding (shrinks NoDrop). */
+  endlessWaveDropPct: number;
+  /** Smith's Hammer's chance per kill, parts per million, before the endless scaling. */
   smithsHammerPpm: number;
 }
 

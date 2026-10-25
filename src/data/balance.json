@@ -12,7 +12,7 @@
     "difficultyPct": { "normal": 100, "nightmare": 85, "hell": 2400 }
   },
   "endless": { "tierWaves": 10, "startLevel": 85, "levelPerWave": 1, "hpPctPerWave": 4, "damagePctPerWave": 3 },
-  "drops": { "dropPct": 15, "gemRunePct": 40, "runeMultiplierPct": 125, "tierDropPct": 25, "smithsHammerPpm": 11 },
+  "drops": { "dropPct": 15, "gemRunePct": 40, "runeMultiplierPct": 125, "endlessWaveDropPct": 3, "smithsHammerPpm": 11 },
   "itemConversions": {
     "fireresist": ["fire", 25],
     "coldresist": ["cold", 25],

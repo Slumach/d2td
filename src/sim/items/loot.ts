@@ -78,10 +78,16 @@ export function sendHome(sim: Sim, player: number, items: readonly Item[]): void
   for (const item of items) if (!stow(sim, player, item)) sim.state.homeward[player]?.push(item);
 }
 
-/** The drop rate scaling of the wave a monster walks in: each endless Tier multiplies it (balance.json drops.tierDropPct). */
+/** The drop rate scaling of the wave a monster walks in: every endless wave past Hell multiplies it (balance.json drops.endlessWaveDropPct). */
 function tierPct(sim: Sim, monster: Monster): number {
-  const tier = sim.data.waves[monster.wave]?.tier ?? 0;
-  return compoundPct(100 + sim.data.drops.tierDropPct, tier);
+  return compoundPct(100 + sim.data.drops.endlessWaveDropPct, endlessWaveOf(sim.data, monster.wave));
+}
+
+/** How many waves past Hell Baal a wave index lies: 0 in the campaign, 1 for the first endless wave. */
+export function endlessWaveOf(data: { waves: readonly { tier?: number; actWave: number; actWaves: number }[] }, wave: number): number {
+  const w = data.waves[wave];
+  if (!w?.tier) return 0;
+  return (w.tier - 1) * w.actWaves + w.actWave;
 }
 
 /** What a killed monster drops, onto the ground. */

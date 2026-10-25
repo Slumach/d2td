@@ -25,7 +25,7 @@ const tier = Number(args.tier);
 
 const data = buildGameData(loadTables(), DESIGN);
 const items = data.items;
-const scale = compoundPct(100 + data.drops.tierDropPct, tier);
+const scale = compoundPct(100 + data.drops.endlessWaveDropPct, tier * DESIGN.balance.endless.tierWaves);
 
 interface Tally {
   kills: number;
@@ -81,7 +81,7 @@ console.log(`${runs} runs, magic find ${mf}, endless Tier ${tier} scaling (${sca
   const trials = 40;
   for (const [name, inStage, t] of stages) {
     const waves = data.waves.filter(inStage);
-    const tierScale = compoundPct(100 + data.drops.tierDropPct, t);
+    const tierScale = compoundPct(100 + data.drops.endlessWaveDropPct, t * DESIGN.balance.endless.tierWaves);
     let n = 0;
     let gemsRunes = 0;
     let magicUp = 0;
