@@ -1,68 +1,46 @@
-# Report (Oct 24, afternoon): Eternal Conflict, 0.4.2 and 0.4.3
+# Report (Oct 25): Eternal Conflict pass four, 0.4.6
 
-**0.4.3 is published** (https://github.com/Slumach/d2td/releases/tag/v0.4.3; 0.4.2 went out an hour earlier and shipped random as random races), and `main` is pushed. Tests: 337 pass; the payload check found zero Blizzard files. Every call made without asking is in design.md under **Pass three: Eternal Conflict (0.4.2)**, with a "Calls made" list after each group of items.
+**0.4.6 is published** (https://github.com/Slumach/d2td/releases/tag/v0.4.6), and `main` is pushed. Tests: 345 pass; the payload check found zero Blizzard files. The design notes are in design.md under **Pass four: the pad, the sends (0.4.6, Oct 25)**, with a "Calls made" list.
 
-To try it: main menu, **Eternal Conflict**, set the game up, **Start game**. In a browser dev build: `?battle&team=2&race=paladin` (`&speed=4` to hurry). Bot against bot: `npm run battle` (`--team 2` for 2v2).
+Earlier today: 0.4.3 (random towers), 0.4.4 (the team-game freeze, War Cries in D2's order, 300-gold towers in Eternal Conflict) and 0.4.5 (saves loading again).
 
 ## What shipped
 
 | Item | Commit | In one line |
 | --- | --- | --- |
-| 0: the name | `f9ae0b1` | Battle Mode is Eternal Conflict everywhere a player reads it; the menu button's hint is "Heaven against Hell, Legion style." |
-| 1 to 4: fighters, kings, shards, HUD | `fe49d76` | Towers are fighters with charstats life that hold the creeps and fall for the round, rallying to the king when their pad is clear; build pads with spawn gates, both battlefields in one world; Tyrael and Baal on their platforms, hit by the leaks and striking back, with attack, life and regen; shards mined every tick, the pile counting them; the Legion HUD (wave box, scoreboard, send tray with monster icons). Legion's wave timing: 60 s first, then the countdown only when every creep on both sides is dead. |
-| 5: game setup | `98fbc66` | D2R's options panel and D2R's checkboxes: random races or all pick, X1 to X4 sends, mirror, easy, the long game (waves 22 to 30), no champions; the host's setup shows in the lobby (protocol 4). |
-| 6: menus | `2e1a182` | The changelog scrolls inside D2R's panel under its buttons; the lobby wears the panel and stone buttons. |
-| 7: balance and release | `1ed9a88` | The harness rerun on the new fighters, races evened, 0.4.2 built, published and pushed. |
-| Random towers (your correction) | `a140c5d` | Random is Legion's random builder: a fresh roll of four lines from different races every wave, only those build; the bot plays its roll. 0.4.3. |
-
-Items 1 to 4 are one commit: the HUD reads the state the fighters and shards changed and could not compile against the old sim on its own.
+| Creeps cross the pad | `9f12595` | No road through the pad: creeps come through the gate anywhere across it and walk a cost field to the exit, round your fighters where there is a way and into them where you wall it; a fighter beside their way is met in passing. The bot walls row 10. |
+| Sends land as a group | `9f12595` | Every monster of a send on one tick, a second behind the wave. |
+| Thirty sends, auras | `9f12595` | Sends open and close by wave (a dozen or so on the tray at a time, two rows). New: Blood Raven, Griswold, the Smith, Bloodwitch, Bremm (Might), the High Council, Hephasto (Holy Freeze), Diablo's Seals (Fanaticism, 60 shards), Izual, Frozenstein, Shenk and Eldritch, Pandemonium (120% life under Fanaticism, 110 shards). Tooltips name the pack, its mods and its aura. |
+| Drops past Hell | `ecd6d24` | 3% more a wave, compounding, instead of 25% a Tier. |
+| Legends keep their level | `fc0d99c` | Tyrael starts at the highest level of the three towers (ascending reset them to 5: that was the 140k to 50k); the panel counts the riders' damage. |
+| Javelins | `5250e50` | Amazon towers wear them (the thrown-weapon rule caught them first). They lend stats, not damage: the javelin skills' damage is the table's poison and lightning. |
+| Races retuned | `e55c9c4` | The pads changed the table (walls favour melee and summons): tuner rounds on eight seeds, the best round shipped. |
 
 ## The race table
 
-1v1, 16 seeds, each pairing played from both sides (896 matches). Each cell is the row race's win rate against the column race.
+1v1, eight seeds, each pairing from both sides (448 matches), at the shipped percents (gold 95% Paladin, 125% Sorceress, 110% Necromancer, 115% Amazon, 120% Barbarian, 60% Druid, 125% Assassin; team percents unchanged).
 
 | Race | Pal | Sor | Nec | Ama | Bar | Dru | Ass | Overall |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Paladin | | 56 | 31 | 53 | 50 | 47 | 45 | **47** |
-| Sorceress | 44 | | 53 | 63 | 44 | 38 | 50 | **48** |
-| Necromancer | 69 | 47 | | 38 | 66 | 56 | 67 | **57** |
-| Amazon | 47 | 38 | 63 | | 63 | 41 | 48 | **50** |
-| Barbarian | 50 | 56 | 34 | 38 | | 50 | 69 | **49** |
-| Druid | 53 | 63 | 44 | 59 | 50 | | 19 | **48** |
-| Assassin | 55 | 50 | 33 | 52 | 31 | 81 | | **50** |
+| Paladin | | 63 | 50 | 50 | 38 | 44 | 56 | **50** |
+| Sorceress | 38 | | 25 | 38 | 69 | 50 | 47 | **44** |
+| Necromancer | 50 | 75 | | 69 | 31 | 75 | 59 | **60** |
+| Amazon | 50 | 63 | 31 | | 50 | 31 | 63 | **48** |
+| Barbarian | 63 | 31 | 69 | 50 | | 88 | 50 | **58** |
+| Druid | 56 | 50 | 25 | 69 | 13 | | 75 | **48** |
+| Assassin | 44 | 53 | 41 | 38 | 50 | 25 | | **42** |
 
-A king fell before wave 21 in 45% of 1v1 matches (50% of mirror matches).
-
-2v2 (each team one race), sixteen seeds:
-
-| Race | Pal | Sor | Nec | Ama | Bar | Dru | Ass | Overall |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Paladin | | 31 | 56 | 41 | 56 | 41 | 53 | 46 |
-| Sorceress | 69 | | 56 | 28 | 63 | 47 | 56 | 53 |
-| Necromancer | 44 | 44 | | 41 | 41 | 47 | 42 | 43 |
-| Amazon | 59 | 72 | 59 | | 69 | 59 | 66 | 64 |
-| Barbarian | 44 | 38 | 59 | 31 | | 59 | 38 | 45 |
-| Druid | 59 | 53 | 53 | 41 | 41 | | 59 | 51 |
-| Assassin | 47 | 44 | 58 | 34 | 63 | 41 | | 48 |
-
-In 2v2 every race but the Amazon is between 43% and 53%; the Amazon won 34% at 92% team gold and 64% at 99% and 106%, so it ships at 99% and flagged. A king fell before wave 21 in 50% of 2v2 matches and 55% of mirror matches.
-
-The levers (balance.json `battle.races`): gold 85% Paladin, 98% Sorceress, 128% Necromancer, 86% Amazon, 170% Barbarian, 66% Druid, 120% Assassin; team gold on top 100%, 102%, 122%, 99%, 150%, 80%, 90%. New mode levers: `battle.teamWavePct` (waves at 155% in 2v2, 175% in 3v3, 195% in 4v4, because two pads of fighters rallying to one king left his life untouched), `battle.fighter` (lifePct 400, tierPct 100/220/500/1000/2000) and `battle.king` (600 life for one or two a side, 900 and 1,500 beyond; attack 15% a strike, 2% on bosses).
-
-## What missed
-
-- **Pairings.** Every race's overall 1v1 rate is within 47 to 57, but nine of the 21 pairings are outside 40 to 60; the worst is Druid against Assassin, 19 to 81 (the Assassin's traps on the path burst the Druid's summons). 2v2: every race but the Amazon is between 43% and 53%; the Amazon flips between 34% and 64% on seven points of team gold and ships at 64%. The levers are knife-edged (the Necromancer went 58% to 63% on a five-point step) and 16 seeds disagree with 8 by up to twenty points on a race.
-- **3v3 and 4v4** were checked for king falls only (43% and 45% on two seeds); their race tables were not tuned.
-- **references/d2td/** does not exist; the D2R screenshots in references/ stood in for "ours".
-- **Gold-only play** is noted as a setup switch for later, not built.
-- **Random towers** were not balanced or measured: the harness plays races; a random-builder harness run is one flag away (`tools/battle.ts` takes no setup options yet).
-- **Not tested in Electron or between two real PCs.** The sim, the lobby and the setup options are covered by tests (the relay's 2v2 over TCP included), and every screen was driven in a headless Chrome build with real clicks and screenshots.
-- **Not tested against a human.** Every number comes from bots playing bots. The bot does hold its pad (tanks in front, the rest behind), but a human's first wave with one fighter was not played.
+A king fell before wave 21 in 36% of matches (27% of mirrors). The levers are as knife-edged as before: the same percents swung the Sorceress between 34% and 55% across rounds, so treat 42 to 60 as the noise band. 2v2 was not rerun.
 
 ## What to look at first
 
-1. **Play a 1v1 against a bot** and watch wave 1 with one or two fighters: do the creeps engage where you expect, do the life bars read, and is a fallen fighter obvious (dark, still, until the countdown)? Then let the pad clear and watch the fighters run to Tyrael.
-2. **Zoom out** (wheel) and look at both fields: the enemy's pads lie 48 tiles along from yours. Decide whether the gap and the mirrored lane order read as two armies.
-3. **The send tray** over the belt: the figures are the monsters' own standing frames; a few are small. Hover one for its price and income.
-4. **The king's fights.** Leaks hit for their alive weight a swing; the king kills a normal creep in about seven strikes. If late leaks feel too slow or too deadly, the levers are `battle.king.attack.hitPct`, `damagePerWeight` and `damagePctPerWave`.
-5. **Balance** by feel: `battle.fighter.lifePct` and `tierPct` are the global fighter levers, `teamWavePct` the team one, `battle.races` the per-race one; `npm run battle` remeasures 1v1 in about a minute, 2v2 in five.
+1. **Wall your pad** in a 1v1 against a bot: tanks right across a row, damage behind. Watch a wave fan out from the gate and pile into the wall; then leave a three-tile gap and watch them stream through it and hit the fighters at its edges.
+2. **Send Diablo's Seals** at wave 14 or later (60 shards) and watch the whole pack land at once under Fanaticism; hover the tray for the tooltip.
+3. **Make a legend** in the campaign from a high-level evolution and check the panel's damage goes up, not down.
+
+## What missed
+
+- No ring is drawn under a monster that carries an aura; the tooltip is the only tell.
+- The uber bosses (uberbaal and the rest are in monstats.txt) would make a fine dearest send; they need art extraction and a monsters.json entry.
+- The bot sends by cost alone; it does not weigh auras.
+- Balance is one tuner round on eight seeds; the Barbarian against the Druid (88 to 13) is the pairing to watch.
