@@ -35,15 +35,15 @@
       "name": "War Cries",
       "tiers": [
         [
-          "battle-cry",
           "find-item"
         ],
         [
-          "war-cry",
-          "shout"
+          "shout",
+          "battle-cry"
         ],
         [
-          "battle-orders"
+          "battle-orders",
+          "war-cry"
         ]
       ]
     }

@@ -1166,7 +1166,7 @@ CONFIGS.SORC = { strategy: 'SORC', builds: SORC_BUILDS, tiers: true, evolve: tru
 // needs kills, and a boss alone leaves none (Normal Baal and Nightmare Andariel lapped it to death)
 CONFIGS.NECRO = { strategy: 'NECRO', builds: ['teeth', 'amplify-damage'], tiers: true, evolve: true, elements: true, bossKill: ['bone-spear', 'bone-spirit'] };
 const AMAZON_BUILDS = ['magic-arrow', 'poison-javelin', 'critical-strike'];
-const BARB_BUILDS = ['bash', 'double-swing', 'battle-cry', 'find-item'];
+const BARB_BUILDS = ['bash', 'double-swing', 'find-item'];
 const DRUID_BUILDS = ['firestorm', 'arctic-blast', 'raven'];
 const ASSASSIN_BUILDS = ['fire-blast', 'tiger-strike', 'cloak-of-shadows'];
 CONFIGS.AMAZON = { strategy: 'AMAZON', builds: AMAZON_BUILDS, tiers: true, evolve: true, elements: true };

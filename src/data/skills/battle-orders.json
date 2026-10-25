@@ -3,6 +3,7 @@
   "skill": "Battle Orders",
   "archetype": "buffAura",
   "damageType": "none",
+  "tierBonus": 1522,
   "buffAura": {
     "radiusTenths": 15
   }

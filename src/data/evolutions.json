@@ -162,7 +162,7 @@
     },
     "partner": {
       "skill": "war-cry",
-      "minTier": 2
+      "minTier": 3
     }
   },
   "frenzy-barb": {
@@ -180,7 +180,7 @@
     "name": "Singer",
     "attack": {
       "skill": "war-cry",
-      "minTier": 2
+      "minTier": 3
     },
     "partner": {
       "skill": "find-item",
