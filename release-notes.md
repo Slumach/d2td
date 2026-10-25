@@ -1,3 +1,9 @@
+0.4.4
+
+- Fixed a freeze in team games: a Berserk tower's hit set a monster's life to a non-number, which the lockstep check caught and stopped the match on.
+- The Barbarian's War Cries line runs in D2's order: Find Item, then Shout or Battle Cry, then Battle Orders or War Cry. The Singer and the Whirlwind Barb take War Cry at T3.
+- Eternal Conflict: a tower costs 300 gold, not the campaign's 600.
+
 0.4.3
 
 - Random towers in the game setup is Legion's random builder: a fresh roll of four lines from different races every wave, and only those build that wave (0.4.2 shipped it as random races by mistake).
